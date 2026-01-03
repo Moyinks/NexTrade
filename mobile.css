@@ -1,0 +1,535 @@
+/**
+ * NexTrade — Mobile Responsive Styles (CHROME FIX)
+ * Touch-optimized overrides for Android/Mobile devices
+ * Institutional Matte Blue Design System
+ * * CRITICAL FIX:
+ * - Force 140px bottom padding on .app-main to account for Chrome's dynamic bottom bar.
+ * - Uses !important to override any other calculation logic.
+ */
+
+/* ============================================
+   MOBILE BREAKPOINTS
+   ============================================ */
+
+/* Small devices (landscape phones, 576px and up) */
+@media (min-width: 576px) {
+  .container {
+    padding-left: var(--space-6);
+    padding-right: var(--space-6);
+  }
+
+  .balance-grid {
+    gap: var(--space-6);
+  }
+
+  .strategy-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Medium devices (tablets, 768px and up) */
+@media (min-width: 768px) {
+  :root {
+    --navbar-height: 64px;
+  }
+
+  .hero-card {
+    padding: var(--space-10);
+  }
+
+  .hero-value {
+    font-size: 3rem;
+  }
+
+  .balance-value {
+    font-size: var(--text-3xl);
+  }
+
+  .app-footer {
+    height: var(--navbar-height);
+  }
+
+  .strategy-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .wallet-actions {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .market-item {
+    padding: var(--space-5);
+  }
+
+  .market-item-icon {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* Large devices (desktops, 992px and up) */
+@media (min-width: 992px) {
+  .balance-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .strategy-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .activity-feed-list {
+    max-height: 500px;
+  }
+}
+
+/* Extra large devices (large desktops, 1200px and up) */
+@media (min-width: 1200px) {
+  .strategy-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* ============================================
+   MOBILE-SPECIFIC OVERRIDES (max-width: 640px)
+   ============================================ */
+
+@media (max-width: 640px) {
+  /* Typography adjustments */
+  :root {
+    --text-4xl: 2rem;
+    --text-3xl: 1.75rem;
+    --text-2xl: 1.5rem;
+  }
+
+  /* Reduce padding on mobile */
+  .card {
+    padding: var(--space-4);
+  }
+
+  .hero-card {
+    padding: var(--space-6);
+  }
+
+  .activity-feed {
+    padding: var(--space-4);
+  }
+
+  .strategy-card {
+    padding: var(--space-4);
+  }
+
+  .investment-card {
+    padding: var(--space-4);
+  }
+
+  /* Stack strategy stats vertically on very small screens */
+  .strategy-stats {
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+
+  .strategy-stat {
+    text-align: left;
+  }
+
+  /* Investment details single column */
+  .investment-details {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+
+  /* Single column balance grid on very small screens */
+  @media (max-width: 380px) {
+    .balance-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Reduce modal padding */
+  .modal-content {
+    padding: var(--space-4);
+  }
+
+  /* Adjust market item spacing */
+  .market-item {
+    padding: var(--space-3);
+  }
+
+  .market-item-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Wallet actions stay in grid but with reduced padding */
+  .wallet-action-btn {
+    padding: var(--space-4);
+  }
+
+  .wallet-action-icon {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* ============================================
+   TOUCH TARGET OPTIMIZATION
+   ============================================ */
+
+@media (hover: none) and (pointer: coarse) {
+  .btn {
+    min-height: 44px;
+    padding: var(--space-3) var(--space-6);
+  }
+
+  .btn-sm {
+    min-height: 40px;
+  }
+
+  .btn-icon {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .list-item,
+  .market-item,
+  .transaction-item,
+  .activity-item {
+    min-height: 60px;
+  }
+
+  .tab {
+    min-height: 44px;
+    padding: var(--space-3) var(--space-5);
+  }
+
+  input,
+  textarea,
+  select {
+    min-height: 44px;
+  }
+
+  .strategy-card {
+    min-height: 180px;
+  }
+
+  .market-filter-btn {
+    min-height: 36px;
+  }
+
+  .nav-item {
+    min-height: 56px;
+  }
+}
+
+/* ============================================
+   PREVENT ZOOM ON INPUT FOCUS
+   ============================================ */
+
+@media screen and (max-width: 768px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* ============================================
+   SAFE AREA INSETS
+   ============================================ */
+
+@supports (padding: max(0px)) {
+  .app-wrapper {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+
+  .app-header {
+    padding-top: max(var(--space-4), env(safe-area-inset-top));
+  }
+
+  .app-footer {
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+
+  .auth-page {
+    padding-top: max(var(--space-4), env(safe-area-inset-top));
+    padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
+  }
+}
+
+/* ============================================
+   HORIZONTAL SCROLL OPTIMIZATION
+   ============================================ */
+
+@media (max-width: 768px) {
+  .scroll-container {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scroll-container::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scroll-list {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .scroll-list-item {
+    scroll-snap-align: start;
+  }
+
+  .market-filters {
+    scroll-snap-type: x proximity;
+  }
+
+  .market-filter-btn {
+    scroll-snap-align: start;
+  }
+}
+
+/* ============================================
+   PULL-TO-REFRESH PREVENTION
+   ============================================ */
+
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* ============================================
+   LANDSCAPE MODE ADJUSTMENTS
+   ============================================ */
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .hero-card {
+    padding: var(--space-4);
+  }
+
+  .hero-value {
+    font-size: var(--text-2xl);
+  }
+
+  .app-main {
+    padding-top: var(--space-4);
+    padding-bottom: 100px !important;
+  }
+
+  .section {
+    padding-top: var(--space-4);
+    padding-bottom: var(--space-4);
+  }
+
+  .modal-content {
+    max-height: 80vh;
+  }
+
+  .activity-feed-list {
+    max-height: 200px;
+  }
+}
+
+/* ============================================
+   HIGH DPI SCREENS
+   ============================================ */
+
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .card,
+  .btn,
+  input,
+  .list-item,
+  .market-item {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .divider {
+    height: 0.5px;
+  }
+}
+
+/* ============================================
+   REDUCED MOTION
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .spinner {
+    animation: spin 0.6s linear infinite;
+  }
+}
+
+/* ============================================
+   DARK MODE ENHANCEMENTS
+   ============================================ */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-border: rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+@media print {
+  .app-footer,
+  .app-header,
+  .btn,
+  .wallet-actions {
+    display: none;
+  }
+
+  body {
+    background: white;
+    color: black;
+  }
+
+  .card,
+  .hero-card {
+    border: 1px solid #ccc;
+    page-break-inside: avoid;
+  }
+}
+
+/* ============================================
+   FOCUS VISIBLE
+   ============================================ */
+
+@media (hover: none) {
+  *:focus {
+    outline: none;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+/* ============================================
+   STICKY POSITIONING FIX
+   ============================================ */
+
+@supports (-webkit-touch-callout: none) {
+  .app-footer {
+    position: -webkit-sticky;
+    position: sticky;
+  }
+
+  .market-header {
+    position: -webkit-sticky;
+    position: sticky;
+  }
+}
+
+/* ============================================
+   ANDROID SPECIFIC FIXES
+   ============================================ */
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+button,
+.btn,
+.card-hover,
+.list-item-clickable,
+.market-item,
+.strategy-card {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.activity-description,
+.transaction-date,
+.market-item-name,
+p {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* ============================================
+   SMOOTH SCROLLING
+   ============================================ */
+
+@media (max-width: 768px) {
+  html {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .activity-feed-list,
+  .transaction-list,
+  .market-list,
+  .scroll-container {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ============================================
+   GRID RESPONSIVENESS
+   ============================================ */
+
+@media (max-width: 480px) {
+  .grid-cols-2,
+  .grid-cols-3,
+  .grid-cols-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .balance-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .strategy-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ============================================
+   BOTTOM NAVIGATION SAFE ZONE (FIXED)
+   ============================================ */
+
+@media (max-width: 768px) {
+  .app-main {
+    /* CRITICAL FIX: Huge bottom padding (140px) to clear Chrome's bottom bar */
+    padding-bottom: 140px !important;
+  }
+
+  /* Ensure modals don't get hidden behind navbar */
+  .modal {
+    padding-bottom: 140px !important;
+  }
+}
+
+/* ============================================
+   LOADING STATES
+   ============================================ */
+
+@media (max-width: 640px) {
+  .page-loading {
+    min-height: 40vh;
+  }
+
+  .skeleton-card {
+    height: 120px;
+  }
+}

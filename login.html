@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f172a">
+    <title>NexTrade | Secure Access</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root { 
+            --bg-dark: #0f172a; 
+            --primary: #4f46e5; 
+            --primary-hover: #4338ca;
+            --text-main: #f8fafc; 
+            --text-muted: #94a3b8; 
+            --card-bg: #1e293b;
+            --input-bg: #1e293b;
+            --border-color: #334155;
+        }
+        
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body { 
+            background-color: var(--bg-dark); 
+            color: var(--text-main); 
+            font-family: 'Inter', sans-serif; 
+            margin: 0; 
+            height: 100dvh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            align-items: center; 
+            justify-content: center;
+        }
+
+        .auth-card { 
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+        }
+
+        .auth-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        @media (min-width: 640px) {
+            body { padding: 0; }
+            .auth-card {
+                background: var(--card-bg);
+                max-width: 420px;
+                height: auto;
+                max-height: 90vh;
+                border-radius: 20px;
+                border: 1px solid var(--border-color);
+                padding: 2.5rem;
+                box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5);
+                display: block;
+            }
+            .auth-content { display: block; height: auto; }
+            .legal-footer { margin-top: 1.5rem; position: static; }
+        }
+
+        .logo { 
+            font-size: 1.8rem; 
+            font-weight: 800; 
+            margin-bottom: 0.25rem; 
+            display: flex; align-items: center; justify-content: center; 
+            gap: 10px; color: white; 
+            letter-spacing: -0.5px;
+        }
+        .logo i { color: var(--primary); font-size: 1.6rem; }
+        .subtitle { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem; text-align: center; font-weight: 500; }
+        
+        .tabs { 
+            background: var(--input-bg); padding: 4px; border-radius: 10px; 
+            display: flex; margin-bottom: 1.5rem; border: 1px solid var(--border-color); 
+        }
+        .tab { flex: 1; padding: 10px; border: none; background: none; color: var(--text-muted); font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 0.9rem; }
+        .tab.active { background: var(--bg-dark); color: white; border: 1px solid var(--border-color); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        
+        .form-group { text-align: left; margin-bottom: 1rem; }
+        .label { display: block; font-size: 0.85rem; margin-bottom: 6px; color: var(--text-muted); font-weight: 500; }
+        
+        .input-wrapper { position: relative; }
+        .input-wrapper .left-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 1rem; pointer-events: none; }
+        .input-wrapper .toggle-password { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); cursor: pointer; padding: 5px; }
+
+        .input { 
+            width: 100%; 
+            background: var(--input-bg); 
+            border: 1px solid var(--border-color); 
+            padding: 13px 40px 13px 40px; 
+            border-radius: 10px; 
+            color: white; 
+            font-size: 0.95rem; 
+            outline: none; 
+            transition: border-color 0.2s; 
+        }
+        .input:focus { border-color: var(--primary); }
+        
+        .checkbox-group {
+            display: flex; align-items: flex-start; gap: 10px; margin-top: 1rem;
+            font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;
+        }
+        .checkbox-group input { accent-color: var(--primary); width: 16px; height: 16px; margin-top: 2px; flex-shrink: 0; }
+        .link-text { color: var(--primary); cursor: pointer; text-decoration: none; font-weight: 600; }
+
+        .btn { 
+            width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 10px; 
+            font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 1.25rem; 
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
+        .error-msg { color: #f87171; font-size: 0.85rem; margin-top: 1rem; display: none; text-align: center; padding: 8px; background: rgba(239,68,68,0.1); border-radius: 8px; }
+        .hidden { display: none; }
+
+        .legal-footer { text-align: center; font-size: 0.75rem; color: var(--text-muted); margin-top: auto; padding-top: 1rem; opacity: 0.6; }
+
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); z-index: 2000;
+            display: flex; align-items: flex-end;
+            opacity: 0; pointer-events: none; transition: opacity 0.2s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: all; }
+        
+        .modal-content {
+            background: var(--card-bg); width: 100%; height: 85vh;
+            border-top-left-radius: 20px; border-top-right-radius: 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex; flex-direction: column;
+            transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @media(min-width: 640px) {
+            .modal-overlay { align-items: center; justify-content: center; }
+            .modal-content { width: 90%; max-width: 550px; height: auto; max-height: 80vh; border-radius: 16px; transform: translateY(20px); }
+        }
+        .modal-overlay.active .modal-content { transform: translateY(0); }
+
+        .modal-header { padding: 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { margin: 0; font-size: 1.1rem; color: white; font-weight: 700; }
+        .close-modal { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; padding: 0 10px; cursor: pointer; }
+        
+        .modal-body { 
+            padding: 1.5rem; overflow-y: auto; color: var(--text-muted); 
+            font-size: 0.85rem; line-height: 1.6; text-align: left; flex: 1;
+        }
+        .modal-body h4 { color: white; margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .modal-body p { margin-bottom: 1rem; }
+        .modal-body ul { margin: 0.5rem 0 1rem 1.5rem; }
+        
+        .modal-footer { padding: 1rem; border-top: 1px solid var(--border-color); text-align: center; }
+        .btn-sm { padding: 12px 24px; background: var(--border-color); color: white; border: none; border-radius: 8px; font-weight: 600; width: 100%; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="auth-card">
+        
+        <div class="auth-content">
+            <div class="logo"><i class="fas fa-chart-line"></i><span>NexTrade</span></div>
+            <p class="subtitle">Institutional-Grade Wealth Management</p>
+
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('login')">Sign In</button>
+                <button class="tab" onclick="switchTab('signup')">Create Account</button>
+            </div>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label class="label">Email Address</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-envelope left-icon"></i>
+                        <input type="email" id="loginEmail" class="input" required placeholder="name@example.com">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="label">Password</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-lock left-icon"></i>
+                        <input type="password" id="loginPassword" class="input" required placeholder="••••••••">
+                        <i class="fas fa-eye toggle-password"></i>
+                    </div>
+                </div>
+                <button type="submit" class="btn" id="loginBtn">Secure Sign In</button>
+            </form>
+
+            <form id="signupForm" class="hidden">
+                <div class="form-group">
+                    <label class="label">Full Name</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-user left-icon"></i>
+                        <input type="text" id="signupName" class="input" required placeholder="John Doe">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="label">Email Address</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-envelope left-icon"></i>
+                        <input type="email" id="signupEmail" class="input" required placeholder="name@example.com">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="label">Create Password</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-shield-alt left-icon"></i>
+                        <input type="password" id="signupPassword" class="input" placeholder="Min. 8 chars" required>
+                        <i class="fas fa-eye toggle-password"></i>
+                    </div>
+                </div>
+
+                <!-- SIGNUP TERMS CHECKBOX -->
+<div class="checkbox-group">
+    <input type="checkbox" id="termsCheck" required>
+    <span>
+        I accept the 
+        <span class="link-text" onclick="openModal('terms'); event.stopPropagation();">Terms of Service</span> 
+        & 
+        <span class="link-text" onclick="openModal('privacy'); event.stopPropagation();">Privacy Policy</span>.
+    </span>
+</div>
+
+<!-- TERMS MODAL -->
+<div id="termsModal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Terms of Service</h3>
+            <button class="close-modal" onclick="closeModal('terms')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p><strong>Effective Date:</strong> December 1, 2024</p>
+            
+            <h4>1. Acceptance of Terms</h4>
+            <p>By accessing and using the NexTrade platform ("the Service"), you enter into a binding agreement with NexTrade Financial LLC. If you do not agree to these terms, you must discontinue use immediately.</p>
+
+            <h4>2. Risk Disclosure & Liability</h4>
+            <p>Trading financial assets, including cryptocurrencies and derivatives, involves substantial risk of loss and is not suitable for every investor. You acknowledge that you are trading with funds you can afford to lose. NexTrade utilizes automated trading algorithms ("Bots") which do not guarantee future performance based on historical results.</p>
+
+            <h4>3. User Eligibility & KYC</h4>
+            <p>To access the Service, you must be at least 18 years of age. You agree to provide accurate, current, and complete information during the registration process in compliance with Anti-Money Laundering (AML) and Know Your Customer (KYC) regulations.</p>
+
+            <h4>4. Account Security</h4>
+            <p>You are responsible for maintaining the confidentiality of your login credentials. NexTrade is not liable for any loss or damage arising from your failure to protect your account information.</p>
+
+            <h4>5. Automated Investment Vaults</h4>
+            <p>Funds deposited into Investment Vaults are subject to lock-up periods. Early withdrawal requests may be subject to penalties or delays dependent on market liquidity.</p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-sm" onclick="closeModal('terms')">I Acknowledge & Understand</button>
+        </div>
+    </div>
+</div>
+
+<!-- PRIVACY MODAL -->
+<div id="privacyModal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Privacy Policy</h3>
+            <button class="close-modal" onclick="closeModal('privacy')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p><strong>Last Updated:</strong> December 1, 2024</p>
+
+            <h4>1. Information Collection</h4>
+            <p>We collect information necessary to provide our services and comply with regulatory requirements. This includes:</p>
+            <ul>
+                <li>Identity Data (Name, Government ID)</li>
+                <li>Contact Data (Email, Phone)</li>
+                <li>Financial Data (Transaction history, Wallet addresses)</li>
+            </ul>
+
+            <h4>2. Use of Data</h4>
+            <p>Your data is used strictly for identity verification, transaction processing, and fraud prevention. We do not sell your personal data to third parties for marketing purposes.</p>
+
+            <h4>3. Data Security & Encryption</h4>
+            <p>We implement bank-grade security measures including AES-256 encryption for data at rest and TLS 1.3 for data in transit. However, no method of transmission over the Internet is 100% secure.</p>
+
+            <h4>4. Regulatory Disclosure</h4>
+            <p>We may disclose your information to courts, law enforcement, or regulatory authorities if required by law to prevent fraud or money laundering.</p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-sm" onclick="closeModal('privacy')">Close Policy</button>
+        </div>
+    </div>
+</div>
+
+                <button type="submit" class="btn" id="signupBtn">Create Portfolio</button>
+            </form>
+
+            <div id="errorMsg" class="error-msg"></div>
+        </div>
+
+        <div class="legal-footer">
+            &copy; 2024 NexTrade Financial LLC.
+        </div>
+
+    </div>
+
+    <!-- MODALS -->
+    <!-- Terms of Service & Privacy Policy HTML remains identical -->
+    
+    <!-- SCRIPTS -->
+    <!-- Supabase CDN, Config, Supabase.js, and page scripts remain identical -->
+<!-- CRITICAL: Load scripts in correct order -->
+<!-- 1. Supabase CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<!-- 2. Config (initializes Supabase client) -->
+<script src="config.js"></script>
+
+<script>
+    // Wait for Supabase to initialize before allowing any actions
+    let isSupabaseReady = false;
+
+    async function waitForSupabase() {
+        let attempts = 0;
+        const maxAttempts = 30;
+
+        while (attempts < maxAttempts) {
+            if (window.supabaseClient) {
+                isSupabaseReady = true;
+                console.log('✅ Supabase ready for authentication');
+                // Check if user already has session
+                checkExistingSession();
+                return true;
+            }
+
+            if (window.supabaseInitError) {
+                showError('Configuration error: ' + window.supabaseInitError);
+                return false;
+            }
+
+            attempts++;
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        showError('Failed to initialize. Please check your internet connection and config.js file.');
+        return false;
+    }
+
+    waitForSupabase();
+
+    async function checkExistingSession() {
+        if (!window.supabaseClient) return;
+
+        try {
+            const { data: { session } } = await window.supabaseClient.auth.getSession();
+            if (session) {
+                console.log('✅ Session found - redirecting to app');
+                window.location.href = 'index.html';
+            }
+        } catch (error) {
+            console.error('Session check error:', error);
+        }
+    }
+
+    // PASSWORD TOGGLE
+    document.querySelectorAll('.toggle-password').forEach(icon => {
+        icon.addEventListener('click', function() {
+            const input = this.previousElementSibling;
+            input.type = input.type === 'password' ? 'text' : 'password';
+            this.classList.toggle('fa-eye');
+            this.classList.toggle('fa-eye-slash');
+        });
+    });
+
+    // MODAL LOGIC
+    window.openModal = (t) => document.getElementById(t+'Modal').classList.add('active');
+    window.closeModal = (t) => document.getElementById(t+'Modal').classList.remove('active');
+    document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { 
+        if(e.target === o) o.classList.remove('active'); 
+    }));
+
+    // TABS
+    window.switchTab = function(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+        document.getElementById('loginForm').classList.toggle('hidden', tab !== 'login');
+        document.getElementById('signupForm').classList.toggle('hidden', tab !== 'signup');
+        document.getElementById('errorMsg').style.display = 'none';
+    };
+
+    // LOGIN
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        if (!isSupabaseReady || !window.supabaseClient) {
+            showError('Service not ready. Please wait a moment and try again.');
+            return;
+        }
+
+        const btn = document.getElementById('loginBtn');
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
+
+        setLoading(btn, true);
+
+        try {
+            const { data, error } = await window.supabaseClient.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
+
+            if (error) {
+                showError(error.message);
+                setLoading(btn, false);
+            } else if (data.session) {
+                console.log('✅ Login successful - redirecting');
+                window.location.href = 'index.html';
+            } else {
+                showError('Login failed. Please try again.');
+                setLoading(btn, false);
+            }
+        } catch (error) {
+            console.error('Login error:', error);
+            showError('An unexpected error occurred. Please try again.');
+            setLoading(btn, false);
+        }
+    });
+
+    // SIGNUP
+    document.getElementById('signupForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        if (!isSupabaseReady || !window.supabaseClient) {
+            showError('Service not ready. Please wait a moment and try again.');
+            return;
+        }
+
+        if (!document.getElementById('termsCheck').checked) {
+            showError('You must accept the Terms of Service to create an account.');
+            return;
+        }
+
+        const btn = document.getElementById('signupBtn');
+        const email = document.getElementById('signupEmail').value.trim();
+        const password = document.getElementById('signupPassword').value;
+        const fullName = document.getElementById('signupName').value.trim();
+
+        if (password.length < 8) {
+            showError('Password must be at least 8 characters long.');
+            return;
+        }
+
+        setLoading(btn, true);
+
+        try {
+            const { data, error } = await window.supabaseClient.auth.signUp({
+                email: email,
+                password: password,
+                options: { 
+                    data: { full_name: fullName }
+                }
+            });
+
+            if (error) {
+                showError(error.message);
+                setLoading(btn, false);
+            } else if (data.user) {
+                if (data.user.identities && data.user.identities.length === 0) {
+                    showError('Please check your email to confirm your account.');
+                    setLoading(btn, false);
+                } else {
+                    console.log('✅ Signup successful - redirecting');
+                    alert('Account created successfully! Welcome to NexTrade.');
+                    window.location.href = 'index.html';
+                }
+            } else {
+                showError('Signup failed. Please try again.');
+                setLoading(btn, false);
+            }
+        } catch (error) {
+            console.error('Signup error:', error);
+            showError('An unexpected error occurred. Please try again.');
+            setLoading(btn, false);
+        }
+    });
+
+    // HELPER FUNCTIONS
+    function setLoading(btn, loading) {
+        if (loading) { 
+            btn.dataset.txt = btn.innerText; 
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing'; 
+            btn.disabled = true; 
+        } else { 
+            btn.innerText = btn.dataset.txt; 
+            btn.disabled = false; 
+        }
+    }
+
+    function showError(message) { 
+        const errorElement = document.getElementById('errorMsg'); 
+        errorElement.style.display = 'block'; 
+        errorElement.textContent = message; 
+    }
+</script>
+</body>
+</html>

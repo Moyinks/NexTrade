@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="description" content="NexTrade - Institutional-grade crypto investment platform" />
+  <meta name="theme-color" content="#0a0c10" />
+  <title>NexTrade</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="core.css" />
+  <link rel="stylesheet" href="components.css" />
+  <link rel="stylesheet" href="layouts.css" />
+  <link rel="stylesheet" href="pages.css" />
+  <link rel="stylesheet" href="mobile.css" />
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #0a0c10;
+      color: #fff;
+      font-family: Inter, sans-serif;
+    }
+
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #0a0c10;
+    }
+
+    #loading-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .3s ease;
+    }
+
+    .app-wrapper {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .app-header,
+    .app-footer {
+      flex: 0 0 auto;
+    }
+
+    .app-main {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="loading-screen">
+    <strong>NexTrade</strong>
+    <small class="loading-text">Initializing…</small>
+  </div>
+
+  <div id="app">
+    <div class="app-wrapper">
+      <header class="app-header"></header>
+      <main class="app-main"></main>
+      <footer class="app-footer"></footer>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Core -->
+  <script src="config.js" defer></script>
+  <script src="format.js" defer></script>
+  <script src="validation.js" defer></script>
+  <script src="storage.js" defer></script>
+  <script src="state.js" defer></script>
+  <script src="supabase.js" defer></script>
+  <script src="api.js" defer></script>
+
+  <!-- UI -->
+  <script src="card.js" defer></script>
+  <script src="modal.js" defer></script>
+  <script src="feed.js" defer></script>
+  <script src="navbar.js" defer></script>
+
+  <!-- Views -->
+  <script src="home.js" defer></script>
+  <script src="market.js" defer></script>
+  <script src="vault.js" defer></script>
+  <script src="wallet.js" defer></script>
+
+  <!-- Core controllers -->
+  <script src="bootstraps.js" defer></script>
+  <script src="router.js" defer></script>
+  <script src="app.js" defer></script>
+
+  <!-- SAFE INITIALIZER (DEFERRED BY DESIGN) -->
+  <script defer>
+    (async () => {
+      const waitFor = async (cond, t = 6000) => {
+        const s = Date.now();
+        while (!cond()) {
+          if (Date.now() - s > t) return false;
+          await new Promise(r => setTimeout(r, 50));
+        }
+        return true;
+      };
+
+      const ok = await waitFor(() =>
+        window.supabaseClient &&
+        window.Bootstraps &&
+        window.App &&
+        typeof App.init === 'function'
+      );
+
+      if (!ok) {
+        console.error('❌ App failed to initialize in time');
+        return;
+      }
+
+      await Bootstraps.init();
+      await App.init();
+
+      const screen = document.getElementById('loading-screen');
+      screen.classList.add('hidden');
+      setTimeout(() => screen.remove(), 300);
+
+      console.log('%cNexTrade v1.0.0', 'color:#2563eb;font-weight:bold;');
+    })();
+  </script>
+</body>
+</html>
