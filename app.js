@@ -1,11 +1,10 @@
 /**
- * NexTrade — App Controller (Institutional Standard)
+ * NexTrade — App Controller (Production Grade)
  * * RESPONSIBILITIES:
- * 1. SAFE INIT: Uses locks & dependency checks to prevent race conditions.
- * 2. AUTHENTICATION: Validates Supabase session before loading UI.
- * 3. HYDRATION: Calls API.loadUserData() to populate AppState from DB.
- * 4. MARKET DATA: Fetches live prices for asset valuation.
- * 5. ROUTING: Centralized navigation handler.
+ * 1. SINGLETON ORCHESTRATION: Manages Bootstraps, Auth, State, and Routing.
+ * 2. HYBRID DATA SYNC: Bridges SQL columns (spot_balance) with AppState JSON.
+ * 3. REACTIVE MARKET DATA: Centralized price polling.
+ * 4. ERROR BOUNDARIES: Prevents startup crashes and handles auth failures gracefully.
  */
 
 (function () {
@@ -13,55 +12,80 @@
 
   // 1. Singleton Guard
   if (window.App) {
-    console.warn('App already defined — skipping redefinition.');
+    console.warn('⚠️ NexTrade: App already defined. Skipping re-init.');
     return;
   }
 
-  // 2. Internal State
-  let initialized = false;
-  let initLock = false;
-
+  // 2. Internal Configuration
   const CONSTANTS = {
-    APP_ROOT: 'app-root',
-    NAV_ROOT: 'bottom-nav',
     PRICE_API: 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether,solana,cardano,ripple&vs_currencies=usd',
-    TIMEOUT: 5000
+    POLL_INTERVAL: 60000, // 1 minute
+    INIT_TIMEOUT: 10000
   };
 
-  // 3. Helpers & Logger
-  const log = (...args) => console.log('🚀 NexTrade:', ...args);
-  const warn = (...args) => console.warn('🚀 NexTrade:', ...args);
-  const fail = (...args) => console.error('🚀 NexTrade:', ...args);
+  let initialized = false;
+  let pollIntervalId = null;
 
-  // Robust Waiter
-  async function waitFor(predicateFn, timeout = CONSTANTS.TIMEOUT, interval = 50) {
-    const start = Date.now();
-    while (Date.now() - start < timeout) {
-      try { if (predicateFn()) return true; } catch (e) {}
-      await new Promise(r => setTimeout(r, interval));
+  // 3. Logger
+  const log = (msg, data) => console.log(`🚀 App: ${msg}`, data || '');
+  const error = (msg, err) => console.error(`❌ App: ${msg}`, err || '');
+
+  // ============================================
+  // CORE LOGIC: DATA SYNC (The Fix)
+  // ============================================
+
+  /**
+   * Fetches user profile ensuring alignment between DB columns and AppState.
+   * Handles the 'Hybrid' schema: spot_balance (Numeric) vs balances (JSON).
+   */
+  async function syncUserData(user) {
+    try {
+      if (!window.supabaseClient) throw new Error('Supabase client missing');
+
+      // 1. Fetch Hybrid Data Source
+      const { data: profile, error: dbErr } = await supabaseClient
+        .from('profiles')
+        .select('spot_balance, vault_balance, balances, holdings')
+        .eq('id', user.id)
+        .single();
+
+      if (dbErr) throw dbErr;
+
+      if (profile) {
+        // 2. Reconciliation Logic (Priority: Numeric Column -> JSON Fallback)
+        const spot = Number(profile.spot_balance) || Number(profile.balances?.spot) || 0;
+        const vault = Number(profile.vault_balance) || Number(profile.balances?.vault) || 0;
+
+        // 3. Atomic State Update
+        // This triggers all subscribers (Wallet, Navbar, Home) via AppState
+        AppState.set('user', user);
+        AppState.set('balances', { 
+          spot: spot, 
+          vault: vault, 
+          total: spot + vault 
+        });
+
+        if (profile.holdings) {
+          AppState.set('holdings', profile.holdings);
+        }
+
+        log('State synced with DB', { spot, vault });
+      }
+    } catch (e) {
+      error('Data sync failed', e);
+      // Fallback: Use whatever is in local storage to prevent UI flash
+      // AppState hydrates from storage automatically on load
     }
-    return false;
   }
 
-  function showFatalError(message) {
-    fail(message);
-    const root = document.getElementById(CONSTANTS.APP_ROOT) || document.body;
-    root.innerHTML = `
-      <div style="height:100vh; display:flex; align-items:center; justify-content:center; flex-direction:column; color:#ff5555;">
-        <h2 style="margin-bottom:1rem;">Initialization Error</h2>
-        <p>${message}</p>
-        <button onclick="window.location.reload()" style="margin-top:1rem; padding:10px 20px; cursor:pointer;">Retry</button>
-      </div>`;
-  }
-
-  // 4. Business Logic: Market Data
+  /**
+   * Centralized Market Data Polling
+   * Updates AppState.marketData which Wallet/Market modules subscribe to.
+   */
   async function fetchMarketData() {
     try {
-      // Throttle: Max once per minute
-      const last = window._lastPriceFetch || 0;
-      if (Date.now() - last < 60000 && last !== 0) return;
-
       const res = await fetch(CONSTANTS.PRICE_API);
+      if (!res.ok) throw new Error('API Error');
       const data = await res.json();
       
       const marketData = [
@@ -73,19 +97,17 @@
         { id: 'ripple', symbol: 'XRP', name: 'Ripple', current_price: data.ripple.usd }
       ];
 
-      if (window.AppState) {
-        AppState.set('marketData', marketData);
-        window._lastPriceFetch = Date.now();
-        
-        // Live update if Wallet is active
-        if (AppState.get('ui.currentPage') === 'wallet' && window.Wallet) {
-          Wallet.render(document.getElementById('main-content'));
-        }
+      AppState.set('marketData', marketData);
+      
+      // Force specific UI updates if needed, though Subscription is preferred
+      if (window.Wallet && AppState.get('ui.currentPage') === 'wallet') {
+        // Optional: Trigger specific refresh if Wallet doesn't auto-subscribe (it does in your file)
       }
     } catch (e) {
-      warn('Market data fetch failed (using defaults):', e);
-      // Fallback defaults so the app doesn't break
-      if (!AppState.get('marketData') || AppState.get('marketData').length === 0) {
+      console.warn('⚠️ Market data fetch failed. Using defaults.');
+      // Keep existing data or set defaults if empty
+      const current = AppState.get('marketData');
+      if (!current || current.length === 0) {
         AppState.set('marketData', [
           { symbol: 'BTC', current_price: 95000 },
           { symbol: 'ETH', current_price: 3500 },
@@ -95,177 +117,150 @@
     }
   }
 
-  // 5. Business Logic: Auth & Data Hydration
-  async function validateSessionAndLoad() {
-    if (!window.supabaseClient) {
-      warn('Supabase missing. Running in Visitor/Demo mode.');
-      return null;
-    }
+  // ============================================
+  // INITIALIZATION SEQUENCE
+  // ============================================
 
-    try {
-      // 1. Check Session
-      const { data } = await supabaseClient.auth.getSession();
-      const session = data?.session;
-
-      if (session?.user) {
-        log(`User authenticated: ${session.user.email}`);
-        
-        // 2. Set User in State
-        AppState.setUser(session.user);
-
-        // 3. Hydrate Data via API Module
-        if (window.API && typeof API.loadUserData === 'function') {
-          await API.loadUserData(session.user.id);
-        } else {
-          warn('API module missing. Skipping data hydration.');
-        }
-        return session;
-      }
-    } catch (e) {
-      warn('Session validation failed:', e);
-    }
-    return null;
-  }
-
-  // 6. Router & UI Logic
-  function renderShell() {
-    const root = document.getElementById(CONSTANTS.APP_ROOT);
-    if (!root) return; // Should catch in init
-
-    // Idempotent: Only create if missing
-    if (!document.getElementById('main-content')) {
-      root.innerHTML = `
-        <div id="main-content" style="padding-bottom: 80px; min-height: 100vh;"></div>
-        <nav id="${CONSTANTS.NAV_ROOT}" class="bottom-nav"></nav>
-      `;
-    }
-    renderNavbar();
-  }
-
-  function renderNavbar() {
-    const nav = document.getElementById(CONSTANTS.NAV_ROOT);
-    if (!nav) return;
-
-    const current = (window.AppState && AppState.get('ui.currentPage')) || 'home';
-    const tabs = [
-      { id: 'home', icon: '🏠', label: 'Home' },
-      { id: 'market', icon: '📊', label: 'Market' },
-      { id: 'vault', icon: '🔒', label: 'Vault' },
-      { id: 'wallet', icon: '💼', label: 'Wallet' }
-    ];
-
-    nav.innerHTML = tabs.map(tab => `
-      <div class="nav-item ${current === tab.id ? 'active' : ''}" onclick="App.navigate('${tab.id}')">
-        <div class="nav-icon">${tab.icon}</div>
-        <div class="nav-label">${tab.label}</div>
-      </div>
-    `).join('');
-  }
-
-  async function navigate(page) {
-    if (!page || typeof page !== 'string') return;
-
-    // 1. Update State
-    if (window.AppState) AppState.set('ui.currentPage', page);
-
-    // 2. Update Nav UI
-    renderNavbar();
-
-    // 3. Render Module content
-    const content = document.getElementById('main-content');
-    if (!content) return;
-    
-    content.innerHTML = ''; // Clean slate
-
-    switch (page) {
-      case 'home':
-        if (window.Home) Home.render(content);
-        else content.innerHTML = '<div style="padding:2rem; text-align:center;">Home Module Loading...</div>';
-        break;
-      case 'market':
-        if (window.Market) Market.render(content);
-        else content.innerHTML = '<div style="padding:2rem; text-align:center;">Market Module Loading...</div>';
-        break;
-      case 'vault':
-        if (window.Vault) Vault.render(content);
-        else content.innerHTML = '<div style="padding:2rem; text-align:center;">Vault Module Loading...</div>';
-        break;
-      case 'wallet':
-        if (window.Wallet) Wallet.render(content);
-        else content.innerHTML = '<div style="padding:2rem; text-align:center;">Wallet Module Loading...</div>';
-        break;
-      default:
-        content.innerHTML = '<div style="padding:2rem; text-align:center;">404: Module Not Found</div>';
-    }
-  }
-
-  // 7. Main Initialization Sequence
   async function init() {
-    if (initialized) { warn('App already initialized.'); return; }
-    if (initLock) { warn('App init in progress.'); return; }
-    initLock = true;
+    if (initialized) return;
+
+    // A. Wait for Bootstraps (DOM Authority)
+    if (window.Bootstraps && typeof Bootstraps.init === 'function') {
+      await Bootstraps.init();
+    }
 
     log('Initializing...');
 
-    // A. Check Dependencies
-    const ready = await waitFor(() => window.AppState && window.supabaseClient && window.API, 4000);
-    if (!ready) {
-      showFatalError('Critical modules (AppState, API, or Supabase) failed to load.');
-      initLock = false;
+    // B. Validate Dependencies
+    if (!window.AppState || !window.supabaseClient || !window.Router) {
+      document.body.innerHTML = '<h2 style="color:red; text-align:center; margin-top:50px;">Critical Error: Modules missing.</h2>';
       return;
     }
 
-    // B. Bind DOM Shell
-    renderShell();
+    try {
+      // C. Authentication Check
+      const { data } = await supabaseClient.auth.getSession();
+      const session = data?.session;
 
-    // C. Auth & Data Hydration
-    const session = await validateSessionAndLoad();
+      if (!session) {
+        log('No session, redirecting to login');
+        if (!window.location.pathname.includes('login.html')) {
+          window.location.href = 'login.html';
+        }
+        return;
+      }
 
-    // D. Fetch Market Data (and start polling)
-    await fetchMarketData();
-    setInterval(fetchMarketData, 60000);
+      // D. Critical Data Load (Block UI until ready)
+      await syncUserData(session.user);
+      await fetchMarketData();
 
-    // E. Initial Navigation
-    const startPage = AppState.get('ui.currentPage') || 'home';
-    await navigate(startPage);
+      // E. Start Background Polling
+      pollIntervalId = setInterval(fetchMarketData, CONSTANTS.POLL_INTERVAL);
 
-    // F. Finalize
-    initialized = true;
-    initLock = false;
-    
-    // Dispatch Ready Event
-    window.dispatchEvent(new CustomEvent('nextrade:ready', { detail: { page: startPage } }));
-    log('Ready.');
+      // F. Routing & Navigation
+      if (window.Router) {
+        window.Router.init(); // Bind Nav events
+        
+        // Restore last page or default to 'home'
+        const lastPage = (window.Storage && Storage.getLastPage()) || 'home';
+        navigate(lastPage);
+      }
+
+      // G. Render Shell UI (Navbar)
+      renderNavbar();
+
+      initialized = true;
+      log('Ready.');
+
+    } catch (e) {
+      error('Initialization crashed', e);
+    }
   }
 
-  // 8. Public API
+  // ============================================
+  // NAVIGATION & UI
+  // ============================================
+
+  function renderNavbar() {
+    if (!window.Bootstraps) return;
+    const navRoot = document.getElementById('bottom-nav') || document.querySelector('.app-footer');
+    if (!navRoot) return;
+
+    // Subscribe to page changes to update active tab
+    AppState.subscribe('ui.currentPage', (page) => {
+      if (window.Navbar && typeof Navbar.setActive === 'function') {
+        Navbar.setActive(page);
+      }
+    });
+
+    // Initial Render call if Navbar module exists
+    if (window.Navbar && typeof Navbar.init === 'function') {
+      Navbar.init(window.Bootstraps.getWrapper());
+    }
+  }
+
+  /**
+   * Universal Navigation Handler
+   * Updates State -> Router -> UI -> Persistence
+   */
+  async function navigate(pageId) {
+    if (!pageId) return;
+
+    // 1. Update Global State
+    AppState.set('ui.currentPage', pageId);
+
+    // 2. Delegate Rendering to Router
+    if (window.Router) {
+      window.Router.go(pageId);
+    }
+
+    // 3. Persist Selection
+    if (window.Storage) {
+      Storage.setLastPage(pageId);
+    }
+  }
+
+  // ============================================
+  // PUBLIC API
+  // ============================================
+
   window.App = {
     init,
     navigate,
-    isInitialized: () => initialized,
+    refreshData: async () => {
+      const user = AppState.get('user');
+      if (user) await syncUserData(user);
+    },
     
-    // Helper to allow modules to trigger toasts via App.showSuccess()
+    // UI Helpers exposed for Modules
     showSuccess: (msg) => showToast(msg, 'success'),
     showError: (msg) => showToast(msg, 'error')
   };
 
-  // Toast Helper
-  function showToast(message, type) {
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.style.cssText = `
+  // Toast System (Dependency-free)
+  function showToast(message, type = 'info') {
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.textContent = message;
+    el.style.cssText = `
       position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-      padding: 12px 24px; border-radius: 8px; color: white;
-      font-weight: 600; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      background: ${type === 'success' ? '#10b981' : '#ef4444'};
-      transition: opacity 0.3s ease;
+      background: ${type === 'error' ? '#ef4444' : '#10b981'};
+      color: white; padding: 12px 24px; border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10000;
+      font-weight: 500; opacity: 0; transition: opacity 0.3s;
     `;
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.style.opacity = '1');
+    setTimeout(() => {
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 300);
+    }, 3000);
   }
 
-  // 9. Auto-Boot
-  document.addEventListener('DOMContentLoaded', init);
+  // Auto-Start via Index.html defer script, but listener added for safety
+  document.addEventListener('DOMContentLoaded', () => {
+    // If index.html didn't trigger it, we do it here
+    if (!initialized && window.Bootstraps) init();
+  });
 
 })();
