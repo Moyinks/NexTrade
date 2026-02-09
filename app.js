@@ -1,10 +1,7 @@
 /**
- * NexTrade — App Controller (Updated with CacheManager Integration)
+ * NexTrade — App Controller (FIXED: Investment Persistence)
  * ══════════════════════════════════════════════════════════════
- * CHANGES:
- * - Initializes CacheManager before loading data
- * - Uses CacheManager.getMarketData() instead of direct API
- * - Removed redundant fetchMarketData (uses cache)
+ * CRITICAL FIX: Added syncInvestments() to load vault data on login
  * ══════════════════════════════════════════════════════════════
  */
 
@@ -78,6 +75,30 @@
     }
   }
 
+  // ╔════════════════════════════════════════════════════════════╗
+  // ║  🔥 NEW FUNCTION - THIS IS WHAT WAS MISSING!              ║
+  // ╚════════════════════════════════════════════════════════════╝
+  async function syncInvestments(user) {
+    try {
+      if (!window.supabaseClient) throw new Error('Supabase client missing');
+
+      const { data: investments, error } = await window.supabaseClient
+        .from('investments')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (investments && window.AppState) {
+        AppState.set('investments', investments);
+        console.log(`[APP] 🏦 Investments Synced: ${investments.length} records`);
+      }
+    } catch (err) {
+      console.error('[APP] ❌ Investment Sync Error:', err);
+    }
+  }
+
   // ============================================
   // 2. INITIALIZATION SEQUENCE
   // ============================================
@@ -88,34 +109,21 @@
     console.log('[APP] 🚀 Starting initialization sequence...');
 
     try {
-      // ========================================
-      // STEP 1: Bootstraps (DOM Authority)
-      // ========================================
+      // STEP 1: Bootstraps
       console.log('[APP] Step 1/6: Bootstraps...');
-      
-      if (!window.Bootstraps) {
-        throw new Error('Bootstraps module not loaded');
-      }
-
+      if (!window.Bootstraps) throw new Error('Bootstraps module not loaded');
       if (typeof Bootstraps.init === 'function') {
         await Bootstraps.init();
         console.log('[APP] ✅ Bootstraps ready');
       }
 
       const mainElement = Bootstraps.getMain();
-      if (!mainElement) {
-        throw new Error('Bootstraps failed to create .app-main');
-      }
+      if (!mainElement) throw new Error('Bootstraps failed to create .app-main');
 
-      // ========================================
       // STEP 2: Auth Check
-      // ========================================
       console.log('[APP] Step 2/6: Auth...');
+      if (!window.supabaseClient) throw new Error('Supabase client not loaded');
       
-      if (!window.supabaseClient) {
-        throw new Error('Supabase client not loaded');
-      }
-
       const { data } = await window.supabaseClient.auth.getSession();
       const session = data?.session;
 
@@ -129,61 +137,43 @@
 
       console.log('[APP] ✅ Auth verified');
 
-      // ========================================
-      // STEP 3: Initialize CacheManager
-      // ========================================
+      // STEP 3: CacheManager
       console.log('[APP] Step 3/6: CacheManager...');
-      
-      if (!window.CacheManager) {
-        throw new Error('CacheManager module not loaded');
-      }
-
+      if (!window.CacheManager) throw new Error('CacheManager module not loaded');
       CacheManager.init();
       console.log('[APP] ✅ CacheManager initialized');
 
-      // ========================================
-      // STEP 4: Data Loading (with cache)
-      // ========================================
+      // ╔════════════════════════════════════════════════════════════╗
+      // ║  STEP 4: Data Loading (🔥 NOW INCLUDES INVESTMENTS!)      ║
+      // ╚════════════════════════════════════════════════════════════╝
       console.log('[APP] Step 4/6: Loading user data...');
       
       await Promise.all([
         syncProfile(session.user),
         syncHistory(session.user),
-        CacheManager.getMarketData() // Load market data via cache
+        syncInvestments(session.user), // 🔥 THIS LINE IS NEW!
+        CacheManager.getMarketData()
       ]);
 
       console.log('[APP] ✅ Data loaded');
 
-      // ========================================
-      // STEP 5: Router (Render Content)
-      // ========================================
+      // STEP 5: Router
       console.log('[APP] Step 5/6: Router...');
-      
-      if (!window.Router) {
-        throw new Error('Router module not loaded');
-      }
-
+      if (!window.Router) throw new Error('Router module not loaded');
       await Router.init();
-      
       console.log('[APP] ✅ Router initialized');
 
       const lastPage = (window.Storage && Storage.getLastPage()) || 'home';
       console.log(`[APP] 📍 Navigating to: ${lastPage}`);
-      
       await navigate(lastPage);
 
-      // ========================================
-      // STEP 6: Navbar (Inject Buttons)
-      // ========================================
+      // STEP 6: Navbar
       console.log('[APP] Step 6/6: Navbar...');
-      
       if (window.Navbar) {
         Navbar.init();
-        
         if (window.AppState) {
           AppState.subscribe('ui.currentPage', (page) => Navbar.setActive(page));
         }
-        
         console.log('[APP] ✅ Navbar ready');
       }
 
@@ -221,9 +211,7 @@
 
   async function navigate(pageId) {
     if (!pageId) return;
-    
     console.log(`[APP] 🧭 Navigate called: ${pageId}`);
-    
     if (window.AppState) AppState.set('ui.currentPage', pageId);
     if (window.Router) await window.Router.navigate(pageId);
     if (window.Navbar) Navbar.setActive(pageId);
@@ -263,6 +251,7 @@
         await Promise.all([
           syncProfile(user), 
           syncHistory(user),
+          syncInvestments(user), // 🔥 ALSO REFRESH INVESTMENTS
           CacheManager.refresh()
         ]);
       }
