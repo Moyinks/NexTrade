@@ -4,6 +4,7 @@
  * 1. SYNCHRONOUS HYDRATION: Loads persistence immediately to prevent "empty state" overwrites.
  * 2. DERIVED STATE: Vault balance is calculated dynamically from active investments.
  * 3. ATOMIC UPDATES: Every state change triggers a save to 'nextrade_state_v1'.
+ * 4. SECURE RESET: Added clear() method to wipe data on logout/signup.
  */
 
 (function () {
@@ -12,27 +13,32 @@
   // Prevent double-initialization
   if (window.AppState) return;
 
+  const PERSIST_KEY = 'nextrade_state_v1';
+  const keySubscribers = Object.create(null);
+  const globalSubscribers = [];
+
   // ============================================
-  // 1. INITIAL STATE (Defaults)
+  // 1. INITIAL STATE FACTORY (Reset Logic)
   // ============================================
-  const _state = {
+  const getDefaults = () => ({
     user: null,
     profile: null,
     
     // Financials
     balances: { spot: 0, vault: 0, total: 0 },
-    holdings: {}, // { BTC: 0.5, ETH: 10.0 }
+    holdings: {}, 
     
     // Data Lists
     investments: [],
     transactions: [],
     activityFeed: [],
+    marketData: [], // Added for Home/Market sync
     
     // Config & UI
     strategies: [
-      { id: 'alpha-scalper', name: 'Alpha Scalper', icon: '⚡', risk: 'medium', apy: 10, lockPeriod: 30, minInvestment: 100, description: 'High-frequency trading strategy with 10% monthly ROI split daily.' },
-      { id: 'stable-yield', name: 'Stable Yield', icon: '🛡️', risk: 'low', apy: 8, lockPeriod: 90, minInvestment: 500, description: 'Conservative strategy focused on stable returns.' },
-      { id: 'momentum-pro', name: 'Momentum Pro', icon: '🚀', risk: 'high', apy: 35, lockPeriod: 60, minInvestment: 1000, description: 'Aggressive strategy capitalizing on trends.' }
+      { id: 'strat_stable', name: 'USDC Yield Alpha', icon: '⚡', risk: 'Low', apy: 0.12, durationDays: 7, min: 100, description: 'Algorithmic stablecoin arbitrage across DEX liquidity pools.' },
+      { id: 'strat_defi', name: 'DeFi Blue Chip', icon: '🛡️', risk: 'Medium', apy: 0.24, durationDays: 30, min: 500, description: 'Automated leverage farming on Aave and Compound.' },
+      { id: 'strat_degen', name: 'Meme Momentum', icon: '🚀', risk: 'High', apy: 1.50, durationDays: 3, min: 50, description: 'High-frequency scalping on volatile meme assets.' }
     ],
     ui: {
       currentPage: 'home',
@@ -40,11 +46,10 @@
       modalOpen: null,
       selectedStrategy: null
     }
-  };
+  });
 
-  const keySubscribers = Object.create(null);
-  const globalSubscribers = [];
-  const PERSIST_KEY = 'nextrade_state_v1';
+  // Initialize with defaults
+  let _state = getDefaults();
 
   // ============================================
   // 2. LOGIC & PERSISTENCE
@@ -56,24 +61,43 @@
    */
   const syncVaultData = () => {
     const active = (_state.investments || []).filter(i => i.status === 'active');
-    const vaultTotal = active.reduce((sum, i) => sum + (parseFloat(i.current_value) || parseFloat(i.amount) || 0), 0);
+    
+    // Calculate current value including accrued interest for visual accuracy
+    const vaultTotal = active.reduce((sum, inv) => {
+        // Simple accrual logic matching Vault.js for consistency
+        const now = Date.now();
+        const start = new Date(inv.created_at).getTime();
+        const durationMs = (inv.duration || inv.durationDays || 30) * 24 * 60 * 60 * 1000;
+        const end = start + durationMs;
+        const effectiveNow = Math.min(now, end);
+        const elapsedYearFraction = (effectiveNow - start) / (365 * 24 * 60 * 60 * 1000);
+        const profit = inv.amount * inv.apy * elapsedYearFraction;
+        
+        return sum + inv.amount + profit;
+    }, 0);
     
     _state.balances.vault = vaultTotal;
+    // Total will be recalculated by Home.js using real crypto prices, 
+    // but we keep a rough total here for internal consistency
     _state.balances.total = (_state.balances.spot || 0) + vaultTotal;
   };
 
   const saveToStorage = () => {
     try {
-      const data = {
-        balances: _state.balances,
-        holdings: _state.holdings,
-        investments: _state.investments,
-        transactions: _state.transactions,
-        activityFeed: _state.activityFeed,
-        profile: _state.profile,
-        ui: _state.ui
-      };
-      localStorage.setItem(PERSIST_KEY, JSON.stringify(data));
+      // Security: Only persist if a user is actually logged in to avoid overwriting with empty state
+      if (_state.user) {
+        const data = {
+          balances: _state.balances,
+          holdings: _state.holdings,
+          investments: _state.investments,
+          transactions: _state.transactions,
+          activityFeed: _state.activityFeed,
+          profile: _state.profile,
+          marketData: _state.marketData,
+          ui: _state.ui
+        };
+        localStorage.setItem(PERSIST_KEY, JSON.stringify(data));
+      }
     } catch (e) {
       console.error('AppState: Save failed', e);
     }
@@ -90,6 +114,7 @@
         if (parsed.investments) _state.investments = parsed.investments;
         if (parsed.transactions) _state.transactions = parsed.transactions;
         if (parsed.activityFeed) _state.activityFeed = parsed.activityFeed;
+        if (parsed.marketData) _state.marketData = parsed.marketData;
         if (parsed.profile) _state.profile = parsed.profile;
         if (parsed.ui) _state.ui = { ..._state.ui, ...parsed.ui };
         
@@ -102,7 +127,7 @@
   };
 
   const notify = (key) => {
-    if (keySubscribers[key]) {
+    if (key && keySubscribers[key]) {
       const val = AppState.get(key);
       keySubscribers[key].forEach(cb => { try { cb(val); } catch (e) {} });
     }
@@ -182,6 +207,23 @@
       saveToStorage();
       notify('investments');
       notify('balances');
+    },
+
+    /**
+     * CRITICAL: HARD RESET FOR LOGOUT/SIGNUP
+     * Completely wipes memory and localStorage to prevent data leakage between users.
+     */
+    clear() {
+      console.log('🧹 AppState: Wiping all data...');
+      
+      // 1. Reset Memory to Fresh Defaults
+      _state = getDefaults();
+      
+      // 2. Nuke Persistence
+      localStorage.removeItem(PERSIST_KEY);
+      
+      // 3. Notify all subscribers that state has changed (to empty)
+      notify();
     },
 
     subscribe(arg1, arg2) {

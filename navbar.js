@@ -1,309 +1,402 @@
 /**
- * NexTrade — Navigation Module (Full Senior Architect Rewrite)
- * * RESPONSIBILITIES:
- * 1. Top Header: Logo and Profile/Settings dropdown.
- * 2. Bottom Nav: Tab switching for Home, Market, Vault, and Wallet.
- * 3. Interaction: Isolated event handling to prevent "Ghost Clicks" and Router conflicts.
- * * ARCHITECTURE:
- * - Designed for a Flexbox Shell (app-wrapper).
- * - Removes all manual 'fixed' or 'sticky' inline styles to prevent layout clipping.
+ * ═══════════════════════════════════════════════════════════════════════════
+ * NexTrade — Navbar & Profile System v2.0
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ENHANCEMENTS: Hamburger menu, profile dropdown, verification badge
+ * ═══════════════════════════════════════════════════════════════════════════
  */
 
 const Navbar = (() => {
   'use strict';
 
-  // ============================================
-  // CONFIGURATION & STATE
-  // ============================================
+  let headerEl = null;
+  let footerEl = null;
+  let activePage = 'home';
+  let dropdownOpen = false;
 
-  const navItems = [
-    { id: 'home', label: 'Home', icon: '🏠', page: 'home' },
-    { id: 'market', label: 'Market', icon: '📊', page: 'market' },
-    { id: 'vault', label: 'Vault', icon: '🔒', page: 'vault' },
-    { id: 'wallet', label: 'Wallet', icon: '💼', page: 'wallet' }
-  ];
-
-  let state = {
-    activePage: 'home',
-    isMenuOpen: false,
-    elements: {
-      header: null,
-      footer: null,
-      menuDropdown: null
-    }
+  const PAGE_CONFIG = {
+    'home':   { title: 'NexTrade', icon: 'fa-chart-line', isBrand: true },
+    'market': { title: 'Market',   icon: 'fa-chart-bar',  isBrand: false },
+    'vault':  { title: 'Vault',    icon: 'fa-layer-group',isBrand: false },
+    'wallet': { title: 'Wallet',   icon: 'fa-wallet',     isBrand: false },
   };
 
-  // ============================================
-  // COMPONENT: TOP HEADER
-  // ============================================
-
-  function createTopHeader() {
-    const header = document.createElement('header');
-    header.className = 'app-header';
+  function init() {
+    console.log('[Navbar] Initializing...');
+    headerEl = document.querySelector('.app-header');
+    footerEl = document.querySelector('.app-footer');
     
-    // Internal layout only; positioning is handled by the CSS Flex shell
-    header.style.cssText = `
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      height: 64px;
-      padding: 0 var(--space-4);
-      background-color: var(--color-surface);
-      border-bottom: 1px solid var(--color-border);
-    `;
-
-    // 1. Branding
-    const brand = document.createElement('div');
-    brand.style.cssText = `display: flex; align-items: center; gap: var(--space-2); cursor: pointer;`;
-    brand.onclick = (e) => {
-      e.stopPropagation();
-      window.App.navigate('home');
-    };
-    brand.innerHTML = `
-      <span style="font-size: 1.5rem;">📈</span>
-      <span style="font-weight: 800; color: var(--color-text-primary); font-size: 1.1rem; letter-spacing: -0.02em;">NexTrade</span>
-    `;
-
-    // 2. Profile Action
-    const actionArea = document.createElement('div');
-    actionArea.style.position = 'relative';
-
-    const menuBtn = document.createElement('button');
-    menuBtn.className = 'btn-icon';
-    menuBtn.innerHTML = '☰';
-    menuBtn.style.cssText = `
-      font-size: 1.5rem;
-      color: var(--color-text-secondary);
-      background: none;
-      border: none;
-      padding: 8px;
-      cursor: pointer;
-    `;
-    menuBtn.onclick = (e) => {
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      toggleMenu();
-    };
-
-    // 3. Dropdown (Built and hidden)
-    const dropdown = createDropdownMenu();
-    state.elements.menuDropdown = dropdown;
-
-    actionArea.appendChild(menuBtn);
-    actionArea.appendChild(dropdown);
-    header.appendChild(brand);
-    header.appendChild(actionArea);
-
-    return header;
+    if (!headerEl || !footerEl) {
+      console.error('[Navbar] Missing shell elements');
+      return;
+    }
+    
+    renderFooter();
+    updateHeader('home');
+    injectDropdownStyles();
+    
+    console.log('[Navbar] Ready');
   }
 
-  function createDropdownMenu() {
-    const menu = document.createElement('div');
-    menu.className = 'nav-dropdown';
-    menu.style.cssText = `
-      position: absolute;
-      top: 100%;
-      right: 0;
-      width: 220px;
-      background-color: var(--color-surface-elevated);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
-      display: none;
-      flex-direction: column;
-      z-index: 1000;
-      overflow: hidden;
-      pointer-events: none; /* Prevents blocking clicks when hidden */
-    `;
-
-    const items = [
-      { icon: '👤', label: 'My Profile', action: () => Navbar.showProfileModal() },
-      { icon: '🛡️', label: 'Security & KYC', action: () => Navbar.showProfileModal() },
-      { icon: '🚪', label: 'Sign Out', action: () => handleSignOut(), danger: true }
+  function renderFooter() {
+    if (!footerEl) return;
+    footerEl.innerHTML = '';
+    
+    const navItems = [
+      { id: 'home',   icon: 'fa-home',       label: 'Home' },
+      { id: 'market', icon: 'fa-chart-line', label: 'Market' },
+      { id: 'vault',  icon: 'fa-layer-group',label: 'Vault' },
+      { id: 'wallet', icon: 'fa-wallet',     label: 'Wallet' }
     ];
-
-    items.forEach(item => {
-      const btn = document.createElement('button');
-      btn.style.cssText = `
-        display: flex; align-items: center; gap: 12px;
-        padding: 14px 16px;
-        width: 100%; text-align: left;
-        background: none; border: none;
-        color: ${item.danger ? 'var(--color-danger, #ef4444)' : 'var(--color-text-primary)'};
-        font-size: 0.9rem;
-        cursor: pointer;
-        border-bottom: 1px solid rgba(255,255,255,0.05);
-      `;
-      btn.innerHTML = `<span>${item.icon}</span> ${item.label}`;
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        toggleMenu(false);
-        item.action();
-      };
-      menu.appendChild(btn);
-    });
-
-    return menu;
-  }
-
-  // ============================================
-  // COMPONENT: BOTTOM NAV
-  // ============================================
-
-  function createBottomNav() {
-    const nav = document.createElement('nav');
-    nav.className = 'app-footer';
     
-    // Use Flex flow; position handled by CSS shell
-    nav.style.cssText = `
-      display: flex;
-      justify-content: space-around;
-      align-items: center;
-      width: 100%;
-      height: 64px;
-      background-color: var(--color-surface);
-      border-top: 1px solid var(--color-border);
-      padding-bottom: env(safe-area-inset-bottom);
-    `;
-
     navItems.forEach(item => {
       const btn = document.createElement('button');
       btn.className = 'nav-item';
-      btn.dataset.page = item.page;
-      btn.style.cssText = `
-        flex: 1;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 4px;
-        background: none;
-        border: none;
-        cursor: pointer;
-        position: relative;
-        -webkit-tap-highlight-color: transparent;
-      `;
-
-      btn.innerHTML = `
-        <div class="nav-indicator" style="position: absolute; top: 0; width: 40%; height: 3px; background: var(--color-primary); transform: scaleX(0); transition: transform 0.2s;"></div>
-        <span class="nav-icon" style="font-size: 1.4rem;">${item.icon}</span>
-        <span class="nav-label" style="font-size: 0.7rem; font-weight: 500; color: var(--color-text-secondary);">${item.label}</span>
-      `;
-
+      btn.dataset.target = item.id;
+      btn.style.cssText = 'flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; background:none; border:none; color:var(--color-text-secondary, #94a3b8); font-family:inherit; font-size:0.75rem; padding:8px 0; cursor:pointer; -webkit-tap-highlight-color:transparent;';
+      btn.innerHTML = `<i class="fas ${item.icon}" style="font-size:1.25rem; margin-bottom:4px; pointer-events:none;"></i><span style="font-weight:500; pointer-events:none;">${item.label}</span>`;
       btn.onclick = (e) => {
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        if (window.App && typeof window.App.navigate === 'function') {
-          window.App.navigate(item.page);
+        e.preventDefault();
+        if (window.App && typeof App.navigate === 'function') {
+          App.navigate(item.id);
+        } else if (window.Router) {
+          window.Router.go(item.id);
         }
       };
-
-      nav.appendChild(btn);
+      footerEl.appendChild(btn);
     });
-
-    state.elements.footer = nav;
-    return nav;
   }
 
-  // ============================================
-  // LOGIC & UTILITIES
-  // ============================================
-
-  function toggleMenu(force) {
-    const menu = state.elements.menuDropdown;
-    if (!menu) return;
-
-    state.isMenuOpen = force !== undefined ? force : !state.isMenuOpen;
-    menu.style.display = state.isMenuOpen ? 'flex' : 'none';
-    menu.style.pointerEvents = state.isMenuOpen ? 'auto' : 'none';
-
-    if (state.isMenuOpen) {
-      setTimeout(() => document.addEventListener('click', () => toggleMenu(false), { once: true }), 0);
+  function updateHeader(pageId) {
+    if (!headerEl) return;
+    const config = PAGE_CONFIG[pageId] || PAGE_CONFIG['home'];
+    
+    // Get user info from AppState
+    let userName = 'User';
+    let userEmail = '';
+    let isVerified = false;
+    
+    if (window.AppState) {
+      const user = AppState.get('user');
+      if (user) {
+        userName = user.user_metadata?.name || user.email?.split('@')[0] || 'User';
+        userEmail = user.email || '';
+        isVerified = user.user_metadata?.verified || false;
+      }
+    }
+    
+    const initials = userName.substring(0, 2).toUpperCase();
+    
+    headerEl.innerHTML = `
+      <div class="header-identity" style="display:flex; align-items:center; gap:12px;">
+        <i class="fas ${config.icon}" style="font-size:1.25rem; color:var(--color-primary, #4f46e5);"></i>
+        <span style="font-size:1.125rem; font-weight:700; color:var(--color-text-primary, #fff); letter-spacing:-0.02em;">${config.title}</span>
+      </div>
+      
+      <div class="header-actions" style="position:relative;">
+        <button id="profile-menu-btn" style="width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; color:#fff; cursor:pointer; transition:all 0.2s;">
+          <i class="fas fa-bars" style="font-size:1rem;"></i>
+        </button>
+        
+        <!-- Profile Dropdown -->
+        <div id="profile-dropdown" class="profile-dropdown">
+          <!-- Header -->
+          <div class="profile-header">
+            <div class="profile-avatar">${initials}</div>
+            <div class="profile-info">
+              <div class="profile-name">${userName}</div>
+              <div class="profile-email">${userEmail}</div>
+            </div>
+          </div>
+          
+          <!-- Verification Badge -->
+          <div class="profile-verification ${isVerified ? 'verified' : 'unverified'}">
+            <i class="fas ${isVerified ? 'fa-shield-check' : 'fa-shield-alt'}"></i>
+            <span>${isVerified ? 'Verified Account' : 'Unverified Account'}</span>
+          </div>
+          
+          <!-- Menu Items -->
+          <div class="profile-menu">
+            <button class="profile-menu-item" onclick="Navbar.handleSettings()">
+              <i class="fas fa-user-circle"></i>
+              <span>Account Settings</span>
+              <i class="fas fa-chevron-right profile-menu-arrow"></i>
+            </button>
+            <button class="profile-menu-item" onclick="Navbar.handleNotifications()">
+              <i class="fas fa-bell"></i>
+              <span>Notifications</span>
+              <i class="fas fa-chevron-right profile-menu-arrow"></i>
+            </button>
+            <button class="profile-menu-item" onclick="Navbar.handleHelp()">
+              <i class="fas fa-question-circle"></i>
+              <span>Help & Support</span>
+              <i class="fas fa-chevron-right profile-menu-arrow"></i>
+            </button>
+            <div class="profile-menu-divider"></div>
+            <button class="profile-menu-item danger" onclick="Navbar.handleSignOut()">
+              <i class="fas fa-sign-out-alt"></i>
+              <span>Sign Out</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Attach menu toggle
+    const menuBtn = headerEl.querySelector('#profile-menu-btn');
+    if (menuBtn) {
+      menuBtn.onclick = (e) => {
+        e.stopPropagation();
+        toggleProfileDropdown();
+      };
     }
   }
 
-  function setActive(page) {
-    state.activePage = page;
-    if (!state.elements.footer) return;
+  function toggleProfileDropdown() {
+    const dropdown = document.getElementById('profile-dropdown');
+    const menuBtn = document.getElementById('profile-menu-btn');
+    
+    if (!dropdown) return;
+    
+    dropdownOpen = !dropdownOpen;
+    dropdown.classList.toggle('open', dropdownOpen);
+    
+    if (menuBtn) {
+      menuBtn.style.background = dropdownOpen ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255,255,255,0.1)';
+      menuBtn.style.borderColor = dropdownOpen ? 'rgba(139, 92, 246, 0.4)' : 'rgba(255,255,255,0.1)';
+    }
+    
+    if (dropdownOpen) {
+      setTimeout(() => {
+        document.addEventListener('click', handleOutsideClick);
+      }, 0);
+    } else {
+      document.removeEventListener('click', handleOutsideClick);
+    }
+  }
 
-    const btns = state.elements.footer.querySelectorAll('.nav-item');
-    btns.forEach(btn => {
-      const active = btn.dataset.page === page;
-      const indicator = btn.querySelector('.nav-indicator');
-      const label = btn.querySelector('.nav-label');
-      const icon = btn.querySelector('.nav-icon');
+  function handleOutsideClick(e) {
+    const dropdown = document.getElementById('profile-dropdown');
+    const menuBtn = document.getElementById('profile-menu-btn');
+    
+    if (dropdown && !dropdown.contains(e.target) && e.target !== menuBtn) {
+      dropdownOpen = false;
+      dropdown.classList.remove('open');
+      if (menuBtn) {
+        menuBtn.style.background = 'rgba(255,255,255,0.1)';
+        menuBtn.style.borderColor = 'rgba(255,255,255,0.1)';
+      }
+      document.removeEventListener('click', handleOutsideClick);
+    }
+  }
 
-      if (active) {
-        indicator.style.transform = 'scaleX(1)';
-        label.style.color = 'var(--color-primary)';
-        icon.style.transform = 'translateY(-2px)';
+  function injectDropdownStyles() {
+    if (document.getElementById('navbar-dropdown-styles')) return;
+    
+    const style = document.createElement('style');
+    style.id = 'navbar-dropdown-styles';
+    style.textContent = `
+      .profile-dropdown {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        width: 280px;
+        background: var(--color-surface, #1e293b);
+        border: 1px solid var(--color-border, rgba(255,255,255,0.1));
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
+        opacity: 0;
+        transform: translateY(-10px);
+        pointer-events: none;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 9999;
+        overflow: hidden;
+      }
+      
+      .profile-dropdown.open {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: all;
+      }
+      
+      .profile-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+        border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.1));
+      }
+      
+      .profile-avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #8b5cf6, #6366f1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 16px;
+        font-weight: 700;
+        flex-shrink: 0;
+      }
+      
+      .profile-info {
+        flex: 1;
+        min-width: 0;
+      }
+      
+      .profile-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--color-text-primary, #fff);
+        margin-bottom: 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      
+      .profile-email {
+        font-size: 12px;
+        color: var(--color-text-secondary, #94a3b8);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      
+      .profile-verification {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        font-size: 12px;
+        font-weight: 600;
+        border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.1));
+      }
+      
+      .profile-verification.verified {
+        color: #10b981;
+        background: rgba(16, 185, 129, 0.1);
+      }
+      
+      .profile-verification.unverified {
+        color: #f59e0b;
+        background: rgba(245, 158, 11, 0.1);
+      }
+      
+      .profile-menu {
+        padding: 8px 0;
+      }
+      
+      .profile-menu-item {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        background: none;
+        border: none;
+        color: var(--color-text-primary, #fff);
+        font-family: inherit;
+        font-size: 14px;
+        text-align: left;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      
+      .profile-menu-item:hover {
+        background: var(--color-surface-elevated, rgba(255,255,255,0.05));
+      }
+      
+      .profile-menu-item i:first-child {
+        width: 20px;
+        text-align: center;
+        color: var(--color-text-secondary, #94a3b8);
+      }
+      
+      .profile-menu-item span {
+        flex: 1;
+      }
+      
+      .profile-menu-arrow {
+        font-size: 10px;
+        color: var(--color-text-tertiary, #64748b);
+      }
+      
+      .profile-menu-item.danger {
+        color: #ef4444;
+      }
+      
+      .profile-menu-item.danger i {
+        color: #ef4444;
+      }
+      
+      .profile-menu-divider {
+        height: 1px;
+        background: var(--color-border, rgba(255,255,255,0.1));
+        margin: 8px 0;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function setActive(pageId) {
+    if (!footerEl) return;
+    activePage = pageId;
+    
+    const buttons = footerEl.querySelectorAll('button');
+    buttons.forEach(btn => {
+      const icon = btn.querySelector('i');
+      if (btn.dataset.target === pageId) {
+        btn.style.color = 'var(--color-primary, #4f46e5)';
+        if (icon) {
+          icon.style.transform = 'translateY(-2px)';
+          icon.style.transition = 'transform 0.2s';
+        }
       } else {
-        indicator.style.transform = 'scaleX(0)';
-        label.style.color = 'var(--color-text-secondary)';
-        icon.style.transform = 'translateY(0)';
+        btn.style.color = 'var(--color-text-secondary, #94a3b8)';
+        if (icon) icon.style.transform = 'none';
       }
     });
-  }
-
-  function showProfileModal() {
-    if (window.Modal) {
-      const user = (window.AppState && typeof AppState.get === 'function') ? AppState.get('user') : {};
-      const content = document.createElement('div');
-      content.style.textAlign = 'center';
-      content.innerHTML = `
-        <div style="font-size: 3.5rem; margin-bottom: 1rem;">👤</div>
-        <h3 style="color: var(--color-text-primary); margin-bottom: 0.5rem;">${user.user_metadata?.full_name || 'NexTrade Investor'}</h3>
-        <p style="color: var(--color-text-secondary); font-size: 0.9rem;">${user.email || ''}</p>
-        <div style="margin-top: 1.5rem; display: flex; justify-content: center; gap: 8px;">
-          <span class="badge badge-success" style="font-size: 11px;">Identity Verified</span>
-          <span class="badge" style="font-size: 11px; background: rgba(79, 70, 229, 0.1); color: var(--color-primary);">Pro Account</span>
-        </div>
-      `;
-      Modal.open({ title: 'My Profile', content, showCloseButton: true });
-    }
-  }
-
-  async function handleSignOut() {
-    if (window.supabaseClient) {
-      await window.supabaseClient.auth.signOut();
-    }
-    window.location.href = 'login.html';
-  }
-
-  // ============================================
-  // INITIALIZATION
-  // ============================================
-
-  function init(targetContainer) {
-    // 1. Determine safe parent (prefer .app-wrapper for Flex flow)
-    const container = document.querySelector('.app-wrapper') || targetContainer || document.body;
     
-    // 2. Clear stale instances
-    document.querySelectorAll('.app-header, .app-footer').forEach(el => el.remove());
+    updateHeader(pageId);
+  }
 
-    // 3. Construct Components
-    state.elements.header = createTopHeader();
-    state.elements.footer = createBottomNav();
+  // Menu Actions
+  function handleSettings() {
+    toggleProfileDropdown();
+    if (window.App) App.showError('Settings coming soon');
+  }
 
-    // 4. Inject into Flex Structure (Header top, Footer bottom)
-    container.prepend(state.elements.header);
-    container.appendChild(state.elements.footer);
+  function handleNotifications() {
+    toggleProfileDropdown();
+    if (window.App) App.showError('Notifications coming soon');
+  }
 
-    // 5. Initial state sync
-    const startPage = (window.AppState && typeof AppState.get === 'function') ? AppState.get('ui.currentPage') : 'home';
-    setActive(startPage);
+  function handleHelp() {
+    toggleProfileDropdown();
+    if (window.App) App.showError('Help center coming soon');
+  }
 
-    console.log('✅ Navbar: Strict Flex Shell initialized.');
+  function handleSignOut() {
+    toggleProfileDropdown();
+    if (confirm('Sign out?')) {
+      if (window.supabaseClient) {
+        supabaseClient.auth.signOut().then(() => window.location.reload());
+      } else {
+        window.location.href = 'login.html';
+      }
+    }
   }
 
   return {
     init,
     setActive,
-    showProfileModal
+    handleSettings,
+    handleNotifications,
+    handleHelp,
+    handleSignOut
   };
-
 })();
 
 if (typeof window !== 'undefined') window.Navbar = Navbar;

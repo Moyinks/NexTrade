@@ -1,10 +1,8 @@
 /**
- * NexTrade — Router (AUTHORITATIVE, INTEGRATED)
- * Guarantees:
- * - Pages NEVER overlap
- * - Bootstraps.getMain() is the single source of truth for the render target
- * - Synchronized initialization with App and Bootstraps
- * - Robust error handling for missing modules or invalid DOM nodes
+ * NexTrade — Router (FIXED - Proper Bootstraps Integration)
+ * ══════════════════════════════════════════════════════════════
+ * CRITICAL FIX: Waits for Bootstraps.init() before doing anything
+ * ══════════════════════════════════════════════════════════════
  */
 
 (function () {
@@ -14,40 +12,45 @@
   let currentPage = null;
   let currentPageName = null;
   let initialized = false;
+  let navigationQueue = Promise.resolve();
 
   // ==============================
-  // DOM BIND
+  // 1. DOM BINDING (WITH RETRY)
   // ==============================
 
-  /**
-   * Binds the main render container using Bootstraps authority.
-   * Prevents "String" corruption by validating against HTMLElement.
-   */
-  function bindMain() {
-    // If already bound and valid, return
+  async function bindMain() {
     if (appMain instanceof HTMLElement) return appMain;
 
-    // Use Bootstraps as the Authoritative DOM Owner
-    if (window.Bootstraps && typeof window.Bootstraps.getMain === 'function') {
-      appMain = window.Bootstraps.getMain();
+    // Wait for Bootstraps if not ready
+    let attempts = 0;
+    while (attempts < 50) { // 5 seconds max
+      if (window.Bootstraps && typeof Bootstraps.getMain === 'function') {
+        const el = Bootstraps.getMain();
+        if (el instanceof HTMLElement) {
+          appMain = el;
+          console.log('[ROUTER] ✅ Bound to .app-main');
+          return appMain;
+        }
+      }
+
+      // Fallback direct query
+      const fallback = document.querySelector('.app-main');
+      if (fallback) {
+        appMain = fallback;
+        console.log('[ROUTER] ✅ Bound to .app-main (fallback)');
+        return appMain;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
     }
 
-    // Fallback if Bootstraps isn't ready, but with strict validation
-    if (!(appMain instanceof HTMLElement)) {
-      appMain = document.querySelector('.app-main');
-    }
-
-    if (!(appMain instanceof HTMLElement)) {
-      console.error('❌ Router fatal: .app-main is not a valid HTMLElement');
-      return null;
-    }
-
-    console.log('📄 Router: .app-main bound successfully');
-    return appMain;
+    console.error('[ROUTER] ❌ Failed to bind .app-main after 5s');
+    return null;
   }
 
   // ==============================
-  // PAGE RESOLVE
+  // 2. PAGE RESOLUTION
   // ==============================
 
   function resolvePage(name) {
@@ -57,22 +60,168 @@
   }
 
   // ==============================
-  // UNMOUNT
+  // 3. LOADING STATES (SMOOTH)
+  // ==============================
+
+  function showSkeletonLoader(container, pageName) {
+    if (!container) return;
+
+    const skeletons = {
+      home: createHomeSkeleton(),
+      market: createMarketSkeleton(),
+      vault: createVaultSkeleton(),
+      wallet: createWalletSkeleton()
+    };
+
+    const skeleton = skeletons[pageName] || createGenericSkeleton(pageName);
+    
+    container.innerHTML = '';
+    container.style.opacity = '0';
+    container.appendChild(skeleton);
+    
+    requestAnimationFrame(() => {
+      container.style.transition = 'opacity 0.15s ease-out';
+      container.style.opacity = '1';
+    });
+  }
+
+  function createHomeSkeleton() {
+    const div = document.createElement('div');
+    div.style.cssText = 'padding: 16px; padding-bottom: 100px;';
+    div.innerHTML = `
+      <div class="skeleton-pulse" style="height: 180px; border-radius: 16px; margin-bottom: 20px;"></div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 24px;">
+        <div class="skeleton-pulse" style="height: 72px; border-radius: 12px;"></div>
+        <div class="skeleton-pulse" style="height: 72px; border-radius: 12px;"></div>
+        <div class="skeleton-pulse" style="height: 72px; border-radius: 12px;"></div>
+      </div>
+      <div class="skeleton-pulse" style="height: 200px; border-radius: 12px; margin-bottom: 20px;"></div>
+      <div class="skeleton-pulse" style="height: 300px; border-radius: 12px;"></div>
+    `;
+    return div;
+  }
+
+  function createMarketSkeleton() {
+    const div = document.createElement('div');
+    div.style.cssText = 'padding: 16px; padding-bottom: 100px;';
+    div.innerHTML = `
+      <div class="skeleton-pulse" style="height: 120px; border-radius: 12px; margin-bottom: 16px;"></div>
+      <div class="skeleton-pulse" style="height: 48px; border-radius: 12px; margin-bottom: 12px;"></div>
+      ${Array(5).fill(0).map(() => `
+        <div class="skeleton-pulse" style="height: 100px; border-radius: 12px; margin-bottom: 10px;"></div>
+      `).join('')}
+    `;
+    return div;
+  }
+
+  function createVaultSkeleton() {
+    const div = document.createElement('div');
+    div.style.cssText = 'padding: 16px; padding-bottom: 100px;';
+    div.innerHTML = `
+      <div class="skeleton-pulse" style="height: 180px; border-radius: 16px; margin-bottom: 24px;"></div>
+      ${Array(3).fill(0).map(() => `
+        <div class="skeleton-pulse" style="height: 140px; border-radius: 12px; margin-bottom: 12px;"></div>
+      `).join('')}
+    `;
+    return div;
+  }
+
+  function createWalletSkeleton() {
+    const div = document.createElement('div');
+    div.style.cssText = 'padding: 16px; padding-bottom: 100px;';
+    div.innerHTML = `
+      <div class="skeleton-pulse" style="height: 200px; border-radius: 16px; margin-bottom: 24px;"></div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 32px;">
+        <div class="skeleton-pulse" style="height: 56px; border-radius: 16px;"></div>
+        <div class="skeleton-pulse" style="height: 56px; border-radius: 16px;"></div>
+      </div>
+      ${Array(4).fill(0).map(() => `
+        <div class="skeleton-pulse" style="height: 80px; border-radius: 12px; margin-bottom: 8px;"></div>
+      `).join('')}
+    `;
+    return div;
+  }
+
+  function createGenericSkeleton(pageName) {
+    const div = document.createElement('div');
+    div.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 50vh; padding: 20px;';
+    div.innerHTML = `
+      <i class="fas fa-spinner fa-spin" style="font-size: 32px; color: var(--color-primary); margin-bottom: 16px;"></i>
+      <div style="font-size: 14px; font-weight: 600; color: var(--color-text-primary);">Loading ${pageName}...</div>
+    `;
+    return div;
+  }
+
+  function showErrorState(container, pageName, error) {
+    if (!container) return;
+
+    container.innerHTML = '';
+    container.scrollTop = 0;
+
+    const errorDiv = document.createElement('div');
+    errorDiv.style.cssText = `
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 50vh; padding: 20px; text-align: center;
+    `;
+
+    errorDiv.innerHTML = `
+      <div style="font-size: 48px; margin-bottom: 20px; opacity: 0.5;">
+        <i class="fas fa-exclamation-triangle" style="color: #ef4444;"></i>
+      </div>
+      <div style="font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 8px;">
+        Failed to Load Page
+      </div>
+      <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 20px; max-width: 300px;">
+        ${error || 'Something went wrong loading this page.'}
+      </div>
+      <button 
+        onclick="Router.navigate('home')" 
+        class="btn btn-primary" 
+        style="padding: 10px 24px; border-radius: 8px;"
+      >
+        Go to Home
+      </button>
+    `;
+
+    container.appendChild(errorDiv);
+  }
+
+  function show404(container, pageName) {
+    if (!container) return;
+
+    container.innerHTML = '';
+    container.scrollTop = 0;
+
+    const notFound = document.createElement('div');
+    notFound.style.cssText = `
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 50vh; padding: 20px; text-align: center;
+    `;
+
+    notFound.innerHTML = `
+      <div style="font-size: 72px; font-weight: 700; color: var(--color-text-tertiary); margin-bottom: 16px;">404</div>
+      <div style="font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 8px;">Page Not Found</div>
+      <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 20px; max-width: 300px;">
+        The module <strong>${pageName}</strong> could not be loaded.
+      </div>
+      <button onclick="Router.navigate('home')" class="btn btn-primary" style="padding: 10px 24px;">Go to Home</button>
+    `;
+
+    container.appendChild(notFound);
+  }
+
+  // ==============================
+  // 4. CLEANUP
   // ==============================
 
   function unmount() {
     if (currentPage && typeof currentPage.cleanup === 'function') {
       try {
         currentPage.cleanup();
+        console.log(`[ROUTER] 🧹 Cleaned up ${currentPageName}`);
       } catch (err) {
-        console.warn(`Router: Cleanup failed for ${currentPageName}`, err);
+        console.warn(`[ROUTER] ⚠️ Cleanup error in ${currentPageName}:`, err);
       }
-    }
-
-    const container = bindMain();
-    if (container) {
-      container.innerHTML = '';
-      container.scrollTop = 0;
     }
 
     currentPage = null;
@@ -80,125 +229,165 @@
   }
 
   // ==============================
-  // RENDER
+  // 5. RENDER ENGINE (QUEUED)
   // ==============================
 
-  /**
-   * Primary render function.
-   * @param {string} pageName - The name of the module to render.
-   */
-  function render(pageName) {
-    const container = bindMain();
+  async function render(pageName) {
+    navigationQueue = navigationQueue.then(() => executeNavigation(pageName));
+    return navigationQueue;
+  }
+
+  async function executeNavigation(pageName) {
+    const container = await bindMain();
     
     if (!container) {
-      console.error('Router: Cannot render, target container missing.');
+      console.error('[ROUTER] ❌ Cannot render - container not found');
       return;
     }
 
-    if (!pageName) return;
-
-    // Prevent redundant renders of the same page
-    if (pageName === currentPageName) {
-      container.scrollTop = 0;
+    if (!pageName) {
+      console.warn('[ROUTER] ⚠️ No page name provided');
       return;
     }
 
-    console.log(`📄 Router: Navigating to "${pageName}"`);
+    console.log(`[ROUTER] 📄 Navigating to "${pageName}"`);
 
-    const page = resolvePage(pageName);
+    const pageModule = resolvePage(pageName);
 
-    if (!page || typeof page.render !== 'function') {
-      console.error(`Router: Page module "${pageName}" not found or invalid.`);
-      container.innerHTML = `
-        <div style="padding:2rem; color:var(--color-danger, #ff5555); text-align:center;">
-          <h3>Page Not Found</h3>
-          <p>The module "${pageName}" could not be resolved.</p>
-          <button class="btn btn-primary" onclick="App.navigate('home')">Return Home</button>
-        </div>
-      `;
+    if (!pageModule || typeof pageModule.render !== 'function') {
+      console.error(`[ROUTER] ❌ Module "${pageName}" not found`);
+      show404(container, pageName);
       return;
     }
 
-    // Step 1: Cleanup previous page
     unmount();
 
-    // Step 2: Render new page into the validated container
+    showSkeletonLoader(container, pageName);
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     try {
-      page.render(container);
-      currentPage = page;
-      currentPageName = pageName;
+      const renderPromise = pageModule.render(container);
       
-      // Step 3: Sync Navbar if applicable
+      if (renderPromise instanceof Promise) {
+        await renderPromise;
+      }
+
+      container.style.transition = 'opacity 0.2s ease-in';
+      container.style.opacity = '1';
+
+      currentPage = pageModule;
+      currentPageName = pageName;
+
       if (window.Navbar && typeof window.Navbar.setActive === 'function') {
         window.Navbar.setActive(pageName);
       }
+
+      console.log(`[ROUTER] ✅ ${pageName} loaded successfully`);
+
     } catch (err) {
-      console.error(`Router: Execution error in ${pageName}.render()`, err);
-      container.innerHTML = `<div style="padding:2rem; color:#ff5555;">Critical error loading ${pageName}.</div>`;
+      console.error(`[ROUTER] ❌ Render error in ${pageName}:`, err);
+      showErrorState(container, pageName, err.message);
     }
   }
 
   // ==============================
-  // NAV EVENTS
+  // 6. NAVIGATION EVENTS
   // ==============================
 
-  function bindNav() {
+  function bindNavEvents() {
     document.addEventListener('click', e => {
-      const btn = e.target.closest('[data-page]');
-      if (!btn) return;
+      const link = e.target.closest('[data-page]');
+      if (!link) return;
 
       e.preventDefault();
-      e.stopPropagation();
-
-      const targetPage = btn.dataset.page;
+      const target = link.dataset.page;
       
-      // Use App.navigate if available to ensure state consistency
       if (window.App && typeof window.App.navigate === 'function') {
-        window.App.navigate(targetPage);
+        window.App.navigate(target);
       } else {
-        render(targetPage);
+        render(target);
       }
     });
+
+    console.log('[ROUTER] ✅ Navigation events bound');
   }
 
   // ==============================
-  // INITIALIZATION
+  // 7. INITIALIZATION (ASYNC)
   // ==============================
 
-  /**
-   * Initialization sequence coordinated with App.js
-   */
   async function init() {
-    if (initialized) return;
+    if (initialized) {
+      console.warn('[ROUTER] ⚠️ Already initialized');
+      return;
+    }
 
-    bindNav();
+    console.log('[ROUTER] 🔄 Initializing...');
+
+    // CRITICAL: Wait for Bootstraps first
+    if (!window.Bootstraps || typeof Bootstraps.getMain !== 'function') {
+      console.log('[ROUTER] ⏳ Waiting for Bootstraps...');
+      
+      let attempts = 0;
+      while (attempts < 50) { // 5 second timeout
+        if (window.Bootstraps && typeof Bootstraps.getMain === 'function') {
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      
+      if (!window.Bootstraps) {
+        console.error('[ROUTER] ❌ Bootstraps not available after 5s');
+        return;
+      }
+    }
+
+    // Now bind events (DOM should be ready)
+    bindNavEvents();
     
-    // Ensure container is ready before first render
-    if (bindMain()) {
+    // Verify we can bind to main
+    const mainElement = await bindMain();
+    
+    if (mainElement) {
       initialized = true;
-      console.log('📄 Router: Initialized');
+      console.log('[ROUTER] ✅ Initialized successfully');
+    } else {
+      console.error('[ROUTER] ❌ Initialization failed - no .app-main element');
     }
   }
 
   // ==============================
-  // EXPORT & GLOBAL SYNC
+  // 8. EXPORTS
   // ==============================
 
-  // Export the Router object
   window.Router = {
+    init,
+    navigate: render,
     go: render,
-    init: init,
-    getCurrentPage: () => currentPageName
+    getCurrentPage: () => currentPageName,
+    isNavigating: () => navigationQueue
   };
 
-  // Provide the specific hook expected by app.js
-  window.routerRenderPage = render;
-
-  // Manual trigger if DOM is already loaded, otherwise wait for DOMContentLoaded
-  if (document.readyState === 'interactive' || document.readyState === 'complete') {
-    init();
-  } else {
-    document.addEventListener('DOMContentLoaded', init);
+  // Add CSS for skeleton animation
+  if (!document.getElementById('router-styles')) {
+    const style = document.createElement('style');
+    style.id = 'router-styles';
+    style.textContent = `
+      @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+      .skeleton-pulse {
+        background: linear-gradient(90deg, var(--color-surface) 0%, var(--color-surface-elevated) 50%, var(--color-surface) 100%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+      }
+    `;
+    document.head.appendChild(style);
   }
+
+  console.log('[ROUTER] 📦 Module loaded (waiting for init call)');
 
 })();

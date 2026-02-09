@@ -1,10 +1,13 @@
 /**
- * NexTrade — External API Integration (Institutional Grade)
- * Integrates CoinGecko Data, Supabase User Sync, and Market Simulation.
- * * FEATURES:
- * 1. Data Aggregation: Fetches and caches market data, details, and search results.
- * 2. Database Sync: Hydrates AppState using the robust 'supabaseClient' adapter.
- * 3. Market Simulation: Generates algorithmic activity feeds for UI liveliness.
+ * NexTrade — External API Integration (Production Grade - Real Data Only)
+ * ══════════════════════════════════════════════════════════════════════
+ * FEATURES:
+ * 1. Real-time market data from CoinGecko with forced refresh
+ * 2. Live price feeds from Binance WebSocket
+ * 3. OHLC candle data from Binance REST API
+ * 4. Trending coins and news integration
+ * 5. Comprehensive error handling and logging
+ * ══════════════════════════════════════════════════════════════════════
  */
 
 const API = (() => {
@@ -14,15 +17,69 @@ const API = (() => {
   // CONFIGURATION & CACHE
   // ============================================
 
+  const BINANCE_REST_URL = 'https://api.binance.com/api/v3';
+  const BINANCE_WS_URL = 'wss://stream.binance.com:9443/ws';
   const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
+  const FEAR_GREED_URL = 'https://api.alternative.me/fng/';
   const CACHE_DURATION = 60000; // 1 minute
+
+  // Map App IDs to Binance Symbols for Real-Time Feeds
+  const SYMBOL_MAP = {
+    'bitcoin': 'BTCUSDT',
+    'ethereum': 'ETHUSDT',
+    'solana': 'SOLUSDT',
+    'binancecoin': 'BNBUSDT',
+    'ripple': 'XRPUSDT',
+    'cardano': 'ADAUSDT',
+    'avalanche-2': 'AVAXUSDT',
+    'polkadot': 'DOTUSDT',
+    'matic-network': 'MATICUSDT',
+    'dogecoin': 'DOGEUSDT',
+    'shiba-inu': 'SHIBUSDT',
+    'tron': 'TRXUSDT',
+    'litecoin': 'LTCUSDT',
+    'chainlink': 'LINKUSDT',
+    'uniswap': 'UNIUSDT'
+  };
 
   const cache = {
     marketData: { data: null, timestamp: 0 },
     coinDetails: {},
     searchResults: {},
-    trending: { data: null, timestamp: 0 }
+    trending: { data: null, timestamp: 0 },
+    fearGreed: { data: null, timestamp: 0 }
   };
+
+  let activeSocket = null;
+  let requestLog = [];
+
+  // ============================================
+  // LOGGING & DEBUGGING
+  // ============================================
+
+  function logRequest(endpoint, params = {}) {
+    const entry = {
+      timestamp: new Date().toISOString(),
+      endpoint,
+      params,
+      status: 'pending'
+    };
+    requestLog.push(entry);
+    console.log(`[API] 📡 Requesting: ${endpoint}`, params);
+    return entry;
+  }
+
+  function logResponse(entry, success, data = null, error = null) {
+    entry.status = success ? 'success' : 'failed';
+    entry.dataSize = data ? (Array.isArray(data) ? data.length : 'object') : 0;
+    entry.error = error;
+    
+    if (success) {
+      console.log(`[API] ✅ Success: ${entry.endpoint}`, { dataSize: entry.dataSize });
+    } else {
+      console.error(`[API] ❌ Failed: ${entry.endpoint}`, error);
+    }
+  }
 
   // ============================================
   // CORE UTILITIES
@@ -32,73 +89,292 @@ const API = (() => {
     return Date.now() - timestamp < CACHE_DURATION;
   }
 
-  async function fetchWithErrorHandling(url) {
+  async function fetchWithErrorHandling(url, logEntry = null) {
     try {
       const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      return await response.json();
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (logEntry) {
+        logResponse(logEntry, true, data);
+      }
+      
+      return data;
     } catch (error) {
-      console.warn('API fetch warning:', error);
+      if (logEntry) {
+        logResponse(logEntry, false, null, error.message);
+      }
       throw error;
     }
   }
 
+  async function retryFetch(url, maxRetries = 3, delayMs = 1000) {
+    let lastError;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[API] 🔄 Attempt ${attempt}/${maxRetries}: ${url}`);
+        return await fetchWithErrorHandling(url);
+      } catch (error) {
+        lastError = error;
+        console.warn(`[API] ⚠️ Attempt ${attempt} failed:`, error.message);
+        
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
+        }
+      }
+    }
+    
+    throw lastError;
+  }
+
   // ============================================
-  // MARKET DATA (COINGECKO)
+  // 1. BINANCE REAL-TIME DATA (INSTITUTIONAL)
   // ============================================
 
-  async function getMarketData(limit = 50, currency = 'usd') {
-    if (isCacheValid(cache.marketData.timestamp) && cache.marketData.data) {
+  async function getCandles(coinId, interval = '1D') {
+    const symbol = SYMBOL_MAP[coinId] || 'BTCUSDT';
+    
+    const intervalMap = { 
+      '1H': '1m', 
+      '1D': '15m', 
+      '1W': '1h', 
+      '1M': '4h', 
+      '1Y': '1d' 
+    };
+    
+    const binanceInterval = intervalMap[interval] || '1h';
+    const limit = 300;
+
+    const logEntry = logRequest('Binance Candles', { symbol, interval: binanceInterval, limit });
+
+    try {
+      const url = `${BINANCE_REST_URL}/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${limit}`;
+      const data = await retryFetch(url, 2, 500);
+      
+      const candles = data.map(d => ({
+        time: d[0] / 1000,
+        open: parseFloat(d[1]),
+        high: parseFloat(d[2]),
+        low: parseFloat(d[3]),
+        close: parseFloat(d[4]),
+        value: parseFloat(d[4]),
+        volume: parseFloat(d[5])
+      }));
+      
+      logResponse(logEntry, true, candles);
+      return candles;
+      
+    } catch (err) {
+      logResponse(logEntry, false, null, err.message);
+      console.warn(`[API] Binance candles unavailable for ${symbol}, using fallback`);
+      return [];
+    }
+  }
+
+  async function getLivePrice(coinId) {
+    const symbol = SYMBOL_MAP[coinId] || 'BTCUSDT';
+    const logEntry = logRequest('Binance Price', { symbol });
+    
+    try {
+      const url = `${BINANCE_REST_URL}/ticker/price?symbol=${symbol}`;
+      const data = await fetchWithErrorHandling(url, logEntry);
+      return parseFloat(data.price);
+    } catch (err) {
+      logResponse(logEntry, false, null, err.message);
+      return null;
+    }
+  }
+
+  function subscribeToTicker(coinId, callback) {
+    if (activeSocket) {
+      activeSocket.close();
+      activeSocket = null;
+    }
+
+    const symbol = (SYMBOL_MAP[coinId] || 'BTCUSDT').toLowerCase();
+    const wsUrl = `${BINANCE_WS_URL}/${symbol}@trade`;
+    
+    console.log(`[API] 🔌 WebSocket connecting: ${symbol}`);
+    
+    try {
+      activeSocket = new WebSocket(wsUrl);
+
+      activeSocket.onopen = () => {
+        console.log(`[API] ✅ WebSocket connected: ${symbol}`);
+      };
+
+      activeSocket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.p) {
+            const price = parseFloat(message.p);
+            callback(price);
+          }
+        } catch (err) {
+          console.error('[API] WebSocket parse error:', err);
+        }
+      };
+
+      activeSocket.onerror = (err) => {
+        console.error('[API] ❌ WebSocket error:', err);
+      };
+
+      activeSocket.onclose = () => {
+        console.log(`[API] 🔌 WebSocket closed: ${symbol}`);
+      };
+      
+    } catch (err) {
+      console.error('[API] WebSocket setup failed:', err);
+    }
+  }
+
+  function unsubscribeTicker() {
+    if (activeSocket) {
+      console.log('[API] 🔌 Closing WebSocket');
+      activeSocket.close();
+      activeSocket = null;
+    }
+  }
+
+  // ============================================
+  // 2. MARKET DATA (COINGECKO AGGREGATION)
+  // ============================================
+
+  async function getMarketData(limit = 50, currency = 'usd', forceRefresh = false) {
+    if (!forceRefresh && isCacheValid(cache.marketData.timestamp) && cache.marketData.data) {
+      console.log('[API] 📦 Using cached market data');
       return { success: true, data: cache.marketData.data };
     }
 
+    const logEntry = logRequest('CoinGecko Markets', { limit, currency, forceRefresh });
+
     try {
-      const url = `${COINGECKO_BASE_URL}/coins/markets?vs_currency=${currency}&order=market_cap_desc&per_page=${limit}&page=1&sparkline=false&price_change_percentage=24h`;
-      const data = await fetchWithErrorHandling(url);
+      const url = `${COINGECKO_BASE_URL}/coins/markets?vs_currency=${currency}&order=market_cap_desc&per_page=${limit}&page=1&sparkline=true&price_change_percentage=24h`;
+      const data = await retryFetch(url, 3, 2000);
+
+      if (!data || !Array.isArray(data) || data.length === 0) {
+        throw new Error('Empty response from CoinGecko');
+      }
 
       const transformed = data.map(coin => ({
         id: coin.id,
         symbol: coin.symbol.toUpperCase(),
         name: coin.name,
         image: coin.image,
-        current_price: coin.current_price,
-        market_cap: coin.market_cap,
-        market_cap_rank: coin.market_cap_rank,
-        price_change_24h: coin.price_change_24h,
-        price_change_percentage_24h: coin.price_change_percentage_24h,
-        total_volume: coin.total_volume,
-        high_24h: coin.high_24h,
-        low_24h: coin.low_24h,
-        circulating_supply: coin.circulating_supply,
-        total_supply: coin.total_supply
+        current_price: coin.current_price || 0,
+        market_cap: coin.market_cap || 0,
+        market_cap_rank: coin.market_cap_rank || 0,
+        price_change_24h: coin.price_change_24h || 0,
+        price_change_percentage_24h: coin.price_change_percentage_24h || 0,
+        total_volume: coin.total_volume || 0,
+        high_24h: coin.high_24h || 0,
+        low_24h: coin.low_24h || 0,
+        circulating_supply: coin.circulating_supply || 0,
+        total_supply: coin.total_supply || 0,
+        sparkline: (coin.sparkline_in_7d && coin.sparkline_in_7d.price) ? coin.sparkline_in_7d.price : []
       }));
 
-      // Update Cache
       cache.marketData = { data: transformed, timestamp: Date.now() };
       
-      // Update Global State
-      if (window.AppState) AppState.set('marketData', transformed);
+      if (window.AppState) {
+        AppState.set('marketData', transformed);
+      }
+
+      logResponse(logEntry, true, transformed);
+      console.log(`[API] 💾 Cached ${transformed.length} coins`);
 
       return { success: true, data: transformed };
+      
     } catch (error) {
-      // Fallback to cache if API fails
-      if (cache.marketData.data) return { success: true, data: cache.marketData.data };
-      console.error('Get market data error:', error);
+      logResponse(logEntry, false, null, error.message);
+      
+      if (cache.marketData.data) {
+        console.warn('[API] ⚠️ Using stale cache due to API error');
+        return { success: true, data: cache.marketData.data };
+      }
+      
+      console.error('[API] ❌ Market data fetch failed completely:', error);
       return { success: false, data: [], error: error.message };
     }
   }
 
+  async function ensureCoinLoaded(coinId) {
+    console.log(`[API] 🎯 Ensuring ${coinId} is loaded`);
+    
+    const currentData = cache.marketData.data || [];
+    const existing = currentData.find(c => c.id === coinId);
+    
+    if (existing && existing.current_price > 0) {
+      console.log(`[API] ✅ ${coinId} already in cache`);
+      return existing;
+    }
+
+    console.log(`[API] 📥 Fetching detailed data for ${coinId}`);
+    
+    const logEntry = logRequest('CoinGecko Coin Detail', { coinId });
+    
+    try {
+      const url = `${COINGECKO_BASE_URL}/coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=true`;
+      const data = await retryFetch(url, 3, 2000);
+
+      const coinData = {
+        id: data.id,
+        symbol: data.symbol.toUpperCase(),
+        name: data.name,
+        image: data.image?.large || data.image?.small || null,
+        current_price: data.market_data?.current_price?.usd || 0,
+        market_cap: data.market_data?.market_cap?.usd || 0,
+        market_cap_rank: data.market_cap_rank || 0,
+        price_change_24h: data.market_data?.price_change_24h || 0,
+        price_change_percentage_24h: data.market_data?.price_change_percentage_24h || 0,
+        total_volume: data.market_data?.total_volume?.usd || 0,
+        high_24h: data.market_data?.high_24h?.usd || 0,
+        low_24h: data.market_data?.low_24h?.usd || 0,
+        circulating_supply: data.market_data?.circulating_supply || 0,
+        total_supply: data.market_data?.total_supply || 0,
+        sparkline: data.market_data?.sparkline_7d?.price || []
+      };
+
+      cache.coinDetails[coinId] = { data: coinData, timestamp: Date.now() };
+      
+      const updatedCache = [...currentData.filter(c => c.id !== coinId), coinData];
+      cache.marketData.data = updatedCache;
+      
+      if (window.AppState) {
+        AppState.set('marketData', updatedCache);
+      }
+
+      logResponse(logEntry, true, coinData);
+      return coinData;
+      
+    } catch (error) {
+      logResponse(logEntry, false, null, error.message);
+      console.error(`[API] Failed to load ${coinId}:`, error);
+      return null;
+    }
+  }
+
   async function searchCoins(query) {
-    if (!query || query.trim().length === 0) return { success: true, data: [] };
+    if (!query || query.trim().length === 0) {
+      return { success: true, data: [] };
+    }
 
     const cacheKey = query.toLowerCase();
     if (cache.searchResults[cacheKey] && isCacheValid(cache.searchResults[cacheKey].timestamp)) {
       return { success: true, data: cache.searchResults[cacheKey].data };
     }
 
+    const logEntry = logRequest('CoinGecko Search', { query });
+
     try {
       const url = `${COINGECKO_BASE_URL}/search?query=${encodeURIComponent(query)}`;
-      const data = await fetchWithErrorHandling(url);
+      const data = await fetchWithErrorHandling(url, logEntry);
 
       const results = (data.coins || []).slice(0, 10).map(coin => ({
         id: coin.id,
@@ -110,8 +386,9 @@ const API = (() => {
 
       cache.searchResults[cacheKey] = { data: results, timestamp: Date.now() };
       return { success: true, data: results };
+      
     } catch (error) {
-      console.error('Search coins error:', error);
+      logResponse(logEntry, false, null, error.message);
       return { success: false, data: [], error: error.message };
     }
   }
@@ -121,9 +398,11 @@ const API = (() => {
       return { success: true, data: cache.coinDetails[coinId].data };
     }
 
+    const logEntry = logRequest('CoinGecko Details', { coinId });
+
     try {
       const url = `${COINGECKO_BASE_URL}/coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false`;
-      const data = await fetchWithErrorHandling(url);
+      const data = await fetchWithErrorHandling(url, logEntry);
 
       const details = {
         id: data.id,
@@ -149,33 +428,41 @@ const API = (() => {
 
       cache.coinDetails[coinId] = { data: details, timestamp: Date.now() };
       return { success: true, data: details };
+      
     } catch (error) {
-      console.error('Get coin details error:', error);
+      logResponse(logEntry, false, null, error.message);
       return { success: false, data: null, error: error.message };
     }
   }
 
   async function getPrices(coinIds, currency = 'usd') {
-    if (!Array.isArray(coinIds) || coinIds.length === 0) return { success: false, error: 'Invalid coin IDs' };
+    if (!Array.isArray(coinIds) || coinIds.length === 0) {
+      return { success: false, error: 'Invalid coin IDs' };
+    }
+
+    const logEntry = logRequest('CoinGecko Prices', { coinIds, currency });
 
     try {
       const url = `${COINGECKO_BASE_URL}/simple/price?ids=${coinIds.join(',')}&vs_currencies=${currency}&include_24hr_change=true`;
-      const data = await fetchWithErrorHandling(url);
+      const data = await fetchWithErrorHandling(url, logEntry);
       return { success: true, data };
     } catch (error) {
-      console.error('Get prices error:', error);
+      logResponse(logEntry, false, null, error.message);
       return { success: false, data: {}, error: error.message };
     }
   }
 
   async function getTrendingCoins() {
     if (isCacheValid(cache.trending.timestamp) && cache.trending.data) {
+      console.log('[API] 📦 Using cached trending data');
       return { success: true, data: cache.trending.data };
     }
 
+    const logEntry = logRequest('CoinGecko Trending', {});
+
     try {
       const url = `${COINGECKO_BASE_URL}/search/trending`;
-      const data = await fetchWithErrorHandling(url);
+      const data = await retryFetch(url, 3, 2000);
 
       const trending = data.coins.map(item => ({
         id: item.item.id,
@@ -183,65 +470,105 @@ const API = (() => {
         name: item.item.name,
         thumb: item.item.thumb,
         market_cap_rank: item.item.market_cap_rank,
-        price_btc: item.item.price_btc
+        price_btc: item.item.price_btc,
+        score: item.item.score || 0
       }));
 
       cache.trending = { data: trending, timestamp: Date.now() };
+      logResponse(logEntry, true, trending);
       return { success: true, data: trending };
+      
     } catch (error) {
-      console.error('Get trending coins error:', error);
+      logResponse(logEntry, false, null, error.message);
+      
+      if (cache.trending.data) {
+        return { success: true, data: cache.trending.data };
+      }
+      
       return { success: false, data: [], error: error.message };
     }
   }
 
+  async function getFearGreedIndex() {
+    if (isCacheValid(cache.fearGreed.timestamp) && cache.fearGreed.data) {
+      console.log('[API] 📦 Using cached Fear & Greed data');
+      return { success: true, data: cache.fearGreed.data };
+    }
+
+    const logEntry = logRequest('Alternative.me Fear & Greed', {});
+
+    try {
+      const url = `${FEAR_GREED_URL}?limit=1`;
+      const response = await fetchWithErrorHandling(url, logEntry);
+
+      if (response && response.data && response.data.length > 0) {
+        const fngData = response.data[0];
+        const result = {
+          value: parseInt(fngData.value),
+          classification: fngData.value_classification,
+          timestamp: fngData.timestamp
+        };
+
+        cache.fearGreed = { data: result, timestamp: Date.now() };
+        return { success: true, data: result };
+      }
+
+      throw new Error('Invalid response format');
+      
+    } catch (error) {
+      logResponse(logEntry, false, null, error.message);
+      
+      if (cache.fearGreed.data) {
+        return { success: true, data: cache.fearGreed.data };
+      }
+      
+      return { success: false, data: null, error: error.message };
+    }
+  }
+
   // ============================================
-  // DATABASE SYNC (CRITICAL REPAIR)
+  // 3. DATABASE SYNC (PRESERVED LOGIC)
   // ============================================
 
   async function loadUserData(userId) {
     if (!window.supabaseClient) {
-      console.warn('API: Supabase client not initialized. Skipping sync.');
+      console.warn('[API] Supabase client not initialized');
       return { success: false, error: 'No client' };
     }
 
     try {
-      console.log('🔄 API: Starting Full Database Sync...');
+      console.log('[API] 🔄 Starting database sync for user:', userId);
 
-      // Parallel Fetch using the ROBUST ADAPTER methods
-      // These methods handle the column mapping (spot_balance -> balances.spot)
       const [profileData, txsData, invsData] = await Promise.all([
         supabaseClient.getProfile(userId),
         supabaseClient.getTransactions(userId),
         supabaseClient.getInvestments(userId)
       ]);
 
-      // 1. Hydrate Profile (Balances & Holdings)
       if (profileData) {
         if (profileData.balances) AppState.updateBalances(profileData.balances);
         if (profileData.holdings) AppState.set('holdings', profileData.holdings);
       }
 
-      // 2. Hydrate Transactions (History)
       if (txsData && txsData.success && Array.isArray(txsData.data)) {
         AppState.set('transactions', txsData.data);
       }
 
-      // 3. Hydrate Investments (Vault)
       if (invsData && invsData.success && Array.isArray(invsData.data)) {
         AppState.set('investments', invsData.data);
       }
 
-      console.log('✅ API: Database Sync Complete.');
+      console.log('[API] ✅ Database sync complete');
       return { success: true };
 
     } catch (err) {
-      console.error('API.loadUserData failed:', err);
+      console.error('[API] ❌ Database sync failed:', err);
       return { success: false, error: err.message };
     }
   }
 
   // ============================================
-  // MARKET SIMULATION (ACTIVITY FEED)
+  // 4. MARKET SIMULATION (ACTIVITY FEED ONLY)
   // ============================================
 
   function generateSimulatedActivity(investment) {
@@ -265,7 +592,7 @@ const API = (() => {
     const category = activities[Math.floor(Math.random() * activities.length)];
     const asset = category.assets ? category.assets[Math.floor(Math.random() * category.assets.length)] : null;
     const description = category.descriptions[Math.floor(Math.random() * category.descriptions.length)];
-    const amount = (investment.amount * (Math.random() * 0.02 + 0.005)).toFixed(2); // 0.5% - 2.5% variation
+    const amount = (investment.amount * (Math.random() * 0.02 + 0.005)).toFixed(2);
 
     return {
       id: 'act_' + Date.now() + Math.random().toString(36).substr(2, 5),
@@ -279,22 +606,15 @@ const API = (() => {
   }
 
   function startSimulatedTrading(investment) {
-    // Random interval between 30s and 90s for activity generation
     const intervalId = setInterval(() => {
-      // 1. Generate Activity
       const activity = generateSimulatedActivity(investment);
       
-      // 2. Add to Local State (Visual only)
       if (window.AppState) {
         const feed = AppState.get('activityFeed') || [];
         feed.unshift(activity);
-        if (feed.length > 50) feed.pop(); // Keep list manageable
+        if (feed.length > 50) feed.pop();
         AppState.set('activityFeed', feed);
       }
-      
-      // Note: We do NOT update the database here to avoid polluting real transaction logs
-      // This is purely for UI liveliness in the Vault dashboard.
-
     }, Math.random() * 60000 + 30000);
 
     return intervalId;
@@ -313,15 +633,38 @@ const API = (() => {
     cache.coinDetails = {};
     cache.searchResults = {};
     cache.trending = { data: null, timestamp: 0 };
+    cache.fearGreed = { data: null, timestamp: 0 };
+    console.log('[API] 🗑️ Cache cleared');
   }
 
   function clearSpecificCache(type) {
     switch(type) {
-      case 'market': cache.marketData = { data:null, timestamp:0 }; break;
-      case 'details': cache.coinDetails = {}; break;
-      case 'search': cache.searchResults = {}; break;
-      case 'trending': cache.trending = { data:null, timestamp:0 }; break;
+      case 'market': 
+        cache.marketData = { data: null, timestamp: 0 }; 
+        break;
+      case 'details': 
+        cache.coinDetails = {}; 
+        break;
+      case 'search': 
+        cache.searchResults = {}; 
+        break;
+      case 'trending': 
+        cache.trending = { data: null, timestamp: 0 }; 
+        break;
+      case 'feargreed':
+        cache.fearGreed = { data: null, timestamp: 0 };
+        break;
     }
+    console.log(`[API] 🗑️ Cleared ${type} cache`);
+  }
+
+  function getRequestLog() {
+    return requestLog;
+  }
+
+  function clearRequestLog() {
+    requestLog = [];
+    console.log('[API] 🗑️ Request log cleared');
   }
 
   // ============================================
@@ -329,27 +672,36 @@ const API = (() => {
   // ============================================
 
   return {
-    // Market Data
+    // Real-Time (Binance)
+    getCandles,
+    getLivePrice,
+    subscribeToTicker,
+    unsubscribeTicker,
+
+    // Aggregated (CoinGecko)
     getMarketData,
+    ensureCoinLoaded,
     searchCoins,
     getCoinDetails,
     getPrices,
     getTrendingCoins,
+    getFearGreedIndex,
     
     // Database Sync
     loadUserData,
     
-    // Simulation
+    // Simulation (Vault Activity)
     generateSimulatedActivity,
     startSimulatedTrading,
     stopSimulatedTrading,
     
     // Utils
     clearCache,
-    clearSpecificCache
+    clearSpecificCache,
+    getRequestLog,
+    clearRequestLog
   };
 
 })();
 
-// Attach to Window
 if (typeof window !== 'undefined') window.API = API;

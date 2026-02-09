@@ -1,10 +1,9 @@
 /**
- * NexTrade — Mobile Responsive Styles (CHROME FIX)
- * Touch-optimized overrides for Android/Mobile devices
- * Institutional Matte Blue Design System
- * * CRITICAL FIX:
- * - Force 140px bottom padding on .app-main to account for Chrome's dynamic bottom bar.
- * - Uses !important to override any other calculation logic.
+ * NexTrade — Mobile Responsive Styles (Cleaned & Integrated)
+ * * ARCHITECTURE UPDATE:
+ * 1. REMOVED: Conflicting "sticky" positioning (Layout.css handles structure).
+ * 2. REMOVED: 140px padding hack (Flexbox now handles viewport filling).
+ * 3. PRESERVED: Touch targets, safe-area insets, and font scaling.
  */
 
 /* ============================================
@@ -253,11 +252,6 @@
   .app-footer {
     padding-bottom: max(0px, env(safe-area-inset-bottom));
   }
-
-  .auth-page {
-    padding-top: max(var(--space-4), env(safe-area-inset-top));
-    padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
-  }
 }
 
 /* ============================================
@@ -315,7 +309,6 @@ body {
 
   .app-main {
     padding-top: var(--space-4);
-    padding-bottom: 100px !important;
   }
 
   .section {
@@ -420,22 +413,6 @@ body {
 }
 
 /* ============================================
-   STICKY POSITIONING FIX
-   ============================================ */
-
-@supports (-webkit-touch-callout: none) {
-  .app-footer {
-    position: -webkit-sticky;
-    position: sticky;
-  }
-
-  .market-header {
-    position: -webkit-sticky;
-    position: sticky;
-  }
-}
-
-/* ============================================
    ANDROID SPECIFIC FIXES
    ============================================ */
 
@@ -501,35 +478,5 @@ p {
 
   .strategy-stats {
     grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-/* ============================================
-   BOTTOM NAVIGATION SAFE ZONE (FIXED)
-   ============================================ */
-
-@media (max-width: 768px) {
-  .app-main {
-    /* CRITICAL FIX: Huge bottom padding (140px) to clear Chrome's bottom bar */
-    padding-bottom: 140px !important;
-  }
-
-  /* Ensure modals don't get hidden behind navbar */
-  .modal {
-    padding-bottom: 140px !important;
-  }
-}
-
-/* ============================================
-   LOADING STATES
-   ============================================ */
-
-@media (max-width: 640px) {
-  .page-loading {
-    min-height: 40vh;
-  }
-
-  .skeleton-card {
-    height: 120px;
   }
 }

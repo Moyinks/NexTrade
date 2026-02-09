@@ -2,32 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="description" content="NexTrade - Institutional-grade crypto investment platform" />
   <meta name="theme-color" content="#0a0c10" />
   <title>NexTrade</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <link rel="stylesheet" href="core.css" />
   <link rel="stylesheet" href="components.css" />
-  <link rel="stylesheet" href="layouts.css" />
+  <link rel="stylesheet" href="layout.css" />
   <link rel="stylesheet" href="pages.css" />
   <link rel="stylesheet" href="mobile.css" />
 
   <style>
+    /* Critical Initial Styles */
     html, body {
       margin: 0;
       padding: 0;
-      height: 100%;
-      overflow: hidden;
       background: #0a0c10;
       color: #fff;
-      font-family: Inter, sans-serif;
+      font-family: 'Inter', sans-serif;
+      /* We explicitly DO NOT set height here to avoid conflicts with layout.css */
     }
 
+    /* MATURE LOADING SCREEN */
     #loading-screen {
       position: fixed;
       inset: 0;
@@ -37,37 +39,67 @@
       align-items: center;
       justify-content: center;
       background: #0a0c10;
+      transition: opacity 0.4s ease-out;
     }
 
     #loading-screen.hidden {
       opacity: 0;
       pointer-events: none;
-      transition: opacity .3s ease;
     }
 
-    .app-wrapper {
+    .loader-content {
+      text-align: center;
+      animation: fadeIn 0.5s ease-out;
+    }
+
+    .loader-logo {
       display: flex;
-      flex-direction: column;
-      height: 100vh;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: white;
     }
 
-    .app-header,
-    .app-footer {
-      flex: 0 0 auto;
+    .loader-logo i {
+      color: #2563eb; /* Primary Blue */
+      font-size: 1.8rem;
     }
 
-    .app-main {
-      flex: 1 1 auto;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
+    .spinner-ring {
+      width: 28px;
+      height: 28px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
     }
+
+    .loader-text {
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 0.85rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 
 <body>
   <div id="loading-screen">
-    <strong>NexTrade</strong>
-    <small class="loading-text">Initializing…</small>
+    <div class="loader-content">
+      <div class="loader-logo">
+        <i class="fas fa-chart-line"></i>
+        <span>NexTrade</span>
+      </div>
+      <div class="spinner-ring"></div>
+      <div class="loader-text">Authenticating...</div>
+    </div>
   </div>
 
   <div id="app">
@@ -80,7 +112,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <!-- Core -->
   <script src="config.js" defer></script>
   <script src="format.js" defer></script>
   <script src="validation.js" defer></script>
@@ -88,27 +119,26 @@
   <script src="state.js" defer></script>
   <script src="supabase.js" defer></script>
   <script src="api.js" defer></script>
-
-  <!-- UI -->
+ <script src="trade.js" defer></script>
   <script src="card.js" defer></script>
   <script src="modal.js" defer></script>
   <script src="feed.js" defer></script>
   <script src="navbar.js" defer></script>
 
-  <!-- Views -->
   <script src="home.js" defer></script>
-  <script src="market.js" defer></script>
+  <script src="cache-manager.js" defer></script>
+  <script src="markets.js" defer></script>
   <script src="vault.js" defer></script>
   <script src="wallet.js" defer></script>
+ 
 
-  <!-- Core controllers -->
   <script src="bootstraps.js" defer></script>
   <script src="router.js" defer></script>
   <script src="app.js" defer></script>
 
-  <!-- SAFE INITIALIZER (DEFERRED BY DESIGN) -->
   <script defer>
     (async () => {
+      // 1. Wait for Dependencies
       const waitFor = async (cond, t = 6000) => {
         const s = Date.now();
         while (!cond()) {
@@ -127,17 +157,34 @@
 
       if (!ok) {
         console.error('❌ App failed to initialize in time');
+        document.querySelector('.loader-text').textContent = 'Connection Error. Reloading...';
+        document.querySelector('.loader-text').style.color = '#ef4444';
         return;
       }
 
-      await Bootstraps.init();
-      await App.init();
+      // 2. Initialize App
+      try {
+        // Bootstraps must verify the DOM before App starts
+        await Bootstraps.init();
+        await App.init();
+        
+        // 3. Graceful Transition
+        const screen = document.getElementById('loading-screen');
+        const text = document.querySelector('.loader-text');
+        text.textContent = 'Welcome Back';
+        text.style.color = '#10b981'; // Success Green
 
-      const screen = document.getElementById('loading-screen');
-      screen.classList.add('hidden');
-      setTimeout(() => screen.remove(), 300);
-
-      console.log('%cNexTrade v1.0.0', 'color:#2563eb;font-weight:bold;');
+        setTimeout(() => {
+          screen.classList.add('hidden');
+          setTimeout(() => screen.remove(), 400); // Cleanup DOM
+        }, 600);
+        
+        console.log('%cNexTrade Ready', 'color:#2563eb;font-weight:bold;');
+      } catch (err) {
+        console.error('Init Error:', err);
+        // We let the app handle auth errors internally (redirect to login)
+     
+      }
     })();
   </script>
 </body>

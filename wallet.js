@@ -1,504 +1,343 @@
 /**
- * NexTrade — Wallet Module (Institutional Grade)
- * * REAL-LIFE IMPLEMENTATION:
- * 1. DEPOSIT: Creates 'pending' requests. Admin must approve in Supabase to credit funds.
- * 2. WITHDRAW: Deducts balance immediately and creates 'pending' request for Admin review.
- * 3. SCHEMA ALIGNMENT: Stores details in the existing 'description' column.
+ * NexTrade — Wallet Module (Institutional Interface)
+ * * VISUALS: Deep Blue Mesh Gradients (Spot Wallet Theme).
+ * * LOGIC:
+ * 1. ACTION BAR: Wires 'Deposit' & 'Withdraw' directly to Trade.js engine.
+ * 2. ASSETS: Renders 'Holdings' from AppState with live valuation.
+ * 3. HISTORY: Displays 'Pending' vs 'Completed' statuses clearly.
  */
 
 const Wallet = (() => {
   'use strict';
 
   // ============================================
-  // STATE & CONFIG
+  // STATE
   // ============================================
   let container = null;
-  let unsubscribe = null;
+  
+  const state = {
+    user: null,
+    balances: { spot: 0, vault: 0 },
+    holdings: {},
+    transactions: [],
+    marketData: [], // For asset valuation
+    hideBalance: localStorage.getItem('nex_hide_balance') === 'true'
+  };
 
   // ============================================
-  // RENDER ENTRY POINT
+  // HELPERS
   // ============================================
+  function formatMoney(amount) {
+    if (state.hideBalance) return '••••••••';
+    return (window.Format && Format.currency) 
+      ? Format.currency(amount) 
+      : '$' + (amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
+  }
 
-  function render(element) {
-    if (!element || !(element instanceof HTMLElement)) {
-      console.error('[Wallet] Invalid container');
-      return;
+  function togglePrivacy() {
+    state.hideBalance = !state.hideBalance;
+    localStorage.setItem('nex_hide_balance', state.hideBalance);
+    render(container); // Re-render instantly
+  }
+
+  function copyAddress() {
+    const addr = "0x71C7656EC7ab88b098defB751B7401B5f6d89A23";
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(addr);
+      if (window.App && App.showSuccess) App.showSuccess('Address Copied');
+    } else {
+      alert('Address: ' + addr);
     }
-
-    container = element;
-    container.className = 'wallet-page';
-    container.innerHTML = '';
-
-    const frag = document.createDocumentFragment();
-
-    // 1. Header
-    frag.appendChild(createHeader());
-
-    // 2. Balance Card (Spot)
-    frag.appendChild(createBalanceCard());
-
-    // 3. Action Buttons (Deposit/Withdraw)
-    frag.appendChild(createActionButtons());
-
-    // 4. Asset Holdings List
-    frag.appendChild(createHoldingsSection());
-
-    // 5. Transaction History
-    frag.appendChild(createTransactionHistory());
-
-    container.appendChild(frag);
-
-    // Start listening for state changes
-    subscribeToUpdates();
   }
 
   // ============================================
-  // COMPONENT FACTORIES
+  // CORE RENDER
+  // ============================================
+  function render(element) {
+    if (!element) return;
+    container = element;
+    container.className = 'wallet-page';
+    container.style.paddingBottom = '100px';
+
+    // 1. Sync State
+    if (window.AppState) {
+      state.user = AppState.get('user');
+      const bals = AppState.get('balances');
+      state.balances = bals || { spot: 0, vault: 0 };
+      state.holdings = AppState.get('holdings') || {};
+      state.transactions = AppState.get('transactions') || [];
+      state.marketData = AppState.get('marketData') || [];
+    }
+
+    // 2. Build UI
+    container.innerHTML = '';
+    
+    container.appendChild(createHeader());
+    container.appendChild(createHeroCard());
+    container.appendChild(createActionBar());
+    container.appendChild(createAssetsSection());
+    container.appendChild(createHistorySection());
+
+    // 3. Post-Render
+    if (window.Navbar) Navbar.setActive('wallet');
+  }
+
+  // ============================================
+  // COMPONENTS
   // ============================================
 
   function createHeader() {
-    const div = document.createElement('header');
-    div.className = 'wallet-header';
-    div.innerHTML = '<h1 class="wallet-title">Wallet</h1>';
-    return div;
-  }
-
-  function createBalanceCard() {
-    const balances = (window.AppState ? AppState.get('balances') : null) || { spot: 0 };
+    const header = document.createElement('div');
+    header.style.cssText = 'margin-bottom:24px; padding-top:12px; display:flex; justify-content:space-between; align-items:center;';
     
-    const div = document.createElement('div');
-    div.className = 'hero-card';
-    div.id = 'wallet-main-balance';
-    
-    div.innerHTML = `
-      <div class="hero-label">Available Balance</div>
-      <div class="hero-value financial-data">${window.Format ? Format.currency(balances.spot) : balances.spot}</div>
-      <div style="font-size:var(--text-sm); color:rgba(255,255,255,0.7); margin-top:var(--space-2);">
-        Funds available for trading and investment
+    header.innerHTML = `
+      <div>
+        <h2 style="font-size:24px; font-weight:700; color:var(--color-text-primary); letter-spacing:-0.02em; margin:0;">Spot Wallet</h2>
+        <div style="font-size:13px; color:var(--color-text-secondary); margin-top:4px;">Manage your crypto assets</div>
+      </div>
+      <div style="width:40px; height:40px; border-radius:50%; background:var(--color-surface); border:1px solid var(--color-border); display:flex; align-items:center; justify-content:center; color:var(--color-text-secondary);">
+        <i class="fas fa-qrcode"></i>
       </div>
     `;
-    return div;
+    return header;
   }
 
-  function createActionButtons() {
-    const div = document.createElement('div');
-    div.className = 'wallet-actions';
+  function createHeroCard() {
+    const card = document.createElement('div');
+    card.className = 'hero-card';
     
-    div.innerHTML = `
-      <button class="wallet-action-btn" id="btn-deposit">
-        <div class="wallet-action-icon">⬇️</div>
-        <div class="wallet-action-label">Deposit</div>
-      </button>
-      <button class="wallet-action-btn" id="btn-withdraw">
-        <div class="wallet-action-icon" style="background:var(--color-danger)">⬆️</div>
-        <div class="wallet-action-label">Withdraw</div>
-      </button>
+    // Blue Mesh Gradient (Spot Theme)
+    card.style.cssText = `
+      position: relative; overflow: hidden;
+      border-radius: var(--radius-xl);
+      padding: 24px; margin-bottom: 24px; height: 200px;
+      display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5);
+      background: radial-gradient(circle at 10% 10%, rgba(59, 130, 246, 0.4) 0%, transparent 60%),
+                  linear-gradient(135deg, #172554 0%, #020617 100%);
     `;
 
-    // Attach Handlers
-    div.querySelector('#btn-deposit').addEventListener('click', () => showDepositModal());
-    div.querySelector('#btn-withdraw').addEventListener('click', () => showWithdrawModal());
+    const iconClass = state.hideBalance ? 'fa-eye-slash' : 'fa-eye';
 
-    return div;
-  }
-
-  function createHoldingsSection() {
-    const section = document.createElement('section');
-    section.className = 'wallet-holdings';
-    section.innerHTML = `
-      <h2 style="font-size:var(--text-xl); font-weight:600; color:var(--color-text-primary); margin:var(--space-8) 0 var(--space-4);">
-        Your Assets
-      </h2>
-      <div id="holdings-list-container" style="display:flex; flex-direction:column; gap:var(--space-3);"></div>
-    `;
-    
-    // Initial render
-    renderHoldings(section.querySelector('#holdings-list-container'));
-    
-    return section;
-  }
-
-  function renderHoldings(target) {
-    const list = target || document.getElementById('holdings-list-container');
-    if (!list) return;
-
-    list.innerHTML = '';
-
-    // Safely get data
-    const holdings = (window.AppState ? AppState.get('holdings') : {}) || {};
-    const marketData = (window.AppState ? AppState.get('marketData') : []) || [];
-
-    // Filter out near-zero dust
-    const entries = Object.entries(holdings).filter(([_, qty]) => parseFloat(qty) > 0.000001);
-
-    if (entries.length === 0) {
-      list.innerHTML = `
-        <div style="padding:var(--space-6); background:var(--color-surface-elevated); border-radius:var(--radius-base); color:var(--color-text-secondary); font-size:var(--text-sm); text-align:center; border:1px dashed var(--color-border);">
-          No crypto assets held.
-        </div>`;
-      return;
-    }
-
-    entries.forEach(([symbol, quantity]) => {
-      // Find current price for valuation
-      const coin = marketData.find(c => c.symbol?.toUpperCase() === symbol.toUpperCase());
-      const price = coin ? coin.current_price : 0;
-      const usdValue = quantity * price;
-
-      const item = document.createElement('div');
-      item.style.cssText = `
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-        padding: var(--space-4); 
-        background: var(--color-surface-elevated); 
-        border-radius: var(--radius-base); 
-        border: 1px solid var(--color-border);
-      `;
-
-      item.innerHTML = `
-        <div style="display:flex; align-items:center; gap:var(--space-3);">
-          <div style="width:40px; height:40px; background:var(--color-surface); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:var(--text-xs); border:1px solid var(--color-border);">
-            ${symbol.substring(0, 3)}
-          </div>
-          <div>
-            <div style="font-weight:600; color:var(--color-text-primary); font-size:var(--text-base);">
-              ${symbol.toUpperCase()}
-            </div>
-            <div style="font-size:var(--text-xs); color:var(--color-text-secondary);">
-              ${parseFloat(quantity).toFixed(6)}
-            </div>
-          </div>
-        </div>
-        <div style="text-align:right;">
-          <div class="financial-data" style="font-weight:700; color:var(--color-text-primary); font-size:var(--text-lg);">
-            ${window.Format ? Format.currency(usdValue) : usdValue.toFixed(2)}
-          </div>
-          <div style="font-size:var(--text-xs); color:var(--color-text-secondary);">
-            @ ${window.Format ? Format.currency(price) : price}
-          </div>
-        </div>
-      `;
-      list.appendChild(item);
-    });
-  }
-
-  function createTransactionHistory() {
-    const section = document.createElement('section');
-    section.className = 'transaction-history';
-    section.innerHTML = `
-      <h2 style="font-size:var(--text-xl); font-weight:600; color:var(--color-text-primary); margin:var(--space-8) 0 var(--space-4);">
-        Transaction History
-      </h2>
-      <div id="tx-history-container" style="display:flex; flex-direction:column; gap:var(--space-2);"></div>
-    `;
-    
-    renderTransactions(section.querySelector('#tx-history-container'));
-    return section;
-  }
-
-  function renderTransactions(target) {
-    const list = target || document.getElementById('tx-history-container');
-    if (!list) return;
-
-    list.innerHTML = '';
-    const txs = (window.AppState ? AppState.get('transactions') : []) || [];
-
-    if (txs.length === 0) {
-      list.innerHTML = `
-        <div class="empty-state" style="text-align:center; padding:var(--space-8); opacity:0.6;">
-          <div style="font-size:48px; margin-bottom:var(--space-2);">📜</div>
-          <div>No transactions found.</div>
-        </div>`;
-      return;
-    }
-
-    txs.forEach(tx => {
-      const isDeposit = tx.type === 'deposit';
-      const isPositive = isDeposit || tx.type === 'sell';
-      const isPending = tx.status === 'pending';
+    card.innerHTML = `
+      <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.6); margin-bottom:12px;">
+        Available Balance
+      </div>
       
-      let icon = '💸'; 
-      if (isDeposit) icon = '⬇️';
-      if (tx.type === 'buy' || tx.type === 'sell') icon = '🪙';
-
-      // Status Badge Style
-      let statusColor = 'var(--color-text-secondary)';
-      if (tx.status === 'completed') statusColor = 'var(--color-success)';
-      if (tx.status === 'pending') statusColor = '#f59e0b'; // Amber/Yellow
-      if (tx.status === 'failed') statusColor = 'var(--color-danger)';
-
-      const item = document.createElement('div');
-      item.className = 'transaction-item';
-      item.style.cssText = `
-        display: flex; 
-        align-items: center; 
-        gap: var(--space-4); 
-        padding: var(--space-4); 
-        background: var(--color-surface-elevated); 
-        border-radius: var(--radius-base); 
-        border: 1px solid var(--color-border);
-      `;
-
-      item.innerHTML = `
-        <div class="transaction-icon" style="width:40px; height:40px; background:var(--color-surface); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.2rem;">
-          ${icon}
-        </div>
-        <div style="flex:1;">
-          <div style="font-weight:600; text-transform:capitalize; color:var(--color-text-primary);">
-            ${tx.type}
-            ${isPending ? '<span style="font-size:10px; background:#f59e0b20; color:#f59e0b; padding:2px 6px; border-radius:4px; margin-left:6px; vertical-align:middle;">PENDING</span>' : ''}
-          </div>
-          <div style="font-size:var(--text-xs); color:var(--color-text-secondary);">
-            ${window.Format ? Format.shortDate(tx.created_at) : tx.created_at.split('T')[0]}
-          </div>
-        </div>
-        <div style="text-align:right;">
-          <div class="financial-data" style="font-weight:700; color:${isPositive ? 'var(--color-success)' : 'var(--color-text-primary)'};">
-            ${isPositive ? '+' : '-'}${window.Format ? Format.currency(tx.amount) : tx.amount}
-          </div>
-          <div style="font-size:var(--text-xs); text-transform:uppercase; color:${statusColor};">
-            ${tx.status}
-          </div>
-        </div>
-      `;
-      list.appendChild(item);
-    });
-  }
-
-  // ============================================
-  // MODAL ACTIONS (REAL DATABASE)
-  // ============================================
-
-  async function showDepositModal() {
-    const content = document.createElement('div');
-    content.style.cssText = 'display:flex; flex-direction:column; gap:var(--space-4);';
-    
-    content.innerHTML = `
-      <div style="padding:var(--space-3); background:var(--color-surface-elevated); border-radius:var(--radius-base); font-size:var(--text-sm); line-height:1.4;">
-        <strong>Instructions:</strong><br>
-        1. Select a payment method.<br>
-        2. Send funds to the provided address.<br>
-        3. Enter the transaction ID/Reference below for verification.
+      <div style="font-family:var(--font-mono); font-size:42px; font-weight:700; color:white; letter-spacing:-1.5px; margin-bottom:16px; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">
+        ${formatMoney(state.balances.spot)}
       </div>
 
-      <div class="input-group">
-        <label class="input-label">Payment Method</label>
-        <select id="dep-method" class="input-field" style="background:var(--color-surface);">
-          <option value="USDT (TRC20)">USDT (TRC20)</option>
-          <option value="USDT (ERC20)">USDT (ERC20)</option>
-          <option value="Bitcoin (BTC)">Bitcoin (BTC)</option>
-          <option value="Bank Wire">Bank Wire (SWIFT)</option>
-        </select>
-      </div>
+      <button id="copy-addr-btn" style="
+        background: rgba(255,255,255,0.1); 
+        border: 1px solid rgba(255,255,255,0.2); 
+        padding: 8px 16px; 
+        border-radius: 20px; 
+        color: rgba(255,255,255,0.9);
+        font-family: var(--font-mono); font-size: 12px;
+        cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+        backdrop-filter: blur(4px); transition: background 0.2s;
+      ">
+        <span>0x71C...9A23</span>
+        <i class="fas fa-copy" style="font-size:10px;"></i>
+      </button>
 
-      <div class="input-group">
-        <label class="input-label">Admin Address / IBAN</label>
-        <div style="display:flex; gap:8px;">
-           <input type="text" id="admin-wallet" class="input-field" value="T9y... (Select method)" readonly style="font-family:monospace; font-size:var(--text-xs);">
-           <button class="btn" style="padding:0 12px;" onclick="navigator.clipboard.writeText(document.getElementById('admin-wallet').value)">📋</button>
-        </div>
-      </div>
-
-      <div class="input-group">
-        <label class="input-label">Amount Sent (USD)</label>
-        <input type="number" id="dep-amount" class="input-field financial-data" placeholder="0.00" min="50" step="0.01">
-      </div>
-
-      <div class="input-group">
-        <label class="input-label">Transaction Hash / Reference ID</label>
-        <input type="text" id="dep-ref" class="input-field" placeholder="e.g. 7f3a1... or Wire Ref #">
-      </div>
-
-      <button class="btn btn-success btn-full" id="submit-deposit" style="padding:var(--space-4);">
-        I Have Sent The Funds
+      <button id="wallet-privacy-btn" style="
+        position: absolute; top: 20px; right: 20px;
+        background: rgba(255,255,255,0.1); border: none; 
+        color: white; width: 32px; height: 32px; border-radius: 50%; 
+        display: flex; align-items: center; justify-content: center; cursor: pointer;
+      ">
+        <i class="fas ${iconClass}" style="font-size:12px;"></i>
       </button>
     `;
 
-    // Dynamic Address Logic
-    const methodSelect = content.querySelector('#dep-method');
-    const addressInput = content.querySelector('#admin-wallet');
-    const updateAddress = () => {
-      const m = methodSelect.value;
-      if(m.includes('TRC20')) addressInput.value = 'TXj7...YourRealAdminWalletHere'; 
-      else if(m.includes('ERC20')) addressInput.value = '0x71C...YourRealAdminWalletHere';
-      else if(m.includes('BTC')) addressInput.value = 'bc1q...YourRealAdminWalletHere';
-      else addressInput.value = 'Ask Support for IBAN';
-    };
-    methodSelect.addEventListener('change', updateAddress);
-    updateAddress(); // Init
+    card.querySelector('#wallet-privacy-btn').onclick = (e) => { e.stopPropagation(); togglePrivacy(); };
+    card.querySelector('#copy-addr-btn').onclick = copyAddress;
 
-    // Handle Submit
-    const btn = content.querySelector('#submit-deposit');
-    btn.onclick = async () => {
-      const amount = parseFloat(content.querySelector('#dep-amount').value);
-      const ref = content.querySelector('#dep-ref').value.trim();
-      const method = methodSelect.value;
-
-      if (!amount || amount < 50) {
-        if (window.App) App.showError('Minimum deposit is $50.00');
-        return;
-      }
-      if (!ref || ref.length < 5) {
-        if (window.App) App.showError('Please enter a valid Transaction Hash/Reference.');
-        return;
-      }
-
-      btn.disabled = true;
-      btn.textContent = 'Submitting Request...';
-
-      try {
-        const tx = {
-          type: 'deposit',
-          amount: amount,
-          status: 'pending', // Waiting for Admin
-          created_at: new Date().toISOString(),
-          description: `Method: ${method} | Ref: ${ref}` // Using existing DB column
-        };
-
-        // 1. Save to Real DB
-        if (window.supabaseClient) {
-          const { error } = await supabaseClient.createTransaction(tx);
-          if (error) throw new Error(error.message);
-        }
-
-        // 2. Update Local State (Only History, NO Balance update)
-        // We do NOT add to balances.spot yet.
-        AppState.addTransaction(tx);
-
-        if (window.Modal) await Modal.close();
-        if (window.App) App.showSuccess('Deposit request submitted. Waiting for confirmation.');
-
-      } catch (err) {
-        console.error('Deposit error:', err);
-        if (window.App) App.showError('Request failed. Check connection.');
-        btn.disabled = false;
-        btn.textContent = 'I Have Sent The Funds';
-      }
-    };
-
-    if (window.Modal) {
-      Modal.open({ title: 'Deposit Funds', content, maxWidth: '400px', showCloseButton: true });
-    }
+    return card;
   }
 
-  async function showWithdrawModal() {
-    const balances = AppState.get('balances');
+  function createActionBar() {
+    const bar = document.createElement('div');
+    bar.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:32px;';
+
+    // 1. Deposit (Primary Action)
+    const depositBtn = document.createElement('button');
+    depositBtn.className = 'btn btn-primary';
+    depositBtn.style.cssText = 'height:56px; border-radius:16px; font-size:15px; width:100%;';
+    depositBtn.innerHTML = `<i class="fas fa-arrow-down" style="margin-right:8px;"></i> Deposit`;
     
-    const content = document.createElement('div');
-    content.style.cssText = 'display:flex; flex-direction:column; gap:var(--space-4);';
+    depositBtn.onclick = () => {
+      if (window.Trade) Trade.openDeposit();
+      else alert('Trade Engine Loading...');
+    };
+
+    // 2. Withdraw (Secondary Action)
+    const withdrawBtn = document.createElement('button');
+    withdrawBtn.className = 'btn btn-secondary';
+    withdrawBtn.style.cssText = 'height:56px; border-radius:16px; font-size:15px; width:100%; border-color:var(--color-border); color:var(--color-text-primary);';
+    withdrawBtn.innerHTML = `<i class="fas fa-arrow-up" style="margin-right:8px;"></i> Withdraw`;
     
-    content.innerHTML = `
-      <div style="padding:var(--space-3); background:var(--color-surface-elevated); border-radius:var(--radius-base); text-align:right;">
-        <span style="font-size:var(--text-xs); color:var(--color-text-secondary);">Available:</span>
-        <span class="financial-data" style="font-weight:700;">${window.Format ? Format.currency(balances.spot) : balances.spot}</span>
-      </div>
+    withdrawBtn.onclick = () => {
+      if (window.Trade) Trade.openWithdraw();
+      else alert('Trade Engine Loading...');
+    };
 
-      <div class="input-group">
-        <label class="input-label">Withdraw Amount</label>
-        <input type="number" id="wd-amount" class="input-field financial-data" placeholder="0.00" min="10" max="${balances.spot}">
-      </div>
+    bar.appendChild(depositBtn);
+    bar.appendChild(withdrawBtn);
+    return bar;
+  }
 
-      <div class="input-group">
-        <label class="input-label">Destination Wallet / Account</label>
-        <input type="text" id="wd-address" class="input-field" placeholder="Paste address here">
-      </div>
+  function createAssetsSection() {
+    const section = document.createElement('div');
+    section.style.marginBottom = '32px';
 
-      <button class="btn btn-danger btn-full" id="submit-withdraw" style="padding:var(--space-4);">
-        Request Withdrawal
-      </button>
+    section.innerHTML = `
+      <h3 style="font-size:16px; font-weight:700; color:var(--color-text-primary); margin-bottom:16px;">Your Assets</h3>
     `;
 
-    const btn = content.querySelector('#submit-withdraw');
-    btn.onclick = async () => {
-      const amount = parseFloat(content.querySelector('#wd-amount').value);
-      const address = content.querySelector('#wd-address').value.trim();
+    const list = document.createElement('div');
+    list.style.cssText = 'display:flex; flex-direction:column; gap:1px;';
 
-      if (!amount || amount < 10) { return App.showError('Min withdrawal $10'); }
-      if (amount > balances.spot) { return App.showError('Insufficient balance'); }
-      if (address.length < 10) { return App.showError('Invalid address'); }
+    // Filter Holdings > 0 (Small dust cleanup visual)
+    const assetKeys = Object.keys(state.holdings).filter(k => state.holdings[k] > 0.000001);
 
-      btn.disabled = true;
-      btn.textContent = 'Processing...';
-
-      try {
-        const tx = {
-          type: 'withdraw',
-          amount: amount,
-          status: 'pending',
-          created_at: new Date().toISOString(),
-          description: `To: ${address}`
+    if (assetKeys.length === 0) {
+      list.innerHTML = `
+        <div class="empty-state" style="padding:32px; text-align:center; border:1px dashed var(--color-border); border-radius:var(--radius-lg); opacity:0.6;">
+          <div style="font-size:24px; color:var(--color-text-tertiary); margin-bottom:8px;"><i class="fas fa-wallet"></i></div>
+          <div style="font-size:13px; color:var(--color-text-secondary);">No assets held yet.</div>
+          <button onclick="App.navigate('market')" style="margin-top:12px; font-size:12px; color:var(--color-primary); background:none; border:none; font-weight:600; cursor:pointer;">Buy Crypto</button>
+        </div>
+      `;
+    } else {
+      assetKeys.forEach(symbol => {
+        const amount = state.holdings[symbol];
+        
+        // Find price info
+        // We use state.marketData if available, otherwise defaults
+        const coin = state.marketData.find(c => c.symbol.toLowerCase() === symbol.toLowerCase()) || { 
+          name: symbol.toUpperCase(), 
+          symbol: symbol.toUpperCase(), 
+          current_price: 0, 
+          image: null,
+          price_change_percentage_24h: 0 
         };
+        
+        // Safe valuation
+        const value = amount * (coin.current_price || 0);
+        const isUp = (coin.price_change_percentage_24h || 0) >= 0;
 
-        // 1. DB Insert
-        if (window.supabaseClient) {
-          const { error } = await supabaseClient.createTransaction(tx);
-          if (error) throw new Error(error.message);
-          
-          // 2. DB Balance Update (Reserve funds)
-          const newSpot = balances.spot - amount;
-          const { error: balErr } = await supabaseClient.updateBalances(AppState.get('user').id, { spot: newSpot });
-          if (balErr) throw new Error(balErr.message);
-        }
+        const item = document.createElement('div');
+        item.className = 'list-item'; // Uses core.css styling
+        item.style.cssText = `
+          display:flex; align-items:center; justify-content:space-between;
+          padding:16px; background:var(--color-surface);
+          border-bottom:1px solid var(--color-border);
+          cursor:pointer;
+        `;
+        
+        // Tap asset to go to market page for it
+        item.onclick = () => {
+            if (window.Market) {
+                App.navigate('market');
+                // Optional: Scroll to coin or open detail not implemented yet, 
+                // but this links the flow.
+            }
+        };
+        
+        item.innerHTML = `
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:40px; height:40px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden;">
+              ${coin.image ? `<img src="${coin.image}" style="width:100%; height:100%;">` : `<span style="font-size:12px; font-weight:700;">${coin.symbol[0]}</span>`}
+            </div>
+            
+            <div>
+              <div style="font-size:15px; font-weight:600; color:var(--color-text-primary);">${coin.name}</div>
+              <div style="font-size:12px; color:var(--color-text-secondary);">${amount.toFixed(4)} ${coin.symbol.toUpperCase()}</div>
+            </div>
+          </div>
 
-        // 3. Local Update
-        AppState.updateBalances({ spot: balances.spot - amount });
-        AppState.addTransaction(tx);
-
-        if (window.Modal) await Modal.close();
-        if (window.App) App.showSuccess('Withdrawal requested.');
-
-      } catch (err) {
-        console.error('Withdraw error:', err);
-        App.showError('Failed to process withdrawal.');
-        btn.disabled = false;
-        btn.textContent = 'Request Withdrawal';
-      }
-    };
-
-    if (window.Modal) {
-      Modal.open({ title: 'Withdraw Funds', content, maxWidth: '400px', showCloseButton: true });
-    }
-  }
-
-  // ============================================
-  // SUBSCRIPTIONS & CLEANUP
-  // ============================================
-
-  function subscribeToUpdates() {
-    if (unsubscribe) unsubscribe();
-
-    if (window.AppState) {
-      unsubscribe = AppState.subscribe((state) => {
-        // 1. Update Balance Header
-        const balEl = document.querySelector('#wallet-main-balance .hero-value');
-        if (balEl) {
-          balEl.textContent = window.Format ? Format.currency(state.balances.spot) : state.balances.spot;
-        }
-
-        // 2. Re-render Lists
-        renderHoldings();
-        renderTransactions();
+          <div style="text-align:right;">
+            <div style="font-family:var(--font-mono); font-size:15px; font-weight:600; color:var(--color-text-primary);">
+              ${formatMoney(value)}
+            </div>
+            <div style="font-size:12px; font-weight:500; color:${isUp ? 'var(--color-success)' : 'var(--color-danger)'};">
+              ${coin.current_price > 0 ? '$' + coin.current_price.toLocaleString() : '---'}
+            </div>
+          </div>
+        `;
+        list.appendChild(item);
       });
     }
+
+    section.appendChild(list);
+    return section;
   }
 
-  function cleanup() {
-    if (unsubscribe) {
-      unsubscribe();
-      unsubscribe = null;
+  function createHistorySection() {
+    const section = document.createElement('div');
+    
+    section.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="font-size:16px; font-weight:700; color:var(--color-text-primary);">Recent Activity</h3>
+      </div>
+    `;
+
+    const list = document.createElement('div');
+    list.style.cssText = 'display:flex; flex-direction:column; gap:8px;';
+
+    if (state.transactions.length === 0) {
+       list.innerHTML = `<div class="empty-state" style="text-align:center; padding:20px; font-size:13px; opacity:0.5;">No transactions found</div>`;
+    } else {
+      // Sort by date desc
+      const sortedTxs = [...state.transactions].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+
+      sortedTxs.slice(0, 20).forEach(tx => {
+        const isDeposit = tx.type === 'deposit' || tx.type === 'in';
+        const isPending = tx.status === 'pending';
+        
+        let color = isDeposit ? 'var(--color-success)' : 'var(--color-text-primary)';
+        if (isPending) color = 'var(--color-warning)'; // Yellow for Pending
+        
+        const icon = isDeposit ? 'fa-arrow-down' : 'fa-arrow-up';
+        const date = new Date(tx.created_at).toLocaleDateString(undefined, { month:'short', day:'numeric' });
+
+        const item = document.createElement('div');
+        item.style.cssText = `
+          display:flex; align-items:center; justify-content:space-between;
+          padding:12px 16px; background:var(--color-surface); border:1px solid var(--color-border);
+          border-radius:var(--radius-lg);
+        `;
+        
+        item.innerHTML = `
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:36px; height:36px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; color:${isPending ? '#f59e0b' : (isDeposit ? '#10b981' : '#fff')}; border:1px solid var(--color-border);">
+              <i class="fas ${icon}" style="font-size:12px;"></i>
+            </div>
+            <div>
+              <div style="font-size:14px; font-weight:600; color:var(--color-text-primary); text-transform:capitalize;">${tx.type}</div>
+              <div style="font-size:11px; color:var(--color-text-secondary);">
+                ${date} • <span style="text-transform:uppercase; font-size:10px; font-weight:700; color:${isPending ? '#f59e0b' : '#94a3b8'}">${tx.status}</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="font-family:var(--font-mono); font-size:14px; font-weight:600; color:${color};">
+            ${isDeposit ? '+' : '-'}${formatMoney(tx.amount)}
+          </div>
+        `;
+        list.appendChild(item);
+      });
     }
-    container = null;
+
+    section.appendChild(list);
+    return section;
   }
 
-  // ============================================
-  // EXPORT
-  // ============================================
-  return { 
-    render, 
-    cleanup 
-  };
-
+  return { render };
 })();
 
 if (typeof window !== 'undefined') window.Wallet = Wallet;

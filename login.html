@@ -19,6 +19,8 @@
             --card-bg: #1e293b;
             --input-bg: #1e293b;
             --border-color: #334155;
+            --danger: #ef4444;
+            --success: #10b981;
         }
         
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -91,6 +93,8 @@
         
         .form-group { text-align: left; margin-bottom: 1rem; }
         .label { display: block; font-size: 0.85rem; margin-bottom: 6px; color: var(--text-muted); font-weight: 500; }
+        .label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .forgot-link { font-size: 0.8rem; color: var(--primary); cursor: pointer; text-decoration: none; font-weight: 600; }
         
         .input-wrapper { position: relative; }
         .input-wrapper .left-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 1rem; pointer-events: none; }
@@ -108,6 +112,7 @@
             transition: border-color 0.2s; 
         }
         .input:focus { border-color: var(--primary); }
+        .input.otp { text-align: center; letter-spacing: 0.5em; font-family: monospace; font-size: 1.2rem; padding: 13px; }
         
         .checkbox-group {
             display: flex; align-items: flex-start; gap: 10px; margin-top: 1rem;
@@ -123,11 +128,13 @@
         .btn:active { transform: scale(0.98); }
         .btn:disabled { opacity: 0.7; cursor: not-allowed; }
 
-        .error-msg { color: #f87171; font-size: 0.85rem; margin-top: 1rem; display: none; text-align: center; padding: 8px; background: rgba(239,68,68,0.1); border-radius: 8px; }
-        .hidden { display: none; }
+        .error-msg { color: var(--danger); font-size: 0.85rem; margin-top: 1rem; display: none; text-align: center; padding: 8px; background: rgba(239,68,68,0.1); border-radius: 8px; }
+        .success-msg { color: var(--success); font-size: 0.85rem; margin-top: 1rem; display: none; text-align: center; padding: 8px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; }
+        .hidden { display: none !important; }
 
         .legal-footer { text-align: center; font-size: 0.75rem; color: var(--text-muted); margin-top: auto; padding-top: 1rem; opacity: 0.6; }
 
+        /* MODALS */
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.9); z-index: 2000;
@@ -137,15 +144,16 @@
         .modal-overlay.active { opacity: 1; pointer-events: all; }
         
         .modal-content {
-            background: var(--card-bg); width: 100%; height: 85vh;
+            background: var(--card-bg); width: 100%;
             border-top-left-radius: 20px; border-top-right-radius: 20px;
             border-top: 1px solid var(--border-color);
             display: flex; flex-direction: column;
             transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            padding-bottom: 20px;
         }
         @media(min-width: 640px) {
             .modal-overlay { align-items: center; justify-content: center; }
-            .modal-content { width: 90%; max-width: 550px; height: auto; max-height: 80vh; border-radius: 16px; transform: translateY(20px); }
+            .modal-content { width: 90%; max-width: 450px; border-radius: 16px; transform: translateY(20px); border: 1px solid var(--border-color); }
         }
         .modal-overlay.active .modal-content { transform: translateY(0); }
 
@@ -153,16 +161,9 @@
         .modal-header h3 { margin: 0; font-size: 1.1rem; color: white; font-weight: 700; }
         .close-modal { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; padding: 0 10px; cursor: pointer; }
         
-        .modal-body { 
-            padding: 1.5rem; overflow-y: auto; color: var(--text-muted); 
-            font-size: 0.85rem; line-height: 1.6; text-align: left; flex: 1;
-        }
-        .modal-body h4 { color: white; margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.5px; }
-        .modal-body p { margin-bottom: 1rem; }
-        .modal-body ul { margin: 0.5rem 0 1rem 1.5rem; }
-        
-        .modal-footer { padding: 1rem; border-top: 1px solid var(--border-color); text-align: center; }
-        .btn-sm { padding: 12px 24px; background: var(--border-color); color: white; border: none; border-radius: 8px; font-weight: 600; width: 100%; cursor: pointer; }
+        .modal-body { padding: 1.5rem; color: var(--text-muted); font-size: 0.9rem; line-height: 1.6; }
+        .otp-display { text-align: center; margin: 1.5rem 0; }
+        .resend-link { text-align: center; margin-top: 1rem; font-size: 0.85rem; color: var(--primary); cursor: pointer; text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -173,7 +174,7 @@
             <div class="logo"><i class="fas fa-chart-line"></i><span>NexTrade</span></div>
             <p class="subtitle">Institutional-Grade Wealth Management</p>
 
-            <div class="tabs">
+            <div class="tabs" id="authTabs">
                 <button class="tab active" onclick="switchTab('login')">Sign In</button>
                 <button class="tab" onclick="switchTab('signup')">Create Account</button>
             </div>
@@ -187,7 +188,10 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="label">Password</label>
+                    <div class="label-row">
+                        <label class="label" style="margin:0;">Password</label>
+                        <span class="forgot-link" onclick="toggleForgotPassword(true)">Forgot Password?</span>
+                    </div>
                     <div class="input-wrapper">
                         <i class="fas fa-lock left-icon"></i>
                         <input type="password" id="loginPassword" class="input" required placeholder="••••••••">
@@ -195,6 +199,25 @@
                     </div>
                 </div>
                 <button type="submit" class="btn" id="loginBtn">Secure Sign In</button>
+            </form>
+
+            <form id="forgotForm" class="hidden">
+                <div style="text-align:center; margin-bottom:1.5rem;">
+                    <i class="fas fa-key" style="font-size:2rem; color:var(--primary); margin-bottom:1rem;"></i>
+                    <h3 style="margin:0; color:white;">Reset Password</h3>
+                    <p style="font-size:0.85rem; color:var(--text-muted);">Enter your email to receive a reset link.</p>
+                </div>
+                <div class="form-group">
+                    <label class="label">Email Address</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-envelope left-icon"></i>
+                        <input type="email" id="forgotEmail" class="input" required placeholder="name@example.com">
+                    </div>
+                </div>
+                <button type="submit" class="btn" id="forgotBtn">Send Recovery Link</button>
+                <div style="text-align:center; margin-top:1rem;">
+                    <span class="forgot-link" style="color:var(--text-muted);" onclick="toggleForgotPassword(false)">Back to Login</span>
+                </div>
             </form>
 
             <form id="signupForm" class="hidden">
@@ -221,290 +244,281 @@
                     </div>
                 </div>
 
-                <!-- SIGNUP TERMS CHECKBOX -->
-<div class="checkbox-group">
-    <input type="checkbox" id="termsCheck" required>
-    <span>
-        I accept the 
-        <span class="link-text" onclick="openModal('terms'); event.stopPropagation();">Terms of Service</span> 
-        & 
-        <span class="link-text" onclick="openModal('privacy'); event.stopPropagation();">Privacy Policy</span>.
-    </span>
-</div>
-
-<!-- TERMS MODAL -->
-<div id="termsModal" class="modal-overlay">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Terms of Service</h3>
-            <button class="close-modal" onclick="closeModal('terms')">&times;</button>
-        </div>
-        <div class="modal-body">
-            <p><strong>Effective Date:</strong> December 1, 2024</p>
-            
-            <h4>1. Acceptance of Terms</h4>
-            <p>By accessing and using the NexTrade platform ("the Service"), you enter into a binding agreement with NexTrade Financial LLC. If you do not agree to these terms, you must discontinue use immediately.</p>
-
-            <h4>2. Risk Disclosure & Liability</h4>
-            <p>Trading financial assets, including cryptocurrencies and derivatives, involves substantial risk of loss and is not suitable for every investor. You acknowledge that you are trading with funds you can afford to lose. NexTrade utilizes automated trading algorithms ("Bots") which do not guarantee future performance based on historical results.</p>
-
-            <h4>3. User Eligibility & KYC</h4>
-            <p>To access the Service, you must be at least 18 years of age. You agree to provide accurate, current, and complete information during the registration process in compliance with Anti-Money Laundering (AML) and Know Your Customer (KYC) regulations.</p>
-
-            <h4>4. Account Security</h4>
-            <p>You are responsible for maintaining the confidentiality of your login credentials. NexTrade is not liable for any loss or damage arising from your failure to protect your account information.</p>
-
-            <h4>5. Automated Investment Vaults</h4>
-            <p>Funds deposited into Investment Vaults are subject to lock-up periods. Early withdrawal requests may be subject to penalties or delays dependent on market liquidity.</p>
-        </div>
-        <div class="modal-footer">
-            <button class="btn-sm" onclick="closeModal('terms')">I Acknowledge & Understand</button>
-        </div>
-    </div>
-</div>
-
-<!-- PRIVACY MODAL -->
-<div id="privacyModal" class="modal-overlay">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Privacy Policy</h3>
-            <button class="close-modal" onclick="closeModal('privacy')">&times;</button>
-        </div>
-        <div class="modal-body">
-            <p><strong>Last Updated:</strong> December 1, 2024</p>
-
-            <h4>1. Information Collection</h4>
-            <p>We collect information necessary to provide our services and comply with regulatory requirements. This includes:</p>
-            <ul>
-                <li>Identity Data (Name, Government ID)</li>
-                <li>Contact Data (Email, Phone)</li>
-                <li>Financial Data (Transaction history, Wallet addresses)</li>
-            </ul>
-
-            <h4>2. Use of Data</h4>
-            <p>Your data is used strictly for identity verification, transaction processing, and fraud prevention. We do not sell your personal data to third parties for marketing purposes.</p>
-
-            <h4>3. Data Security & Encryption</h4>
-            <p>We implement bank-grade security measures including AES-256 encryption for data at rest and TLS 1.3 for data in transit. However, no method of transmission over the Internet is 100% secure.</p>
-
-            <h4>4. Regulatory Disclosure</h4>
-            <p>We may disclose your information to courts, law enforcement, or regulatory authorities if required by law to prevent fraud or money laundering.</p>
-        </div>
-        <div class="modal-footer">
-            <button class="btn-sm" onclick="closeModal('privacy')">Close Policy</button>
-        </div>
-    </div>
-</div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="termsCheck" required>
+                    <span>
+                        I accept the 
+                        <span class="link-text" onclick="openModal('terms'); event.stopPropagation();">Terms</span> 
+                        & 
+                        <span class="link-text" onclick="openModal('privacy'); event.stopPropagation();">Privacy Policy</span>.
+                    </span>
+                </div>
 
                 <button type="submit" class="btn" id="signupBtn">Create Portfolio</button>
             </form>
 
             <div id="errorMsg" class="error-msg"></div>
+            <div id="successMsg" class="success-msg"></div>
         </div>
 
         <div class="legal-footer">
-            &copy; 2024 NexTrade Financial LLC.
+            &copy; 2026 NexTrade Financial LLC.
         </div>
-
     </div>
 
-    <!-- MODALS -->
-    <!-- Terms of Service & Privacy Policy HTML remains identical -->
-    
-    <!-- SCRIPTS -->
-    <!-- Supabase CDN, Config, Supabase.js, and page scripts remain identical -->
-<!-- CRITICAL: Load scripts in correct order -->
-<!-- 1. Supabase CDN -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <div id="otpModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Verify Your Email</h3>
+                </div>
+            <div class="modal-body">
+                <p>We've sent a 6-digit confirmation code to <strong id="otpEmailDisplay" style="color:white;"></strong>.</p>
+                
+                <form id="otpForm">
+                    <div class="form-group">
+                        <label class="label" style="text-align:center;">Enter Confirmation Code</label>
+                        <input type="text" id="otpInput" class="input otp" placeholder="123456" maxlength="6" inputmode="numeric" required autocomplete="one-time-code">
+                    </div>
+                    <button type="submit" class="btn" id="otpBtn">Verify & Sign In</button>
+                </form>
 
-<!-- 2. Config (initializes Supabase client) -->
-<script src="config.js"></script>
+                <div class="resend-link" onclick="window.location.reload()">Wrong email? Start over</div>
+            </div>
+        </div>
+    </div>
 
-<script>
-    // Wait for Supabase to initialize before allowing any actions
-    let isSupabaseReady = false;
+    <div id="termsModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header"><h3>Terms of Service</h3><button class="close-modal" onclick="closeModal('terms')">&times;</button></div>
+            <div class="modal-body"><p>By accessing NexTrade, you agree to our terms regarding high-frequency trading risks...</p></div>
+        </div>
+    </div>
+    <div id="privacyModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header"><h3>Privacy Policy</h3><button class="close-modal" onclick="closeModal('privacy')">&times;</button></div>
+            <div class="modal-body"><p>We collect only necessary financial data for KYC compliance...</p></div>
+        </div>
+    </div>
 
-    async function waitForSupabase() {
-        let attempts = 0;
-        const maxAttempts = 30;
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
 
-        while (attempts < maxAttempts) {
-            if (window.supabaseClient) {
-                isSupabaseReady = true;
-                console.log('✅ Supabase ready for authentication');
-                // Check if user already has session
-                checkExistingSession();
-                return true;
+    <script>
+        // ============================================
+        // 1. INITIALIZATION & STATE
+        // ============================================
+        let pendingEmail = ''; // Stores email for OTP
+        let isSupabaseReady = false;
+
+        async function init() {
+            // Check for Config & Supabase
+            let attempts = 0;
+            while (!window.supabaseClient && attempts < 20) {
+                await new Promise(r => setTimeout(r, 100));
+                attempts++;
             }
 
-            if (window.supabaseInitError) {
-                showError('Configuration error: ' + window.supabaseInitError);
-                return false;
+            if (!window.supabaseClient) {
+                showError('Configuration failed. Check config.js');
+                return;
             }
 
-            attempts++;
-            await new Promise(resolve => setTimeout(resolve, 100));
+            isSupabaseReady = true;
+            console.log('✅ Auth Ready');
+
+            // Auto-Redirect if already logged in
+            const { data } = await window.supabaseClient.auth.getSession();
+            if (data.session) window.location.href = 'index.html';
         }
 
-        showError('Failed to initialize. Please check your internet connection and config.js file.');
-        return false;
-    }
+        init();
 
-    waitForSupabase();
+        // ============================================
+        // 2. UI CONTROLLERS
+        // ============================================
+        window.switchTab = (tab) => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            
+            // Reset Views
+            document.getElementById('loginForm').classList.toggle('hidden', tab !== 'login');
+            document.getElementById('signupForm').classList.toggle('hidden', tab !== 'signup');
+            document.getElementById('forgotForm').classList.add('hidden');
+            
+            clearMsgs();
+        };
 
-    async function checkExistingSession() {
-        if (!window.supabaseClient) return;
+        window.toggleForgotPassword = (show) => {
+            document.getElementById('loginForm').classList.toggle('hidden', show);
+            document.getElementById('forgotForm').classList.toggle('hidden', !show);
+            document.getElementById('authTabs').classList.toggle('hidden', show); // Hide tabs in recovery mode
+            clearMsgs();
+        };
 
-        try {
-            const { data: { session } } = await window.supabaseClient.auth.getSession();
-            if (session) {
-                console.log('✅ Session found - redirecting to app');
-                window.location.href = 'index.html';
+        window.openModal = (id) => document.getElementById(id+'Modal').classList.add('active');
+        window.closeModal = (id) => document.getElementById(id+'Modal').classList.remove('active');
+
+        // Toggle Password Visibility
+        document.querySelectorAll('.toggle-password').forEach(icon => {
+            icon.onclick = function() {
+                const input = this.previousElementSibling;
+                input.type = input.type === 'password' ? 'text' : 'password';
+                this.classList.toggle('fa-eye');
+                this.classList.toggle('fa-eye-slash');
             }
-        } catch (error) {
-            console.error('Session check error:', error);
-        }
-    }
-
-    // PASSWORD TOGGLE
-    document.querySelectorAll('.toggle-password').forEach(icon => {
-        icon.addEventListener('click', function() {
-            const input = this.previousElementSibling;
-            input.type = input.type === 'password' ? 'text' : 'password';
-            this.classList.toggle('fa-eye');
-            this.classList.toggle('fa-eye-slash');
         });
-    });
 
-    // MODAL LOGIC
-    window.openModal = (t) => document.getElementById(t+'Modal').classList.add('active');
-    window.closeModal = (t) => document.getElementById(t+'Modal').classList.remove('active');
-    document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { 
-        if(e.target === o) o.classList.remove('active'); 
-    }));
+        // ============================================
+        // 3. AUTH LOGIC (THE FIXES)
+        // ============================================
 
-    // TABS
-    window.switchTab = function(tab) {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        event.currentTarget.classList.add('active');
-        document.getElementById('loginForm').classList.toggle('hidden', tab !== 'login');
-        document.getElementById('signupForm').classList.toggle('hidden', tab !== 'signup');
-        document.getElementById('errorMsg').style.display = 'none';
-    };
+        // --- LOGIN ---
+        document.getElementById('loginForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('loginBtn');
+            setLoading(btn, true);
+            clearMsgs();
 
-    // LOGIN
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        if (!isSupabaseReady || !window.supabaseClient) {
-            showError('Service not ready. Please wait a moment and try again.');
-            return;
-        }
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
 
-        const btn = document.getElementById('loginBtn');
-        const email = document.getElementById('loginEmail').value.trim();
-        const password = document.getElementById('loginPassword').value;
-
-        setLoading(btn, true);
-
-        try {
-            const { data, error } = await window.supabaseClient.auth.signInWithPassword({
-                email: email,
-                password: password
-            });
+            const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
 
             if (error) {
                 showError(error.message);
                 setLoading(btn, false);
-            } else if (data.session) {
-                console.log('✅ Login successful - redirecting');
+            } else {
                 window.location.href = 'index.html';
-            } else {
-                showError('Login failed. Please try again.');
-                setLoading(btn, false);
             }
-        } catch (error) {
-            console.error('Login error:', error);
-            showError('An unexpected error occurred. Please try again.');
-            setLoading(btn, false);
-        }
-    });
+        };
 
-    // SIGNUP
-    document.getElementById('signupForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        if (!isSupabaseReady || !window.supabaseClient) {
-            showError('Service not ready. Please wait a moment and try again.');
-            return;
-        }
+        // --- SIGNUP (The Logic Fix) ---
+        document.getElementById('signupForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('signupBtn');
+            const email = document.getElementById('signupEmail').value.trim();
+            const password = document.getElementById('signupPassword').value;
+            const name = document.getElementById('signupName').value.trim();
 
-        if (!document.getElementById('termsCheck').checked) {
-            showError('You must accept the Terms of Service to create an account.');
-            return;
-        }
+            if(!document.getElementById('termsCheck').checked) return showError('Please accept Terms.');
+            
+            setLoading(btn, true);
+            clearMsgs();
 
-        const btn = document.getElementById('signupBtn');
-        const email = document.getElementById('signupEmail').value.trim();
-        const password = document.getElementById('signupPassword').value;
-        const fullName = document.getElementById('signupName').value.trim();
-
-        if (password.length < 8) {
-            showError('Password must be at least 8 characters long.');
-            return;
-        }
-
-        setLoading(btn, true);
-
-        try {
+            // 1. Create User
             const { data, error } = await window.supabaseClient.auth.signUp({
-                email: email,
-                password: password,
-                options: { 
-                    data: { full_name: fullName }
-                }
+                email, 
+                password,
+                options: { data: { full_name: name } } // Explicit Name Save
             });
 
             if (error) {
                 showError(error.message);
                 setLoading(btn, false);
-            } else if (data.user) {
-                if (data.user.identities && data.user.identities.length === 0) {
-                    showError('Please check your email to confirm your account.');
-                    setLoading(btn, false);
-                } else {
-                    console.log('✅ Signup successful - redirecting');
-                    alert('Account created successfully! Welcome to NexTrade.');
-                    window.location.href = 'index.html';
-                }
-            } else {
-                showError('Signup failed. Please try again.');
-                setLoading(btn, false);
+                return;
             }
-        } catch (error) {
-            console.error('Signup error:', error);
-            showError('An unexpected error occurred. Please try again.');
+
+            // 2. INTERCEPT: Check if session exists (Auto-confirm off) vs No Session (Auto-confirm on)
+            // If Supabase sends a session immediately, just go in.
+            if (data.session) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            // 3. TRIGGER OTP MODAL (Stop Spinner)
+            // If no session, it means email confirmation is required.
             setLoading(btn, false);
-        }
-    });
+            pendingEmail = email;
+            document.getElementById('otpEmailDisplay').textContent = email;
+            openModal('otp');
+        };
 
-    // HELPER FUNCTIONS
-    function setLoading(btn, loading) {
-        if (loading) { 
-            btn.dataset.txt = btn.innerText; 
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing'; 
-            btn.disabled = true; 
-        } else { 
-            btn.innerText = btn.dataset.txt; 
-            btn.disabled = false; 
-        }
-    }
+        // --- OTP VERIFICATION ---
+        document.getElementById('otpForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('otpBtn');
+            const token = document.getElementById('otpInput').value.trim();
 
-    function showError(message) { 
-        const errorElement = document.getElementById('errorMsg'); 
-        errorElement.style.display = 'block'; 
-        errorElement.textContent = message; 
+            setLoading(btn, true);
+
+            const { data, error } = await window.supabaseClient.auth.verifyOtp({
+                email: pendingEmail,
+                token: token,
+                type: 'signup'
+            });
+
+            if (error) {
+                alert('Verification Failed: ' + error.message); // Alert works better inside modal
+                setLoading(btn, false);
+            } else {
+                // Success! Force session refresh just in case
+                await window.supabaseClient.auth.getSession();
+                window.location.href = 'index.html';
+            }
+        };
+
+        // --- FORGOT PASSWORD ---
+        document.getElementById('forgotForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('forgotBtn');
+            const email = document.getElementById('forgotEmail').value.trim();
+            
+            setLoading(btn, true);
+
+            const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email, {
+                redirectTo: window.location.origin + '/index.html?reset=true',
+            });
+
+            setLoading(btn, false);
+            
+            if (error) {
+                showError(error.message);
+            } else {
+                document.getElementById('forgotForm').reset();
+                showSuccess('Recovery link sent! Check your inbox.');
+                setTimeout(() => toggleForgotPassword(false), 3000); // Auto-back to login
+            }
+        };
+
+        // ============================================
+        // HELPERS
+        // ============================================
+        function setLoading(btn, loading) {
+            if (loading) {
+                btn.dataset.text = btn.innerText;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing';
+                btn.disabled = true;
+            } else {
+                btn.innerText = btn.dataset.text || 'Submit';
+                btn.disabled = false;
+            }
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('errorMsg');
+            el.textContent = msg;
+            el.style.display = 'block';
+            document.getElementById('successMsg').style.display = 'none';
+        }
+
+        function showSuccess(msg) {
+            const el = document.getElementById('successMsg');
+            el.textContent = msg;
+            el.style.display = 'block';
+            document.getElementById('errorMsg').style.display = 'none';
+        }
+
+        function clearMsgs() {
+            document.getElementById('errorMsg').style.display = 'none';
+            document.getElementById('successMsg').style.display = 'none';
+        }
+// Auto-submit OTP when 6 digits are entered
+document.getElementById('otpInput').addEventListener('input', function(e) {
+    if (this.value.length === 6) {
+        document.getElementById('otpForm').requestSubmit(); 
     }
-</script>
+});
+    </script>
+    
 </body>
 </html>

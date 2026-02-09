@@ -1,13 +1,13 @@
 /**
- * NexTrade — Layout Styles (Global Padding Strategy)
- * * FAIL-SAFE FIX:
- * 1. Body Padding: Reserves physical space at Top/Bottom so content NEVER hides bars.
- * 2. Position Fixed: Pins Header/Footer to viewport (Z-Index 1000).
- * 3. Visibility: Removes complex overflow rules that might clip content.
+ * NexTrade — Layout Styles (Master Architecture)
+ * * CRITICAL FIX: "PINNED APP SHELL"
+ * 1. APP WRAPPER: Now uses 'position: fixed; inset: 0' to force the app to match the screen size exactly.
+ * 2. NO OVERFLOW: Prevents the body from growing taller than the device screen.
+ * 3. FOOTER VISIBILITY: Mathematically guarantees the footer stays anchored at the bottom.
  */
 
 /* ============================================
-   RESET & BASE
+   RESET & VIEWPORT ENGINE
    ============================================ */
 
 *, *::before, *::after {
@@ -19,88 +19,96 @@ html {
   width: 100%;
   height: 100%;
   font-size: 16px;
+  overscroll-behavior: none; 
 }
 
 body {
   margin: 0;
   padding: 0;
   width: 100%;
-  min-height: 100%;
+  height: 100%; /* Fallback */
+  height: 100dvh; /* Dynamic Viewport */
   background-color: var(--color-background);
   color: var(--color-text-primary);
   font-family: var(--font-body, system-ui, -apple-system, sans-serif);
   
-  /* CRITICAL: Reserve space for Fixed Header & Footer */
-  padding-top: calc(64px + env(safe-area-inset-top));
-  padding-bottom: calc(80px + env(safe-area-inset-bottom));
-  
-  /* Ensure scrolling happens on body */
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  /* CRITICAL: Disable body scroll. Only .app-main scrolls. */
+  overflow: hidden; 
+  position: fixed; /* Extra safety for iOS */
+  inset: 0;
 }
 
 /* ============================================
-   APP SHELL
+   APP SHELL (The Fixed Window)
    ============================================ */
 
-/* The wrapper just holds content now, no layout logic needed */
 .app-wrapper {
-  display: block;
+  /* PINNED POSITIONING: Forces the app to be exactly screen size */
+  position: fixed;
+  inset: 0;
   width: 100%;
-  position: relative;
+  height: 100%; /* Fallback */
+  height: 100dvh; 
+  
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* No scroll on the wrapper itself */
+  z-index: 1;
 }
 
-/* STICKY HEADER (Pinned to Top) */
+/* 1. HEADER (Rigid Top) */
 .app-header {
-  position: fixed;
-  top: 0;
-  left: 0;
+  flex: 0 0 auto; /* Rigid height */
   width: 100%;
-  height: 64px; /* Matches body padding-top */
-  z-index: 1000; /* Highest priority */
+  height: auto;
+  min-height: 64px;
+  z-index: 1000;
   
   background-color: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   
-  /* Padding for internals */
-  padding: 0 var(--space-4);
+  /* Safe Area Support */
   padding-top: env(safe-area-inset-top);
+  padding-left: var(--space-4);
+  padding-right: var(--space-4);
   
-  /* Flex layout for logo/menu */
   display: flex;
   align-items: center;
   justify-content: space-between;
   box-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 
-/* MAIN CONTENT (Flows naturally) */
+/* 2. MAIN CONTENT (The Scrollable Middle) */
 .app-main {
-  display: block;
+  flex: 1; /* Occupy all remaining space */
   width: 100%;
   max-width: var(--container-max-width);
   margin: 0 auto;
+  
+  /* SCROLL ENGINE */
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  
   padding: var(--space-4);
+  padding-bottom: var(--space-6);
   position: relative;
   z-index: 1;
 }
 
-/* FOOTER NAV (Pinned to Bottom) */
+/* 3. FOOTER NAV (Rigid Bottom) */
 .app-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
+  flex: 0 0 auto; /* Rigid height */
   width: 100%;
-  height: 64px; /* Base height */
+  height: auto;
   min-height: 64px;
-  z-index: 1000; /* Highest priority */
+  z-index: 1000;
   
   background-color: var(--color-surface);
   border-top: 1px solid var(--color-border);
   
-  /* Safe Area for iPhone Home Bar */
+  /* Safe Area Support */
   padding-bottom: env(safe-area-inset-bottom);
-  box-sizing: content-box; /* Ensure padding adds to height */
   
   display: flex;
   align-items: stretch;
@@ -125,13 +133,11 @@ body {
    UTILITIES
    ============================================ */
 
-/* Spacing */
 .m-0 { margin: 0; } .m-2 { margin: var(--space-2); } .m-4 { margin: var(--space-4); }
 .mt-2 { margin-top: var(--space-2); } .mt-4 { margin-top: var(--space-4); } .mt-6 { margin-top: var(--space-6); }
 .mb-2 { margin-bottom: var(--space-2); } .mb-4 { margin-bottom: var(--space-4); } .mb-6 { margin-bottom: var(--space-6); }
 .p-0 { padding: 0; } .p-2 { padding: var(--space-2); } .p-4 { padding: var(--space-4); } .p-6 { padding: var(--space-6); }
 
-/* Flex */
 .flex { display: flex; }
 .flex-col { flex-direction: column; }
 .flex-1 { flex: 1; }
@@ -139,14 +145,13 @@ body {
 .justify-between { justify-content: space-between; }
 .justify-center { justify-content: center; }
 
-/* Display/Vis */
 .hidden { display: none !important; }
 .block { display: block; }
 .w-full { width: 100%; }
 .h-full { height: 100%; }
 
 /* ============================================
-   COMPONENT VISUALS (Restored)
+   COMPONENT VISUALS
    ============================================ */
 
 .hero-card {
@@ -157,6 +162,7 @@ body {
   position: relative;
   overflow: hidden;
   color: white;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .hero-value {
@@ -164,6 +170,7 @@ body {
   font-size: 2.5rem;
   font-weight: 700;
   margin: var(--space-2) 0;
+  letter-spacing: -0.05em;
 }
 
 .balance-grid {
@@ -178,6 +185,11 @@ body {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
+  transition: transform 0.2s ease;
+}
+
+.balance-card:active {
+  transform: scale(0.98);
 }
 
 .list { display: flex; flex-direction: column; gap: var(--space-3); }

@@ -1,227 +1,257 @@
 /**
- * NexTrade — App Controller (Production Grade)
- * * RESPONSIBILITIES:
- * 1. SINGLETON ORCHESTRATION: Manages Bootstraps, Auth, State, and Routing.
- * 2. HYBRID DATA SYNC: Bridges SQL columns (spot_balance) with AppState JSON.
- * 3. REACTIVE MARKET DATA: Centralized price polling.
- * 4. ERROR BOUNDARIES: Prevents startup crashes and handles auth failures gracefully.
+ * NexTrade — App Controller (Updated with CacheManager Integration)
+ * ══════════════════════════════════════════════════════════════
+ * CHANGES:
+ * - Initializes CacheManager before loading data
+ * - Uses CacheManager.getMarketData() instead of direct API
+ * - Removed redundant fetchMarketData (uses cache)
+ * ══════════════════════════════════════════════════════════════
  */
 
 (function () {
   'use strict';
 
-  // 1. Singleton Guard
-  if (window.App) {
-    console.warn('⚠️ NexTrade: App already defined. Skipping re-init.');
-    return;
-  }
+  if (window.App && window.App.initialized) return;
 
-  // 2. Internal Configuration
   const CONSTANTS = {
-    PRICE_API: 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether,solana,cardano,ripple&vs_currencies=usd',
-    POLL_INTERVAL: 60000, // 1 minute
-    INIT_TIMEOUT: 10000
+    POLL_INTERVAL: 60000,
+    TOAST_DURATION: 3000,
+    LOGIN_PAGE: 'login.html'
   };
 
-  let initialized = false;
-  let pollIntervalId = null;
-
-  // 3. Logger
-  const log = (msg, data) => console.log(`🚀 App: ${msg}`, data || '');
-  const error = (msg, err) => console.error(`❌ App: ${msg}`, err || '');
+  const state = {
+    initialized: false,
+    pollTimer: null
+  };
 
   // ============================================
-  // CORE LOGIC: DATA SYNC (The Fix)
+  // 1. DATA SYNCHRONIZATION
   // ============================================
 
-  /**
-   * Fetches user profile ensuring alignment between DB columns and AppState.
-   * Handles the 'Hybrid' schema: spot_balance (Numeric) vs balances (JSON).
-   */
-  async function syncUserData(user) {
+  async function syncProfile(user) {
     try {
       if (!window.supabaseClient) throw new Error('Supabase client missing');
 
-      // 1. Fetch Hybrid Data Source
-      const { data: profile, error: dbErr } = await supabaseClient
+      const { data: profile, error } = await window.supabaseClient
         .from('profiles')
-        .select('spot_balance, vault_balance, balances, holdings')
+        .select('spot_balance, vault_balance, holdings')
         .eq('id', user.id)
         .single();
 
-      if (dbErr) throw dbErr;
+      if (error) throw error;
 
       if (profile) {
-        // 2. Reconciliation Logic (Priority: Numeric Column -> JSON Fallback)
-        const spot = Number(profile.spot_balance) || Number(profile.balances?.spot) || 0;
-        const vault = Number(profile.vault_balance) || Number(profile.balances?.vault) || 0;
+        const balanceState = {
+          spot: parseFloat(profile.spot_balance) || 0,
+          vault: parseFloat(profile.vault_balance) || 0,
+          total: (parseFloat(profile.spot_balance) || 0) + (parseFloat(profile.vault_balance) || 0)
+        };
 
-        // 3. Atomic State Update
-        // This triggers all subscribers (Wallet, Navbar, Home) via AppState
-        AppState.set('user', user);
-        AppState.set('balances', { 
-          spot: spot, 
-          vault: vault, 
-          total: spot + vault 
-        });
-
-        if (profile.holdings) {
-          AppState.set('holdings', profile.holdings);
+        if (window.AppState) {
+          AppState.set('user', user);
+          AppState.set('balances', balanceState);
+          if (profile.holdings) AppState.set('holdings', profile.holdings);
         }
-
-        log('State synced with DB', { spot, vault });
+        console.log('[APP] 💰 Balance Synced:', balanceState);
       }
-    } catch (e) {
-      error('Data sync failed', e);
-      // Fallback: Use whatever is in local storage to prevent UI flash
-      // AppState hydrates from storage automatically on load
+    } catch (err) {
+      console.error('[APP] ❌ Profile Sync Error:', err);
     }
   }
 
-  /**
-   * Centralized Market Data Polling
-   * Updates AppState.marketData which Wallet/Market modules subscribe to.
-   */
-  async function fetchMarketData() {
+  async function syncHistory(user) {
     try {
-      const res = await fetch(CONSTANTS.PRICE_API);
-      if (!res.ok) throw new Error('API Error');
-      const data = await res.json();
-      
-      const marketData = [
-        { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin', current_price: data.bitcoin.usd },
-        { id: 'ethereum', symbol: 'ETH', name: 'Ethereum', current_price: data.ethereum.usd },
-        { id: 'tether', symbol: 'USDT', name: 'Tether', current_price: data.tether.usd },
-        { id: 'solana', symbol: 'SOL', name: 'Solana', current_price: data.solana.usd },
-        { id: 'cardano', symbol: 'ADA', name: 'Cardano', current_price: data.cardano.usd },
-        { id: 'ripple', symbol: 'XRP', name: 'Ripple', current_price: data.ripple.usd }
-      ];
+      const { data: txs, error } = await window.supabaseClient
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
-      AppState.set('marketData', marketData);
-      
-      // Force specific UI updates if needed, though Subscription is preferred
-      if (window.Wallet && AppState.get('ui.currentPage') === 'wallet') {
-        // Optional: Trigger specific refresh if Wallet doesn't auto-subscribe (it does in your file)
+      if (error) throw error;
+
+      if (txs && window.AppState) {
+        AppState.set('transactions', txs);
+        console.log(`[APP] 📜 History Synced: ${txs.length} records`);
       }
-    } catch (e) {
-      console.warn('⚠️ Market data fetch failed. Using defaults.');
-      // Keep existing data or set defaults if empty
-      const current = AppState.get('marketData');
-      if (!current || current.length === 0) {
-        AppState.set('marketData', [
-          { symbol: 'BTC', current_price: 95000 },
-          { symbol: 'ETH', current_price: 3500 },
-          { symbol: 'USDT', current_price: 1.00 }
-        ]);
-      }
+    } catch (err) {
+      console.error('[APP] ❌ History Sync Error:', err);
     }
   }
 
   // ============================================
-  // INITIALIZATION SEQUENCE
+  // 2. INITIALIZATION SEQUENCE
   // ============================================
 
   async function init() {
-    if (initialized) return;
+    if (state.initialized) return;
 
-    // A. Wait for Bootstraps (DOM Authority)
-    if (window.Bootstraps && typeof Bootstraps.init === 'function') {
-      await Bootstraps.init();
-    }
-
-    log('Initializing...');
-
-    // B. Validate Dependencies
-    if (!window.AppState || !window.supabaseClient || !window.Router) {
-      document.body.innerHTML = '<h2 style="color:red; text-align:center; margin-top:50px;">Critical Error: Modules missing.</h2>';
-      return;
-    }
+    console.log('[APP] 🚀 Starting initialization sequence...');
 
     try {
-      // C. Authentication Check
-      const { data } = await supabaseClient.auth.getSession();
+      // ========================================
+      // STEP 1: Bootstraps (DOM Authority)
+      // ========================================
+      console.log('[APP] Step 1/6: Bootstraps...');
+      
+      if (!window.Bootstraps) {
+        throw new Error('Bootstraps module not loaded');
+      }
+
+      if (typeof Bootstraps.init === 'function') {
+        await Bootstraps.init();
+        console.log('[APP] ✅ Bootstraps ready');
+      }
+
+      const mainElement = Bootstraps.getMain();
+      if (!mainElement) {
+        throw new Error('Bootstraps failed to create .app-main');
+      }
+
+      // ========================================
+      // STEP 2: Auth Check
+      // ========================================
+      console.log('[APP] Step 2/6: Auth...');
+      
+      if (!window.supabaseClient) {
+        throw new Error('Supabase client not loaded');
+      }
+
+      const { data } = await window.supabaseClient.auth.getSession();
       const session = data?.session;
 
       if (!session) {
-        log('No session, redirecting to login');
-        if (!window.location.pathname.includes('login.html')) {
-          window.location.href = 'login.html';
+        console.log('[APP] ⚠️ No session, redirecting to login...');
+        if (!window.location.pathname.includes(CONSTANTS.LOGIN_PAGE)) {
+          window.location.href = CONSTANTS.LOGIN_PAGE;
         }
         return;
       }
 
-      // D. Critical Data Load (Block UI until ready)
-      await syncUserData(session.user);
-      await fetchMarketData();
+      console.log('[APP] ✅ Auth verified');
 
-      // E. Start Background Polling
-      pollIntervalId = setInterval(fetchMarketData, CONSTANTS.POLL_INTERVAL);
+      // ========================================
+      // STEP 3: Initialize CacheManager
+      // ========================================
+      console.log('[APP] Step 3/6: CacheManager...');
+      
+      if (!window.CacheManager) {
+        throw new Error('CacheManager module not loaded');
+      }
 
-      // F. Routing & Navigation
-      if (window.Router) {
-        window.Router.init(); // Bind Nav events
+      CacheManager.init();
+      console.log('[APP] ✅ CacheManager initialized');
+
+      // ========================================
+      // STEP 4: Data Loading (with cache)
+      // ========================================
+      console.log('[APP] Step 4/6: Loading user data...');
+      
+      await Promise.all([
+        syncProfile(session.user),
+        syncHistory(session.user),
+        CacheManager.getMarketData() // Load market data via cache
+      ]);
+
+      console.log('[APP] ✅ Data loaded');
+
+      // ========================================
+      // STEP 5: Router (Render Content)
+      // ========================================
+      console.log('[APP] Step 5/6: Router...');
+      
+      if (!window.Router) {
+        throw new Error('Router module not loaded');
+      }
+
+      await Router.init();
+      
+      console.log('[APP] ✅ Router initialized');
+
+      const lastPage = (window.Storage && Storage.getLastPage()) || 'home';
+      console.log(`[APP] 📍 Navigating to: ${lastPage}`);
+      
+      await navigate(lastPage);
+
+      // ========================================
+      // STEP 6: Navbar (Inject Buttons)
+      // ========================================
+      console.log('[APP] Step 6/6: Navbar...');
+      
+      if (window.Navbar) {
+        Navbar.init();
         
-        // Restore last page or default to 'home'
-        const lastPage = (window.Storage && Storage.getLastPage()) || 'home';
-        navigate(lastPage);
+        if (window.AppState) {
+          AppState.subscribe('ui.currentPage', (page) => Navbar.setActive(page));
+        }
+        
+        console.log('[APP] ✅ Navbar ready');
       }
 
-      // G. Render Shell UI (Navbar)
-      renderNavbar();
+      state.initialized = true;
+      console.log('[APP] ✅✅✅ App Fully Initialized ✅✅✅');
 
-      initialized = true;
-      log('Ready.');
-
-    } catch (e) {
-      error('Initialization crashed', e);
+    } catch (error) {
+      console.error('[APP] ❌ Initialization failed:', error);
+      
+      const mainElement = document.querySelector('.app-main');
+      if (mainElement) {
+        mainElement.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 50vh; padding: 20px; text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 20px; opacity: 0.5;">
+              <i class="fas fa-exclamation-triangle" style="color: #ef4444;"></i>
+            </div>
+            <div style="font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 8px;">
+              Failed to Initialize App
+            </div>
+            <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 20px; max-width: 400px;">
+              ${error.message || 'An unexpected error occurred during startup.'}
+            </div>
+            <button onclick="window.location.reload()" class="btn btn-primary" style="padding: 10px 24px;">
+              Reload App
+            </button>
+          </div>
+        `;
+      }
     }
   }
 
   // ============================================
-  // NAVIGATION & UI
+  // 3. UTILITIES & API
   // ============================================
 
-  function renderNavbar() {
-    if (!window.Bootstraps) return;
-    const navRoot = document.getElementById('bottom-nav') || document.querySelector('.app-footer');
-    if (!navRoot) return;
-
-    // Subscribe to page changes to update active tab
-    AppState.subscribe('ui.currentPage', (page) => {
-      if (window.Navbar && typeof Navbar.setActive === 'function') {
-        Navbar.setActive(page);
-      }
-    });
-
-    // Initial Render call if Navbar module exists
-    if (window.Navbar && typeof Navbar.init === 'function') {
-      Navbar.init(window.Bootstraps.getWrapper());
-    }
-  }
-
-  /**
-   * Universal Navigation Handler
-   * Updates State -> Router -> UI -> Persistence
-   */
   async function navigate(pageId) {
     if (!pageId) return;
+    
+    console.log(`[APP] 🧭 Navigate called: ${pageId}`);
+    
+    if (window.AppState) AppState.set('ui.currentPage', pageId);
+    if (window.Router) await window.Router.navigate(pageId);
+    if (window.Navbar) Navbar.setActive(pageId);
+    if (window.Storage) Storage.setLastPage(pageId);
+  }
 
-    // 1. Update Global State
-    AppState.set('ui.currentPage', pageId);
+  function showToast(message, type) {
+    const el = document.createElement('div');
+    el.textContent = message;
+    const bgColor = type === 'error' ? '#ef4444' : '#10b981';
+    
+    el.style.cssText = `
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      background: ${bgColor}; color: white; padding: 12px 24px; border-radius: 8px;
+      font-weight: 600; font-family: sans-serif; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 99999; opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
+    `;
 
-    // 2. Delegate Rendering to Router
-    if (window.Router) {
-      window.Router.go(pageId);
-    }
-
-    // 3. Persist Selection
-    if (window.Storage) {
-      Storage.setLastPage(pageId);
-    }
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.style.opacity = '1');
+    setTimeout(() => {
+      el.style.opacity = '0';
+      setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
+    }, CONSTANTS.TOAST_DURATION);
   }
 
   // ============================================
-  // PUBLIC API
+  // 4. EXPORT
   // ============================================
 
   window.App = {
@@ -229,38 +259,19 @@
     navigate,
     refreshData: async () => {
       const user = AppState.get('user');
-      if (user) await syncUserData(user);
+      if (user) {
+        await Promise.all([
+          syncProfile(user), 
+          syncHistory(user),
+          CacheManager.refresh()
+        ]);
+      }
     },
-    
-    // UI Helpers exposed for Modules
     showSuccess: (msg) => showToast(msg, 'success'),
-    showError: (msg) => showToast(msg, 'error')
+    showError: (msg) => showToast(msg, 'error'),
+    initialized: false
   };
 
-  // Toast System (Dependency-free)
-  function showToast(message, type = 'info') {
-    const el = document.createElement('div');
-    el.className = `toast toast-${type}`;
-    el.textContent = message;
-    el.style.cssText = `
-      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-      background: ${type === 'error' ? '#ef4444' : '#10b981'};
-      color: white; padding: 12px 24px; border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10000;
-      font-weight: 500; opacity: 0; transition: opacity 0.3s;
-    `;
-    document.body.appendChild(el);
-    requestAnimationFrame(() => el.style.opacity = '1');
-    setTimeout(() => {
-      el.style.opacity = '0';
-      setTimeout(() => el.remove(), 300);
-    }, 3000);
-  }
-
-  // Auto-Start via Index.html defer script, but listener added for safety
-  document.addEventListener('DOMContentLoaded', () => {
-    // If index.html didn't trigger it, we do it here
-    if (!initialized && window.Bootstraps) init();
-  });
+  console.log('[APP] 📦 App module loaded');
 
 })();

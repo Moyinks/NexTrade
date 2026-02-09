@@ -1,13 +1,9 @@
 /**
- * NexTrade — Bootstraps (AUTHORITATIVE DOM OWNER)
- * Responsibilities:
- * - Wait for real DOM readiness.
- * - Bind and OWN app shell nodes exactly once.
- * - Enforce scroll + layout rules to provide an "App-like" feel on mobile.
- * - FIXES:
- * - Enhanced bindDOM with strict HTMLElement validation to prevent "String" corruption.
- * - Exposed authoritative getters to prevent Router/Module namespace collisions.
- * - Added a singleton guard to prevent double-initialization.
+ * NexTrade — Bootstraps (DOM & Layout Controller)
+ * * CRITICAL FIX APPLIED:
+ * 1. REMOVED: `dom.main.style.height = '100%'` (This was pushing the footer off-screen).
+ * 2. RETAINED: Scroll locking on body to prevent rubber-banding.
+ * 3. RETAINED: Native touch scrolling enablement for .app-main.
  */
 
 'use strict';
@@ -15,6 +11,7 @@
 const Bootstraps = (() => {
   let initialized = false;
 
+  // Internal references to shell elements
   const dom = {
     wrapper: null,
     header: null,
@@ -23,19 +20,15 @@ const Bootstraps = (() => {
   };
 
   // ============================================
-  // DOM READY (NO GUESSING)
+  // 1. DOM READINESS
   // ============================================
 
   /**
-   * Promise that resolves when the DOM is interactive or complete.
-   * @returns {Promise}
+   * Returns a promise that resolves when the DOM is fully interactive.
    */
   function domReady() {
     return new Promise(resolve => {
-      if (
-        document.readyState === 'interactive' ||
-        document.readyState === 'complete'
-      ) {
+      if (document.readyState === 'interactive' || document.readyState === 'complete') {
         resolve();
       } else {
         document.addEventListener('DOMContentLoaded', resolve, { once: true });
@@ -44,134 +37,104 @@ const Bootstraps = (() => {
   }
 
   // ============================================
-  // STRICT DOM BIND
+  // 2. DOM BINDING
   // ============================================
 
   /**
-   * Identifies core app nodes and validates their types.
-   * Prevents modules from working with "undefined" or corrupted string references.
+   * Locates and validates the core App Shell elements.
+   * Fails loudly if the HTML structure is incorrect (missing header/footer).
    */
   function bindDOM() {
+    console.log('📦 Bootstraps: Binding shell elements...');
+
     const wrapper = document.querySelector('.app-wrapper');
     const header = document.querySelector('.app-header');
     const main = document.querySelector('.app-main');
     const footer = document.querySelector('.app-footer');
 
-    // Strict validation: Must exist and be HTMLElements
-    if (!(wrapper instanceof HTMLElement) || !(main instanceof HTMLElement)) {
-      console.error('❌ FATAL: App shell missing or invalid structure.');
-      console.error('Wrapper:', wrapper);
-      console.error('Main:', main);
-      throw new Error('Bootstraps failed: .app-wrapper or .app-main not found in DOM.');
+    // Strict Validation
+    if (!wrapper || !main || !footer) {
+      console.error('❌ Bootstraps: Critical DOM elements missing. Check index.html.');
+      console.error({ wrapper, header, main, footer });
+      return false;
     }
 
-    // Assign to internal state
     dom.wrapper = wrapper;
     dom.header = header;
     dom.main = main;
     dom.footer = footer;
 
-    console.log('📦 Bootstraps: DOM shell successfully bound');
+    console.log('✅ Bootstraps: Shell bound successfully.');
+    return true;
   }
 
   // ============================================
-  // UI / SCROLL LOCK
+  // 3. LAYOUT & SCROLL ENGINE
   // ============================================
 
   /**
-   * Locks the viewport to prevent "rubber-banding" on mobile and forces
-   * scrolling to occur specifically within the .app-main container.
+   * Applies strictly necessary scroll rules.
+   * DELETED: Height overrides that break Flexbox layout.
    */
-  function lockUI() {
-    // Lock the root and body
-    document.documentElement.style.height = '100%';
-    document.body.style.height = '100%';
-    document.body.style.margin = '0';
+  function configureLayout() {
+    // 1. Lock the Root (Prevent Body Scroll)
+    // We let layout.css handle 'height: 100dvh', we just enforce overflow.
+    document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
-
-    // Enable internal scrolling for the main view only
+    document.body.style.margin = '0';
+    
+    // 2. Enable Internal Scrolling for Main
+    // This ensures that while the body is locked, the content area can still scroll.
     if (dom.main) {
       dom.main.style.overflowY = 'auto';
       dom.main.style.overflowX = 'hidden';
-      dom.main.style.webkitOverflowScrolling = 'touch';
-      dom.main.style.height = '100%'; 
-      // Ensure flex behavior is consistent across browsers
-      dom.main.style.display = 'block';
+      dom.main.style.webkitOverflowScrolling = 'touch'; // iOS Momentum
+      
+      // CRITICAL: We do NOT set height='100%' here. 
+      // We rely on .app-wrapper { display: flex } in layout.css to size this correctly.
     }
 
-    console.log('📦 Bootstraps: UI layout rules enforced');
+    console.log('📦 Bootstraps: Scroll engine active.');
   }
 
   // ============================================
-  // INIT
+  // 4. INITIALIZATION SEQUENCE
   // ============================================
 
-  /**
-   * Master initialization for the app layout.
-   */
   async function init() {
     if (initialized) {
-      console.warn('Bootstraps: Already initialized, skipping.');
+      console.warn('Bootstraps: Already initialized.');
       return;
     }
 
-    console.log('🚀 Bootstraps: Initializing layout…');
-
     await domReady();
-    bindDOM();
-    lockUI();
-
-    initialized = true;
-    console.log('📦 Bootstraps: Completed successfully');
-  }
-
-  // ============================================
-  // SAFE GETTERS (SINGLE SOURCE OF TRUTH)
-  // ============================================
-
-  /**
-   * Authoritative getter for the main render container.
-   * @returns {HTMLElement|null}
-   */
-  function getMain() {
-    if (!initialized) {
-      const fallback = document.querySelector('.app-main');
-      return fallback instanceof HTMLElement ? fallback : null;
+    
+    const success = bindDOM();
+    if (success) {
+      configureLayout();
+      initialized = true;
+    } else {
+      console.error('❌ Bootstraps: Initialization failed due to missing DOM.');
     }
-    return dom.main;
-  }
-
-  function getHeader() {
-    return dom.header;
-  }
-
-  function getFooter() {
-    return dom.footer;
-  }
-
-  function getWrapper() {
-    return dom.wrapper;
-  }
-
-  function isReady() {
-    return initialized;
   }
 
   // ============================================
-  // EXPORT
+  // 5. PUBLIC API (GETTERS)
   // ============================================
 
   return {
     init,
-    isReady,
-    getMain,
-    getHeader,
-    getFooter,
-    getWrapper
+    isReady: () => initialized,
+    
+    // Authoritative Getters for other modules (Router/Navbar)
+    getMain: () => dom.main,
+    getHeader: () => dom.header,
+    getFooter: () => dom.footer,
+    getWrapper: () => dom.wrapper
   };
 })();
 
-// Global exposure
+// Expose to Window
 if (typeof window !== 'undefined') {
   window.Bootstraps = Bootstraps;
 }
