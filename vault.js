@@ -14,11 +14,11 @@ const Vault = (() => {
      CONFIGURATION
      ═══════════════════════════════════════════════════════════════════════════ */
   const CONFIG = {
-    PLATFORM_FEE: 0.015,
-    EARLY_WITHDRAWAL_PENALTY: 0.02,
+    PLATFORM_FEE: 0.1,
+    EARLY_WITHDRAWAL_PENALTY: 0.2,
     TICKER_INTERVAL: 500,
-    TVL_TOTAL: 2400000,
-    ACTIVE_USERS: 2341,
+    TVL_TOTAL: 2454701.89,
+    ACTIVE_USERS: 2641,
     INSURANCE_AMOUNT: 250000,
   };
 
@@ -38,7 +38,7 @@ const Vault = (() => {
         name: 'USDC Yield Alpha',
         risk: 'Low',
         riskLevel: 1,
-        baseAPY: 0.12,
+        baseAPY: 0.22,
         durationDays: 7,
         minInvestment: 100,
         description: 'Algorithmic stablecoin arbitrage across DEX liquidity pools.',
@@ -55,7 +55,7 @@ const Vault = (() => {
         name: 'DeFi Blue Chip',
         risk: 'Medium',
         riskLevel: 3,
-        baseAPY: 0.24,
+        baseAPY: 0.45,
         durationDays: 30,
         minInvestment: 500,
         description: 'Automated leverage farming on Aave and Compound.',
@@ -81,7 +81,7 @@ const Vault = (() => {
         icon: 'fas fa-rocket',
         badge: '🆕',
         capacity: 0.34,
-        participants: 234,
+        participants: 2234,
         performance: [1.2, 1.45, 1.6, 1.55, 1.5, 1.48, 1.52],
       }
     ]
@@ -513,7 +513,25 @@ const Vault = (() => {
     if (!inv) return;
     const timing = getTimeRemaining(inv);
     if (!timing.isDone) return App.showError('Not matured');
-    if (!confirm(`Withdraw ${Format.currency(calculateLiveValue(inv))}?`)) return;
+    async function claim(invId) { // Add async keyword
+  const inv = state.investments.find(i => i.id === invId);
+  if (!inv) return;
+  
+  const timing = getTimeRemaining(inv);
+  if (!timing.isDone) return App.showError('Not matured');
+  
+  // NEW: Use Modal.confirm instead
+  const confirmed = await Modal.confirm({
+    title: 'Confirm Withdrawal',
+    message: `Withdraw ${Format.currency(calculateLiveValue(inv))}?`,
+    confirmText: 'Withdraw Now',
+    cancelText: 'Cancel'
+  });
+  
+  if (!confirmed) return; // User cancelled
+  
+  // ... rest of existing code unchanged
+}
     
     try {
       const finalValue = calculateLiveValue(inv);
@@ -551,7 +569,28 @@ const Vault = (() => {
     const penalty = inv.amount * CONFIG.EARLY_WITHDRAWAL_PENALTY;
     const finalAmount = currentValue - penalty;
     
-    if (!confirm(`Early withdrawal incurs ${(CONFIG.EARLY_WITHDRAWAL_PENALTY * 100)}% penalty.\n\nCurrent: ${Format.currency(currentValue)}\nPenalty: -${Format.currency(penalty)}\nYou get: ${Format.currency(finalAmount)}\n\nProceed?`)) return;
+    // Similar pattern - make function async and replace confirm()
+async function earlyWithdraw(invId) { // Add async
+  const inv = state.investments.find(i => i.id === invId);
+  if (!inv) return;
+  
+  const currentValue = calculateLiveValue(inv);
+  const penalty = inv.amount * CONFIG.EARLY_WITHDRAWAL_PENALTY;
+  const finalAmount = currentValue - penalty;
+  
+  // NEW: Custom modal with danger mode
+  const confirmed = await Modal.confirm({
+    title: 'Early Withdrawal Penalty',
+    message: `Early withdrawal incurs a ${(CONFIG.EARLY_WITHDRAWAL_PENALTY * 100)}% penalty.\n\nCurrent Value: ${Format.currency(currentValue)}\nPenalty: -${Format.currency(penalty)}\nYou Receive: ${Format.currency(finalAmount)}\n\nThis action cannot be undone.`,
+    confirmText: 'Withdraw Anyway',
+    cancelText: 'Keep Invested',
+    dangerMode: true // Triggers red button
+  });
+  
+  if (!confirmed) return;
+  
+  // ... rest of existing code unchanged
+}
     
     try {
       const newSpotBalance = state.balances.spot + finalAmount;
@@ -607,7 +646,7 @@ const Vault = (() => {
     
     container = element;
     container.className = 'vault-page';
-    container.style.paddingBottom = '100px';
+
     
     if (window.AppState) {
       state.user = AppState.get('user');

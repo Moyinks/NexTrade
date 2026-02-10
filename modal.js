@@ -35,7 +35,9 @@ const Modal = (() => {
       left: 0;
       right: 0;
       bottom: 0;
-      background-color: rgba(0, 0, 0, 0.7);
+      background-color: rgba(0, 0, 0, 0.8);
+backdrop-filter: blur(8px);
+-webkit-backdrop-filter: blur(8px); /* iOS Safari */
       display: flex;
       align-items: center;
       justify-content: center;

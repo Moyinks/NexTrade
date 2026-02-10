@@ -57,7 +57,7 @@ const Wallet = (() => {
     if (!element) return;
     container = element;
     container.className = 'wallet-page';
-    container.style.paddingBottom = '100px';
+
 
     // 1. Sync State
     if (window.AppState) {
@@ -92,8 +92,9 @@ const Wallet = (() => {
     
     header.innerHTML = `
       <div>
-        <h2 style="font-size:24px; font-weight:700; color:var(--color-text-primary); letter-spacing:-0.02em; margin:0;">Spot Wallet</h2>
-        <div style="font-size:13px; color:var(--color-text-secondary); margin-top:4px;">Manage your crypto assets</div>
+        <h2 style="font-size:24px; font-weight:700; color:var(--color-text-primary); letter-spacing:-0.02em; margin:0;"></h2>
+        <div <h2 style="font-size:13px; color:var(--color-text-secondary); margin-top:4px;">Manage your crypto assets here<h2>
+        </div>
       </div>
       <div style="width:40px; height:40px; border-radius:50%; background:var(--color-surface); border:1px solid var(--color-border); display:flex; align-items:center; justify-content:center; color:var(--color-text-secondary);">
         <i class="fas fa-qrcode"></i>

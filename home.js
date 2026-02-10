@@ -54,7 +54,7 @@ const Home = (() => {
     
     container = element;
     container.className = 'home-page';
-    container.style.paddingBottom = '100px'; 
+
 
     // Sync state from AppState
     if (window.AppState) {

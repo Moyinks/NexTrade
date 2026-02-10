@@ -91,7 +91,7 @@ body {
   -webkit-overflow-scrolling: touch;
   
   padding: var(--space-4);
-  padding-bottom: var(--space-6);
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0.5px) + 16px);
   position: relative;
   z-index: 1;
 }
