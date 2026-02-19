@@ -167,14 +167,14 @@ const Market = (() => {
         Failed to Load Market
       </div>
       <div style="font-size:13px; color:var(--color-text-secondary); margin-bottom:20px; max-width:300px;">
-        ${message || 'Unable to fetch market data. Please check your connection.'}
+        <div id="error-message-text"></div>
       </div>
       <button onclick="Market.refresh()" class="btn btn-primary" style="padding:10px 24px;">
         <i class="fas fa-sync-alt" style="margin-right:8px;"></i>
         Retry
       </button>
     `;
-
+screen.querySelector('#error-message-text').textContent = message || 'Unable to fetch market data. Please check your connection.';
     container.appendChild(screen);
   }
 
@@ -370,7 +370,7 @@ const Market = (() => {
 
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
             <div style="width:28px; height:28px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden;">
-              ${coin.thumb ? `<img src="${coin.thumb}" style="width:100%; height:100%;">` : `<span style="font-size:11px; font-weight:700;">${coin.symbol.substring(0, 2)}</span>`}
+              ${coin.thumb && coin.thumb.startsWith('https://') ? `<img src="${coin.thumb}" style="width:100%; height:100%;" referrerpolicy="no-referrer">` : `<span style="font-size:11px; font-weight:700;">${coin.symbol.substring(0, 2)}</span>`}
             </div>
             <div style="flex:1; min-width:0;">
               <div style="font-size:12px; font-weight:700; color:var(--color-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
@@ -609,7 +609,7 @@ const Market = (() => {
     card.innerHTML = `
       <div style="display:flex; align-items:center; gap:12px;">
         <div style="width:40px; height:40px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
-          ${coin.image ? `<img src="${coin.image}" style="width:100%; height:100%;">` : `<span style="font-size:14px; font-weight:700;">${coin.symbol.substring(0, 2)}</span>`}
+          ${coin.image && coin.image.startsWith('https://') ? `<img src="${coin.image}" style="width:100%; height:100%;" referrerpolicy="no-referrer">` : `<span style="font-size:11px; font-weight:700;">${coin.symbol.substring(0, 2)}</span>`}
         </div>
 
         <div style="flex:1; min-width:0;">
@@ -916,7 +916,7 @@ const Market = (() => {
     content.innerHTML = `
       <div style="display:flex; align-items:center; gap:12px; padding-bottom:16px; border-bottom:1px solid var(--color-border); margin-bottom:16px;">
         <div style="width:48px; height:48px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden;">
-          ${coin.image ? `<img src="${coin.image}" style="width:100%; height:100%;">` : `<span style="font-size:18px; font-weight:700;">${coin.symbol.substring(0, 2)}</span>`}
+          ${coin.image && coin.image.startsWith('https://') ? `<img src="${coin.image}" style="width:100%; height:100%;" referrerpolicy="no-referrer">` : `<span style="font-size:11px; font-weight:700;">${coin.symbol.substring(0, 2)}</span>`}
         </div>
         <div style="flex:1;">
           <div style="font-size:18px; font-weight:700; color:var(--color-text-primary);">${coin.name}</div>

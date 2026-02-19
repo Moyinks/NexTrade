@@ -51,9 +51,16 @@ function initializeSupabase() {
 
           // Initialize client
           supabaseClient = window.supabase.createClient(
-            SUPABASE_CONFIG.url,
-            SUPABASE_CONFIG.anonKey
-          );
+  SUPABASE_CONFIG.url,
+  SUPABASE_CONFIG.anonKey,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true
+    }
+  }
+);
 
           // Expose to global scope
           window.supabaseClient = supabaseClient;

@@ -1,8 +1,11 @@
 /**
- * NexTrade — App Controller (FIXED: Investment Persistence)
- * ══════════════════════════════════════════════════════════════
- * CRITICAL FIX: Added syncInvestments() to load vault data on login
- * ══════════════════════════════════════════════════════════════
+ * NexTrade — App Controller (FIXED: Profile Creation & Investment Persistence)
+ * ══════════════════════════════════════════════════════════════════════════════════
+ * CRITICAL FIXES:
+ * 1. Added syncInvestments() to load vault data on login
+ * 2. Added ensureProfile() to create profile if it doesn't exist
+ * 3. Better error handling and logging
+ * ══════════════════════════════════════════════════════════════════════════════════
  */
 
 (function () {
@@ -25,17 +28,69 @@
   // 1. DATA SYNCHRONIZATION
   // ============================================
 
+  /**
+   * Ensure user profile exists in database
+   * Creates one if it doesn't exist
+   */
+  async function ensureProfile(user) {
+    try {
+      if (!window.supabaseClient) throw new Error('Supabase client missing');
+
+      // Try to get existing profile
+      const { data: existing, error: fetchError } = await window.supabaseClient
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        // PGRST116 = "not found" which is expected for new users
+        throw fetchError;
+      }
+
+      if (existing) {
+        console.log('[APP] ✅ Profile exists');
+        return existing;
+      }
+
+      // Profile doesn't exist, create it
+      console.log('[APP] 📝 Creating new profile for user:', user.id);
+      
+      const newProfile = {
+        id: user.id,
+        email: user.email,
+        spot_balance: 0,
+        vault_balance: 0,
+        holdings: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: created, error: createError } = await window.supabaseClient
+  .from('profiles')
+  .upsert(newProfile, { onConflict: 'id', ignoreDuplicates: false })
+  .select()
+  .single();
+
+if (createError) throw createError;
+
+      if (createError) throw createError;
+
+      console.log('[APP] ✅ Profile created successfully');
+      return created;
+
+    } catch (err) {
+      console.error('[APP] ❌ Profile creation/fetch error:', err);
+      throw err;
+    }
+  }
+
   async function syncProfile(user) {
     try {
       if (!window.supabaseClient) throw new Error('Supabase client missing');
 
-      const { data: profile, error } = await window.supabaseClient
-        .from('profiles')
-        .select('spot_balance, vault_balance, holdings')
-        .eq('id', user.id)
-        .single();
-
-      if (error) throw error;
+      // Ensure profile exists first
+      const profile = await ensureProfile(user);
 
       if (profile) {
         const balanceState = {
@@ -46,13 +101,21 @@
 
         if (window.AppState) {
           AppState.set('user', user);
+          AppState.set('profile', profile);
           AppState.set('balances', balanceState);
           if (profile.holdings) AppState.set('holdings', profile.holdings);
         }
         console.log('[APP] 💰 Balance Synced:', balanceState);
+        console.log('[APP] 👤 User set in AppState:', user.id);
       }
     } catch (err) {
       console.error('[APP] ❌ Profile Sync Error:', err);
+      // Don't throw - allow app to continue with default values
+      if (window.AppState) {
+        AppState.set('user', user); // At minimum, set the user
+        AppState.set('balances', { spot: 0, vault: 0, total: 0 });
+        AppState.set('holdings', {});
+      }
     }
   }
 
@@ -72,12 +135,16 @@
       }
     } catch (err) {
       console.error('[APP] ❌ History Sync Error:', err);
+      // Set empty array on error
+      if (window.AppState) {
+        AppState.set('transactions', []);
+      }
     }
   }
 
-  // ╔════════════════════════════════════════════════════════════╗
-  // ║  🔥 NEW FUNCTION - THIS IS WHAT WAS MISSING!              ║
-  // ╚════════════════════════════════════════════════════════════╝
+  /**
+   * Sync investments from database
+   */
   async function syncInvestments(user) {
     try {
       if (!window.supabaseClient) throw new Error('Supabase client missing');
@@ -96,6 +163,10 @@
       }
     } catch (err) {
       console.error('[APP] ❌ Investment Sync Error:', err);
+      // Set empty array on error
+      if (window.AppState) {
+        AppState.set('investments', []);
+      }
     }
   }
 
@@ -135,7 +206,7 @@
         return;
       }
 
-      console.log('[APP] ✅ Auth verified');
+      console.log('[APP] ✅ Auth verified for user:', session.user.id);
 
       // STEP 3: CacheManager
       console.log('[APP] Step 3/6: CacheManager...');
@@ -143,19 +214,29 @@
       CacheManager.init();
       console.log('[APP] ✅ CacheManager initialized');
 
-      // ╔════════════════════════════════════════════════════════════╗
-      // ║  STEP 4: Data Loading (🔥 NOW INCLUDES INVESTMENTS!)      ║
-      // ╚════════════════════════════════════════════════════════════╝
+      // STEP 4: Data Loading (NOW INCLUDES INVESTMENTS!)
       console.log('[APP] Step 4/6: Loading user data...');
       
+      // Load data sequentially to ensure profile exists first
+      await syncProfile(session.user);
+      
+      // Then load everything else in parallel
       await Promise.all([
-        syncProfile(session.user),
         syncHistory(session.user),
-        syncInvestments(session.user), // 🔥 THIS LINE IS NEW!
+        syncInvestments(session.user),
         CacheManager.getMarketData()
       ]);
 
       console.log('[APP] ✅ Data loaded');
+
+      // Verify user was set
+      const userCheck = window.AppState ? AppState.get('user') : null;
+      if (!userCheck) {
+        console.warn('[APP] ⚠️ User not set in AppState after sync, setting manually...');
+        if (window.AppState) {
+          AppState.set('user', session.user);
+        }
+      }
 
       // STEP 5: Router
       console.log('[APP] Step 5/6: Router...');
@@ -178,7 +259,23 @@
       }
 
       state.initialized = true;
+      window.supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT' || (!session && state.initialized)) {
+    console.warn('[APP] Session expired or signed out — redirecting');
+    if (window.AppState) AppState.clear();
+    window.location.href = CONSTANTS.LOGIN_PAGE;
+  }
+});
       console.log('[APP] ✅✅✅ App Fully Initialized ✅✅✅');
+
+      // Final verification log
+      console.log('[APP] 📊 Final State Check:', {
+        user: AppState.get('user')?.id,
+        balances: AppState.get('balances'),
+        holdings: AppState.get('holdings'),
+        transactionCount: AppState.get('transactions')?.length || 0,
+        investmentCount: AppState.get('investments')?.length || 0
+      });
 
     } catch (error) {
       console.error('[APP] ❌ Initialization failed:', error);
@@ -251,7 +348,7 @@
         await Promise.all([
           syncProfile(user), 
           syncHistory(user),
-          syncInvestments(user), // 🔥 ALSO REFRESH INVESTMENTS
+          syncInvestments(user),
           CacheManager.refresh()
         ]);
       }

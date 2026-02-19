@@ -378,16 +378,24 @@ const Navbar = (() => {
     if (window.App) App.showError('Help center coming soon');
   }
 
-  function handleSignOut() {
-    toggleProfileDropdown();
-    if (confirm('Sign out?')) {
-      if (window.supabaseClient) {
-        supabaseClient.auth.signOut().then(() => window.location.reload());
-      } else {
-        window.location.href = 'login.html';
-      }
+  async function handleSignOut() {
+  toggleProfileDropdown();
+  if (!window.Modal) return;
+  const confirmed = await Modal.confirm({
+    title: 'Sign Out',
+    message: 'Are you sure you want to sign out?',
+    confirmText: 'Sign Out',
+    cancelText: 'Cancel',
+    dangerMode: true
+  });
+  if (confirmed) {
+    if (window.AppState) AppState.clear();
+    if (window.supabaseClient) {
+      await supabaseClient.auth.signOut();
     }
+    window.location.href = 'login.html';
   }
+}
 
   return {
     init,

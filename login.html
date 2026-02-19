@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a">
     <title>NexTrade | Secure Access</title>
     <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="NexTrade-192.png">
+    <link rel="apple-touch-icon" href="NexTrade-192.png">
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -272,7 +272,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Verify Your Email</h3>
-                </div>
+            </div>
             <div class="modal-body">
                 <p>We've sent a 6-digit confirmation code to <strong id="otpEmailDisplay" style="color:white;"></strong>.</p>
                 
@@ -305,7 +305,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
 
-   <script>
+    <script>
     // ============================================
     // 1. INITIALIZATION & STATE
     // ============================================
@@ -329,7 +329,11 @@
 
         // Auto-Redirect if already logged in
         const { data } = await window.supabaseClient.auth.getSession();
-        if (data.session) window.location.href = 'index.html';
+        if (data.session) {
+            // 🔥 FIX: Mark fresh login before redirect
+            sessionStorage.setItem('nextrade_fresh_login', 'true');
+            window.location.href = 'index.html';
+        }
     }
 
     init();
@@ -368,7 +372,7 @@
     });
 
     // ============================================
-    // 3. AUTH LOGIC (FIXED)
+    // 3. AUTH LOGIC (🔥 FIXED WITH SESSION MARKERS)
     // ============================================
 
     // --- LOGIN ---
@@ -387,6 +391,9 @@
             showError(error.message);
             setLoading(btn, false);
         } else {
+            // 🔥 FIX: Mark fresh login
+            sessionStorage.setItem('nextrade_fresh_login', 'true');
+            
             // Wait a bit for session to propagate
             await new Promise(r => setTimeout(r, 300));
             window.location.href = 'index.html';
@@ -412,7 +419,11 @@
         const { data, error } = await window.supabaseClient.auth.signUp({
             email, 
             password,
-            options: { data: { full_name: name } }
+            options: { 
+                data: { 
+                    full_name: name,
+                } 
+            }
         });
 
         if (error) {
@@ -423,6 +434,9 @@
 
         // If session exists immediately (auto-confirm enabled)
         if (data.session) {
+            // 🔥 FIX: Mark fresh login
+            sessionStorage.setItem('nextrade_fresh_login', 'true');
+            
             await new Promise(r => setTimeout(r, 300));
             window.location.href = 'index.html';
             return;
@@ -435,7 +449,7 @@
         openModal('otp');
     };
 
-    // --- OTP VERIFICATION (🔥 FIXED WITH RETRY LOGIC) ---
+    // --- OTP VERIFICATION (🔥 FIXED WITH RETRY LOGIC + SESSION MARKER) ---
     document.getElementById('otpForm').onsubmit = async (e) => {
         e.preventDefault();
         const btn = document.getElementById('otpBtn');
@@ -484,6 +498,8 @@
             }
 
             // Step 3: Redirect with confidence
+            // 🔥 FIX: Mark fresh login before redirect
+            sessionStorage.setItem('nextrade_fresh_login', 'true');
             window.location.href = 'index.html';
 
         } catch (err) {
@@ -565,16 +581,17 @@
             }, 200);
         }
     });
-</script>
+    </script>
+
     <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js')
-        .then(reg => console.log('NexTrade PWA Ready'))
-        .catch(err => console.log('PWA Setup Failed', err));
-    });
-  }
-</script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('NexTrade PWA Ready'))
+                    .catch(err => console.log('PWA Setup Failed', err));
+            });
+        }
+    </script>
 
 </body>
 </html>

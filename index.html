@@ -111,12 +111,12 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
+<script src="session-manager.js" defer></script>
   <script src="config.js" defer></script>
   <script src="format.js" defer></script>
   <script src="validation.js" defer></script>
   <script src="storage.js" defer></script>
-  <script src="state.js" defer></script>
+  <script src="states.js" defer></script>
   <script src="supabase.js" defer></script>
   <script src="api.js" defer></script>
  <script src="trade.js" defer></script>
@@ -125,15 +125,17 @@
   <script src="feed.js" defer></script>
   <script src="navbar.js" defer></script>
 
-  <script src="home.js" defer></script>
+  <script src="homes.js" defer></script>
   <script src="cache-manager.js" defer></script>
   <script src="markets.js" defer></script>
+  <script src="virtual-scroller.js" defer></script>
   <script src="vault.js" defer></script>
   <script src="wallet.js" defer></script>
+ <script src="admin.js" defer></script>
  
 
   <script src="bootstraps.js" defer></script>
-  <script src="router.js" defer></script>
+  <script src="routers.js" defer></script>
   <script src="app.js" defer></script>
 
   <script defer>
@@ -186,6 +188,10 @@
      
       }
     })();
+    window.addEventListener('beforeunload', () => {
+  if (window.API) API.unsubscribeTicker();
+  if (window.CacheManager) CacheManager.stopBackgroundChecker();
+});
   </script>
 </body>
 </html>

@@ -235,12 +235,15 @@ const API = (() => {
   }
 
   function unsubscribeTicker() {
-    if (activeSocket) {
-      console.log('[API] 🔌 Closing WebSocket');
-      activeSocket.close();
-      activeSocket = null;
-    }
+  if (activeSocket) {
+    console.log('[API] 🔌 Closing WebSocket');
+    activeSocket.onmessage = null;
+    activeSocket.onerror = null;
+    activeSocket.onclose = null;
+    activeSocket.close();
+    activeSocket = null;
   }
+}
 
   // ============================================
   // 2. MARKET DATA (COINGECKO AGGREGATION)

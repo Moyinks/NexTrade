@@ -362,7 +362,8 @@ backdrop-filter: blur(8px);
       strategyInfo.appendChild(strategyDesc);
 
       const form = document.createElement('form');
-      form.style.cssText = `display:flex;flex-direction:column;gap:var(--space-4);`;
+form.setAttribute('action', 'javascript:void(0)'); // Prevent default navigation
+form.style.cssText = `display:flex;flex-direction:column;gap:var(--space-4);`;
 
       const amountGroup = document.createElement('div');
       amountGroup.className = 'input-group';

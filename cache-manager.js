@@ -574,12 +574,13 @@ const CacheManager = (() => {
     startBackgroundChecker();
     
     // Listen for page visibility changes
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && !isValid(cache.marketData)) {
-        console.log('[CACHE] 👁️ Page visible with stale cache, refreshing...');
-        refreshInBackground();
-      }
-    });
+    const _visibilityHandler = () => {
+  if (!document.hidden && !isValid(cache.marketData)) {
+    refreshInBackground();
+  }
+};
+document.removeEventListener('visibilitychange', _visibilityHandler);
+document.addEventListener('visibilitychange', _visibilityHandler);
 
     console.log('[CACHE] ✅ CacheManager initialized');
   }
