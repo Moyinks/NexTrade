@@ -1,0 +1,233 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   NexTrade — Signature Hero Card  v3.0 (Ship-ready)
+
+   Targets:
+     #home-hero-card   — home page hero
+     #wallet-main-hero — wallet page hero
+
+   What this file owns:
+     1. STICKY behaviour (overrides position:relative from both JS files)
+     2. CONTRAST  — card reads as a distinct panel above the #0B0E11 background
+     3. BOWL/CRADLE shape — bottom rounds outward, shadow cradles the card
+     4. AURORA LINE — animated sweep along the bottom edge
+     5. GRAIN TEXTURE — physical depth on the glass surface
+     6. NUMBER SHIMMER — portfolio total never looks static
+     7. QUICK-ACTION BUTTONS — lifted glass surface
+     8. MARKET CARD — real card treatment, not floating rows
+
+   Variables confirmed from theme file:
+     --color-background: #0B0E11
+     --color-surface: #151921
+     --color-surface-elevated: #1E232F
+     --color-border: rgba(255,255,255,0.08)
+     --color-primary: #3B82F6
+     --space-4: 16px
+════════════════════════════════════════════════════════════════════════════ */
+
+
+/* ── 1. STICKY — !important wins over inline position:relative ──────────── */
+
+#home-hero-card,
+#wallet-main-hero {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 20 !important;
+  flex-shrink: 0 !important;
+
+  /* ── 2. CONTRAST: deep navy panel, clearly not the background ─────────── */
+  /*    App bg = #0B0E11. Card must read as "floating above" not "part of".  */
+  background:
+    radial-gradient(ellipse 100% 80% at 0% 120%,  rgba(23, 74, 189, 0.50) 0%, transparent 58%),
+    radial-gradient(ellipse 60%  50% at 100%  -5%, rgba(88,  95, 220, 0.20) 0%, transparent 55%),
+    linear-gradient(162deg, #0d2050 0%, #08173c 55%, #040d24 100%) !important;
+
+  /* Sides + top border — makes the card edge crisp against the dark page    */
+  border-top:   none !important;
+  border-left:  1px solid rgba(59,130,246,0.22) !important;
+  border-right: 1px solid rgba(59,130,246,0.22) !important;
+
+  /* ── 3. BOWL / CRADLE SHAPE ───────────────────────────────────────────── */
+  /*    Only the BOTTOM corners are rounded — the top bleeds to screen edges. */
+  /*    44px creates the "chalice base" silhouette.                           */
+  border-radius: 0 0 44px 44px !important;
+  overflow: hidden !important;
+
+  /* Inner shadow at bottom edge — the "cloth tucking in" beneath the weight */
+  box-shadow:
+    inset 0  1px 0   rgba(255,255,255,0.06),   /* top inner highlight        */
+    inset 0 -1px 0   rgba(59,130,246,0.18),    /* bottom inner glow: the rim */
+    inset 0 -8px 20px rgba(0,0,0,0.35) !important; /* cloth shadow curving up */
+
+  /* drop-shadow follows the card's ACTUAL outline (border-radius included). */
+  /* Because the bottom rounds upward at the corners, the shadow dips at the  */
+  /* center and rises at sides — exactly the concave cradle / bowl effect.   */
+  /* Three layers: close contact shadow, wide ambient, blue edge shimmer.    */
+  filter:
+    drop-shadow(0   6px  12px rgba(0,0,0,0.55))
+    drop-shadow(0  22px  44px rgba(0,0,0,0.38))
+    drop-shadow(0  40px  70px rgba(0,0,0,0.22))
+    drop-shadow(0   2px   6px rgba(37,99,235,0.25)) !important;
+
+  isolation: isolate;
+  will-change: transform;
+}
+
+/* ── 4. AURORA LINE — animated light sweeps the bottom rim ──────────────── */
+/*    overflow:hidden clips this to the card — it appears as a travelling     */
+/*    highlight along the very bottom edge, not beyond.                       */
+
+#home-hero-card::before,
+#wallet-main-hero::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: -100%;
+  width: 300%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent          0%,
+    transparent         22%,
+    rgba(56,139,253,0.0) 30%,
+    rgba(56,139,253,0.9) 40%,
+    rgba(130,84,240,1.0) 50%,
+    rgba(56,189,248,0.9) 60%,
+    rgba(56,189,248,0.0) 70%,
+    transparent         78%,
+    transparent        100%
+  );
+  animation: nex-aurora 6s cubic-bezier(0.4,0,0.6,1) infinite;
+  pointer-events: none;
+  z-index: 3;
+}
+
+@keyframes nex-aurora {
+  0%   { transform: translateX(0%);     opacity: 0; }
+  8%   { opacity: 1; }
+  50%  { transform: translateX(33.33%); opacity: 1; }
+  92%  { opacity: 1; }
+  100% { transform: translateX(66.66%); opacity: 0; }
+}
+
+/* ── 5. GRAIN TEXTURE — micro-noise for tactile glass feel ──────────────── */
+
+#home-hero-card::after,
+#wallet-main-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+  opacity: 0.55;
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 1;
+}
+
+/* ── 6. NUMBER SHIMMER — portfolio total breathes ────────────────────────── */
+
+#home-total-value,
+#total-equity-display {
+  background: linear-gradient(
+    110deg,
+    #cbd5f0  0%,
+    #ffffff  26%,
+    #bfdbfe  44%,
+    #ffffff  52%,
+    #cbd5f0 100%
+  );
+  background-size: 280% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: nex-shimmer 7s linear infinite;
+  position: relative;
+  z-index: 3;
+}
+
+@keyframes nex-shimmer {
+  0%   { background-position: 0%   center; }
+  100% { background-position: 280% center; }
+}
+
+/* ── 7. PRIVACY TOGGLE & HERO BUTTONS — blue glass orb ─────────────────── */
+
+#wallet-privacy-btn,
+#home-hero-card button {
+  background: rgba(23,78,216,0.25)      !important;
+  border:     1px solid rgba(96,165,250,0.40) !important;
+  box-shadow:
+    0 0 22px rgba(23,78,216,0.20),
+    inset 0 1px 0 rgba(255,255,255,0.12) !important;
+  backdrop-filter:         blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1),
+              box-shadow 0.2s ease !important;
+}
+
+#wallet-privacy-btn:active,
+#home-hero-card button:active {
+  transform: scale(0.90) !important;
+  box-shadow: 0 0 8px rgba(23,78,216,0.25) !important;
+}
+
+/* ── 8. QUICK-ACTION BUTTONS — visible glass above dark page ─────────────── */
+/*    Surface: #151921. Page: #0B0E11. Delta is only ~10% — too subtle.       */
+/*    We lift with rgba tint + border so they read as distinct panels.         */
+
+div[style*="grid-template-columns:repeat(3,1fr)"] > button,
+div[style*="grid-template-columns: repeat(3, 1fr)"] > button {
+  background: rgba(22,32,54,0.90)    !important;
+  border:     1px solid rgba(255,255,255,0.11) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    0 4px 14px rgba(0,0,0,0.35)      !important;
+  transition: background 0.16s ease, transform 0.14s ease,
+              box-shadow 0.16s ease !important;
+}
+
+div[style*="grid-template-columns:repeat(3,1fr)"] > button:active,
+div[style*="grid-template-columns: repeat(3, 1fr)"] > button:active {
+  transform:  scale(0.95)           !important;
+  background: rgba(30,48,84,0.95)   !important;
+}
+
+/* ── 9. MARKET CARD — real card, not floating rows ───────────────────────── */
+/*    The JS sets: background:var(--color-surface,#151921);border-radius:12px  */
+/*    We enhance the shadow and give it a noticeably elevated look.            */
+
+div[style*="background:var(--color-surface,#151921);border:1px solid var(--color-border,rgba(255,255,255,0.08));border-radius:12px"] {
+  background: #151921 !important;
+  border:     1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 14px !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.04),
+    0 6px 24px rgba(0,0,0,0.35),
+    0 1px  4px rgba(0,0,0,0.25) !important;
+}
+
+/* Coin row press state */
+div[style*="background:var(--color-surface,#151921);border:1px solid var(--color-border,rgba(255,255,255,0.08));border-radius:12px"] > div {
+  transition: background 0.10s ease !important;
+}
+
+/* ── 10. WALLET HERO override — wallet.js sets gradient via JS innerHTML ─── */
+/*    We must override inline style with !important.                           */
+
+#wallet-main-hero[style] {
+  background:
+    radial-gradient(ellipse 100% 80% at 0% 120%,  rgba(23,74,189,0.50) 0%, transparent 58%),
+    radial-gradient(ellipse 60%  50% at 100%  -5%, rgba(88,95,220,0.20) 0%, transparent 55%),
+    linear-gradient(162deg, #0d2050 0%, #08173c 55%, #040d24 100%) !important;
+}
+
+/* ── 11. REDUCED MOTION — honour the OS accessibility setting ───────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  #home-hero-card::before,
+  #wallet-main-hero::before,
+  #home-total-value,
+  #total-equity-display {
+    animation: none !important;
+  }
+}

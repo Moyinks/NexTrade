@@ -1,1441 +1,803 @@
 /**
- * NexTrade — Vault (Institutional Terminal) v5.0 - PERSISTENCE FIXED
- * ═══════════════════════════════════════════════════════════════════════════
- * CRITICAL FIXES:
- * 1. claim() and earlyWithdraw() now RE-FETCH from Supabase after mutation
- * 2. handleClaimAll() uses fresh DB data to prevent stale state
- * 3. Added crypto asset support (BTC/ETH/SOL) with fiat fallback
- * 4. Improved error handling with user-facing messages
- * ═══════════════════════════════════════════════════════════════════════════
+ * NexTrade — Vault Module v6.0 (Institutional Edition)
+ *
+ * Two plans: Steady Accumulator (22% APY, 90d) and Alpha Seeker (65% APY, 30d)
+ * Recommended plan surfaced from nex_investor_profile in localStorage
+ * All supabase columns unchanged: investments, profiles, transactions
+ * Exports: render, refresh, destroy, cleanup, openInvestModal, handleClaimAll, syncInvestmentsFromDB
  */
 
-const Vault = (() => {
+(function () {
   'use strict';
 
-  /* ═══════════════════════════════════════════════════════════════════════════
-     CONFIGURATION
-     ═══════════════════════════════════════════════════════════════════════════ */
-  const CONFIG = {
-    PLATFORM_FEE: 0.015,
-    EARLY_WITHDRAWAL_PENALTY: 0.02,
-    TICKER_INTERVAL: 500,
-    TVL_TOTAL: 2400000,
-    ACTIVE_USERS: 2341,
-    INSURANCE_AMOUNT: 250000,
-    ITEMS_PER_PAGE: 20,
-    VIRTUAL_SCROLL_ITEM_HEIGHT: 160,
-    VIRTUAL_SCROLL_BUFFER: 5,
-    HERO_MIN_HEIGHT: 180,
-  };
-
-  // Asset to Strategy Mapping
-  const ASSET_STRATEGY_MAP = {
-    'bitcoin': 'strat_stable',
-    'ethereum': 'strat_defi',
-    'solana': 'strat_degen'
-  };
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-     STATE
-     ═══════════════════════════════════════════════════════════════════════════ */
-  let container = null;
-  let tickerInterval = null;
-  let virtualScrollers = {};
-
-  const state = {
-    user: null,
-    balances: { spot: 0, vault: 0 },
-    holdings: {},
-    investments: [],
-    strategies: [
-      {
-        id: 'usdc_alpha',
-        name: 'USDC Yield Alpha',
-        risk: 'Low',
-        riskLevel: 1,
-        baseAPY: 0.12,
-        durationDays: 7,
-        minInvestment: 100,
-        description: 'Algorithmic stablecoin arbitrage across DEX liquidity pools.',
-        color: '#10b981',
-        gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-        icon: 'fas fa-shield-alt',
-        badge: '⭐',
-        capacity: 0.78,
-        participants: 842,
-        performance: [0.11, 0.115, 0.12, 0.118, 0.122, 0.12, 0.119],
-        acceptedAssets: ['usd', 'bitcoin']
-      },
-      {
-        id: 'defi_bluechip',
-        name: 'DeFi Blue Chip',
-        risk: 'Medium',
-        riskLevel: 3,
-        baseAPY: 0.24,
-        durationDays: 30,
-        minInvestment: 500,
-        description: 'Automated leverage farming on Aave and Compound.',
-        color: '#3b82f6',
-        gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-        icon: 'fas fa-layer-group',
-        badge: '🔥',
-        capacity: 0.62,
-        participants: 1456,
-        performance: [0.22, 0.235, 0.24, 0.238, 0.245, 0.24, 0.242],
-        acceptedAssets: ['usd', 'ethereum']
-      },
-      {
-        id: 'meme_momentum',
-        name: 'Meme Momentum',
-        risk: 'High',
-        riskLevel: 5,
-        baseAPY: 1.50,
-        durationDays: 3,
-        minInvestment: 50,
-        description: 'High-frequency scalping on volatile meme assets.',
-        color: '#f59e0b',
-        gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-        icon: 'fas fa-rocket',
-        badge: '🆕',
-        capacity: 0.34,
-        participants: 234,
-        performance: [1.2, 1.45, 1.6, 1.55, 1.5, 1.48, 1.52],
-        acceptedAssets: ['usd', 'solana']
-      }
-    ],
-    ui: {
-      activeTab: 'overview',
-      expandedGroups: new Set(),
-      scrollPositions: {},
-      filters: {
-        search: '',
-        strategy: 'all',
-        sortBy: 'maturity',
-        sortOrder: 'asc'
-      },
-      pagination: {
-        active: { page: 1, total: 0 },
-        completed: { page: 1, total: 0 },
-        all: { page: 1, total: 0 }
-      }
+  const STRATEGIES = [
+    {
+      id:          'steady-accumulator',
+      name:        'Steady Accumulator',
+      tagline:     'Earn reliably. Sleep soundly.',
+      category:    'Conservative Growth',
+      icon:        '\u{1F6E1}\uFE0F',
+      apy:         22,
+      apyRange:    '18\u201326%',
+      minAmount:   1500,
+      duration:    90,
+      riskLevel:   1,
+      riskLabel:   'Low',
+      riskColor:   '#10b981',
+      penaltyRate: 0.08,
+      perfFee:     15,
+      accentColor: '#10b981',
+      mechanics: [
+        { icon: '\u{1F3E6}', title: 'Stablecoin Lending',    pct: 55, desc: 'USDC/USDT loaned to institutional borrowers via audited DeFi protocols. Base rate 8\u201314% APY from real borrower demand \u2014 no speculation.' },
+        { icon: '\u27A0',    title: 'ETH Staking',            pct: 30, desc: 'Native Ethereum staking through validator nodes we operate. Protocol rewards 3\u20135% APY, fully on-chain and verifiable.' },
+        { icon: '\u{1F4A7}', title: 'Liquidity Provision',    pct: 15, desc: 'Capital deployed as liquidity in the highest-fee stable trading pairs. Every swap generates a real-time fee \u2014 paid to us continuously.' }
+      ],
+      highlights: [
+        'Capital deployed only in audited protocols',
+        'No leverage \u2014 ever',
+        '15% performance fee on profit only',
+        'Early exit: up to 8% fee on claimed value'
+      ]
+    },
+    {
+      id:          'alpha-seeker',
+      name:        'Alpha Seeker',
+      tagline:     'Outperform the market. Own the risk.',
+      category:    'Quantitative Momentum',
+      icon:        '\u26A1',
+      apy:         65,
+      apyRange:    '45\u201390%',
+      minAmount:   1500,
+      duration:    30,
+      riskLevel:   2,
+      riskLabel:   'Medium\u2013High',
+      riskColor:   '#f59e0b',
+      penaltyRate: 0.15,
+      perfFee:     20,
+      accentColor: '#f59e0b',
+      mechanics: [
+        { icon: '\u{1F4CA}', title: 'Quant Momentum Signals',  pct: 50, desc: 'RSI-divergence and volume-anomaly signals across the top 20 high-volume pairs. We enter and exit within hours \u2014 not days.' },
+        { icon: '\u2696\uFE0F', title: 'Funding Rate Arbitrage', pct: 30, desc: 'When perpetual futures markets are heavily long, shorts collect a payment every 8 hours. We sit on the profitable side and collect \u2014 market-neutral.' },
+        { icon: '\u{1F525}', title: 'Volatile-Pair Liquidity',  pct: 20, desc: 'Providing liquidity on high-volatility pairs earns 10\u00D7 the fees of stable pairs. Managed with dynamic rebalancing.' }
+      ],
+      highlights: [
+        'Algo-driven \u2014 no emotional decisions',
+        'Funding rate arbitrage runs 24/7',
+        '20% performance fee on profit only',
+        'Early exit: up to 15% fee on claimed value'
+      ]
     }
-  };
+  ];
 
-  /* ═══════════════════════════════════════════════════════════════════════════
-     UTILITIES
-     ═══════════════════════════════════════════════════════════════════════════ */
-  function generateUUID() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-      const r = Math.random() * 16 | 0;
-      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-    });
-  }
+  let _container        = null;
+  let _activeTab        = 'explore';
+  let _destroyed        = false;
+  let _isProcessing     = false;
+  let _milestoneChecked = new Set();
 
-  function getDynamicAPY(strategy) {
-    const hour = new Date().getHours();
-    const variance = Math.sin(hour / 24 * Math.PI * 2) * 0.02;
-    return strategy.baseAPY * (1 + variance);
-  }
-
-  function getRiskColor(level) {
-    const colors = ['#10b981', '#84cc16', '#eab308', '#f97316', '#ef4444'];
-    return colors[Math.min(level - 1, 4)] || '#6b7280';
-  }
-
-  function createRiskDots(level, max = 5) {
-    let html = '<div style="display:flex; gap:3px;">';
-    for (let i = 1; i <= max; i++) {
-      const color = i <= level ? getRiskColor(level) : 'rgba(255,255,255,0.2)';
-      html += `<div style="width:6px; height:6px; border-radius:50%; background:${color};"></div>`;
-    }
-    return html + '</div>';
-  }
-
-  function createSparkline(data, color = '#10b981', width = 80, height = 24) {
-    if (!data || data.length === 0) return '';
-    const max = Math.max(...data);
-    const min = Math.min(...data);
-    const range = max - min || 1;
-    const points = data.map((v, i) => {
-      const x = (i / (data.length - 1)) * width;
-      const y = height - ((v - min) / range) * height;
-      return `${x},${y}`;
-    }).join(' ');
-    return `<svg width="${width}" height="${height}" style="display:block;"><polyline fill="none" stroke="${color}" stroke-width="2" points="${points}" style="opacity:0.8;"/></svg>`;
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-     FINANCIAL CALCULATIONS
-     ═══════════════════════════════════════════════════════════════════════════ */
-  function calculateLiveValue(inv) {
-    if (inv.status !== 'active') return (inv.amount || 0) + (inv.profit || 0);
-    const now = Date.now();
-    const start = new Date(inv.created_at).getTime();
-    if (isNaN(start)) return inv.amount;
-    const durationMs = (inv.duration || 30) * 24 * 60 * 60 * 1000;
-    const maturityDate = start + durationMs;
-    const effectiveNow = Math.min(now, maturityDate);
-    const yearsElapsed = (effectiveNow - start) / (365 * 24 * 60 * 60 * 1000);
-    const n = 365;
-    const compoundValue = inv.amount * Math.pow(1 + inv.apy / n, n * yearsElapsed);
-    const grossProfit = compoundValue - inv.amount;
-    const platformFee = grossProfit * CONFIG.PLATFORM_FEE;
-    return inv.amount + (grossProfit - platformFee);
-  }
-
-  function getTimeRemaining(inv) {
-    const start = new Date(inv.created_at).getTime();
-    const durationMs = (inv.duration || 30) * 24 * 60 * 60 * 1000;
-    const maturityDate = start + durationMs;
-    const remaining = maturityDate - Date.now();
-    if (remaining <= 0) return { text: 'Matured', ms: 0, percent: 100, isDone: true, maturityDate };
-    const days = Math.floor(remaining / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const elapsed = Date.now() - start;
-    const percent = Math.min(100, Math.max(0, (elapsed / durationMs) * 100));
-    return { text: `${days}d ${hours}h`, ms: remaining, percent, isDone: false, maturityDate };
-  }
-
-  function calculateProjection(amount, apy, days) {
-    const years = days / 365;
-    const n = 365;
-    const compoundValue = amount * Math.pow(1 + apy / n, n * years);
-    const grossProfit = compoundValue - amount;
-    const platformFee = grossProfit * CONFIG.PLATFORM_FEE;
-    const netProfit = grossProfit - platformFee;
-    return { grossProfit, platformFee, netProfit, finalValue: amount + netProfit };
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-     DATABASE SYNC HELPER (NEW - CRITICAL FIX)
-     ═══════════════════════════════════════════════════════════════════════════ */
-  async function syncInvestmentsFromDB() {
-    if (!window.supabaseClient || !state.user) {
-      console.warn('[VAULT] Cannot sync: no supabase client or user');
-      return false;
-    }
-
-    try {
-      const { data: freshInvestments, error } = await window.supabaseClient
-        .from('investments')
-        .select('*')
-        .eq('user_id', state.user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      if (freshInvestments) {
-        AppState.set('investments', freshInvestments);
-        state.investments = freshInvestments.filter(i => i && i.amount > 0);
-        console.log(`[VAULT] ✅ Synced ${freshInvestments.length} investments from DB`);
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      console.error('[VAULT] ❌ DB sync failed:', error);
-      return false;
-    }
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-     DATA AGGREGATION
-     ═══════════════════════════════════════════════════════════════════════════ */
-  function getPositionGroups() {
-    const groups = {};
-    
-    state.investments
-      .filter(i => i.status === 'active')
-      .forEach(inv => {
-        const key = inv.strategy_id;
-        if (!groups[key]) {
-          groups[key] = {
-            strategy: state.strategies.find(s => s.id === key) || { id: key, name: 'Unknown', color: '#8b5cf6', gradient: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', icon: 'fas fa-box' },
-            positions: [],
-            totalInvested: 0,
-            totalCurrent: 0,
-            totalProfit: 0,
-            earliestMaturity: null,
-            readyToClaim: 0,
-            avgAPY: 0
-          };
-        }
-        
-        const current = calculateLiveValue(inv);
-        const profit = current - inv.amount;
-        const timing = getTimeRemaining(inv);
-        
-        groups[key].positions.push({ ...inv, current, profit, timing });
-        groups[key].totalInvested += inv.amount;
-        groups[key].totalCurrent += current;
-        groups[key].totalProfit += profit;
-        groups[key].avgAPY += inv.apy;
-        
-        if (timing.isDone) groups[key].readyToClaim++;
-        
-        if (!groups[key].earliestMaturity || timing.maturityDate < groups[key].earliestMaturity) {
-          groups[key].earliestMaturity = timing.maturityDate;
-        }
-      });
-    
-    Object.values(groups).forEach(group => {
-      if (group.positions.length > 0) {
-        group.avgAPY = group.avgAPY / group.positions.length;
-      }
-    });
-    
-    return Object.values(groups);
-  }
-
-  function getPortfolioSummary() {
-    const activeInvs = state.investments.filter(i => i.status === 'active');
-    const completedInvs = state.investments.filter(i => i.status === 'completed');
-    
-    const totalValue = activeInvs.reduce((acc, inv) => acc + calculateLiveValue(inv), 0);
-    const totalInvested = activeInvs.reduce((acc, inv) => acc + inv.amount, 0);
-    const totalProfit = totalValue - totalInvested;
-    const lifetimeEarnings = completedInvs.reduce((acc, inv) => acc + (inv.profit || 0), 0);
-    
-    const claimableInvs = activeInvs.filter(inv => getTimeRemaining(inv).isDone);
-    const totalClaims = claimableInvs.reduce((acc, inv) => acc + calculateLiveValue(inv), 0);
-    
-    const avgAPY = activeInvs.length > 0 
-      ? activeInvs.reduce((acc, inv) => acc + (inv.apy || 0), 0) / activeInvs.length 
-      : 0;
-    
+  function getState() {
+    if (!window.AppState) return { user: null, balances: { spot: 0, vault: 0 }, investments: [] };
     return {
-      totalValue,
-      totalInvested,
-      totalProfit,
-      profitPercent: totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0,
-      activeCount: activeInvs.length,
-      completedCount: completedInvs.length,
-      lifetimeEarnings,
-      avgAPY,
-      claimableCount: claimableInvs.length,
-      totalClaims
+      user:        AppState.get('user')        || null,
+      profile:     AppState.get('profile')     || null,
+      balances:    AppState.get('balances')    || { spot: 0, vault: 0 },
+      investments: AppState.get('investments') || []
     };
   }
 
-  function filterAndSortInvestments(investments, filters) {
-    let filtered = [...investments];
-    
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      filtered = filtered.filter(inv => {
-        const strategy = state.strategies.find(s => s.id === inv.strategy_id);
-        return strategy?.name.toLowerCase().includes(searchLower) || 
-               inv.strategy_id.toLowerCase().includes(searchLower);
-      });
-    }
-    
-    if (filters.strategy !== 'all') {
-      filtered = filtered.filter(inv => inv.strategy_id === filters.strategy);
-    }
-    
-    filtered.sort((a, b) => {
-      let valA, valB;
-      
-      switch (filters.sortBy) {
-        case 'amount':
-          valA = a.amount;
-          valB = b.amount;
-          break;
-        case 'maturity':
-          valA = getTimeRemaining(a).maturityDate;
-          valB = getTimeRemaining(b).maturityDate;
-          break;
-        case 'apy':
-          valA = a.apy;
-          valB = b.apy;
-          break;
-        case 'profit':
-          valA = calculateLiveValue(a) - a.amount;
-          valB = calculateLiveValue(b) - b.amount;
-          break;
-        default:
-          return 0;
-      }
-      
-      return filters.sortOrder === 'asc' ? valA - valB : valB - valA;
-    });
-    
-    return filtered;
+  function fmt(val) {
+    if (window.Format && Format.currency) return Format.currency(parseFloat(val) || 0);
+    const n = parseFloat(val) || 0;
+    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  /* ═══════════════════════════════════════════════════════════════════════════
-     VIRTUAL SCROLL ENGINE
-     ═══════════════════════════════════════════════════════════════════════════ */
-  
+  function showError(msg)   { if (window.App && App.showError)   App.showError(msg);   else alert(msg); }
+  function showSuccess(msg) { if (window.App && App.showSuccess) App.showSuccess(msg); else alert(msg); }
 
-  /* ═══════════════════════════════════════════════════════════════════════════
-     TAB NAVIGATION - INSTITUTIONAL SEGMENTED CONTROL
-     ═══════════════════════════════════════════════════════════════════════════ */
-  function createTabNavigation() {
-    const nav = document.createElement('div');
-    nav.style.cssText = `
-      display: flex;
-      background: #0f172a;
-      padding: 4px;
-      border-radius: 12px;
-      margin: 0 0 20px 0;
-      border: 1px solid rgba(255,255,255,0.05);
-      flex-shrink: 0;
-    `;
-    
-    const tabs = [
-      { id: 'overview', label: 'Overview', icon: 'fa-chart-pie' },
-      { id: 'active', label: 'Active', icon: 'fa-chart-line' },
-      { id: 'completed', label: 'Completed', icon: 'fa-check-circle' },
-      { id: 'all', label: 'All', icon: 'fa-list' }
-    ];
-    
-    tabs.forEach(tab => {
-      const btn = document.createElement('button');
-      btn.className = 'vault-tab-btn';
-      btn.dataset.tab = tab.id;
-      const isActive = tab.id === state.ui.activeTab;
-      
-      btn.style.cssText = `
-        flex: 1;
-        padding: 10px 0;
-        border: none;
-        border-radius: 8px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        background: ${isActive ? '#3b82f6' : 'transparent'};
-        color: ${isActive ? '#ffffff' : '#64748b'};
-        box-shadow: ${isActive ? '0 2px 8px rgba(59, 130, 246, 0.4)' : 'none'};
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-      `;
-      
-      btn.innerHTML = `<i class="fas ${tab.icon}" style="font-size:11px;"></i><span>${tab.label}</span>`;
-      btn.onclick = () => switchTab(tab.id);
-      nav.appendChild(btn);
-    });
-    
-    return nav;
+  function el(tag, css, txt) {
+    const e = document.createElement(tag);
+    if (css) e.style.cssText = css;
+    if (txt != null) e.textContent = txt;
+    return e;
   }
 
-  function switchTab(tabId) {
-    if (virtualScrollers[state.ui.activeTab] && virtualScrollers[state.ui.activeTab].container) {
-      state.ui.scrollPositions[state.ui.activeTab] = virtualScrollers[state.ui.activeTab].container.scrollTop;
-    }
-    
-    state.ui.activeTab = tabId;
-    
-    document.querySelectorAll('.vault-tab-btn').forEach(btn => {
-      const isActive = btn.dataset.tab === tabId;
-      btn.style.background = isActive ? '#3b82f6' : 'transparent';
-      btn.style.color = isActive ? '#ffffff' : '#64748b';
-      btn.style.boxShadow = isActive ? '0 2px 8px rgba(59, 130, 246, 0.4)' : 'none';
-    });
-    
-    const contentContainer = container.querySelector('#tab-content-container');
-    if (contentContainer) {
-      Object.values(virtualScrollers).forEach(scroller => {
-        if (scroller && scroller.destroy) scroller.destroy();
-      });
-      virtualScrollers = {};
-      
-      const newContent = renderTabContent(tabId);
-      contentContainer.innerHTML = '';
-      contentContainer.appendChild(newContent);
-      
-      requestAnimationFrame(() => {
-        if (state.ui.scrollPositions[tabId] && virtualScrollers[tabId]) {
-          requestAnimationFrame(() => {
-            if (virtualScrollers[tabId] && virtualScrollers[tabId].container) {
-              virtualScrollers[tabId].container.scrollTop = state.ui.scrollPositions[tabId];
-            }
-          });
+  function getRecommendedId() {
+    try {
+      const p = localStorage.getItem('nex_investor_profile');
+      return p === 'alpha-seeker' ? 'alpha-seeker' : 'steady-accumulator';
+    } catch (_) { return 'steady-accumulator'; }
+  }
+
+  function calcEarlyPenalty(investment) {
+    const strategy  = STRATEGIES.find(s => s.id === investment.strategy_id) || {};
+    const baseRate  = strategy.penaltyRate || 0.10;
+    const totalDays = strategy.duration    || 30;
+    const claimAmt  = parseFloat(investment.current_value || investment.amount || 0);
+    if (!investment.matures_at) return { penalty: 0, receive: claimAmt, isEarly: false, daysRemaining: 0 };
+    const matureMs = new Date(investment.matures_at).getTime();
+    const isEarly  = matureMs > Date.now();
+    if (!isEarly) return { penalty: 0, receive: claimAmt, isEarly: false, daysRemaining: 0 };
+    const daysLeft = (matureMs - Date.now()) / 86400000;
+    const fraction = Math.max(0, Math.min(1, daysLeft / totalDays));
+    const penalty  = Math.round(baseRate * fraction * claimAmt * 100) / 100;
+    return { penalty, receive: Math.max(0, claimAmt - penalty), isEarly: true, daysRemaining: Math.ceil(daysLeft) };
+  }
+
+  function checkMilestones(investments) {
+    if (!Array.isArray(investments)) return;
+    [10, 25, 50, 100].forEach(m => {
+      investments.forEach(inv => {
+        if (!inv || inv.status !== 'active') return;
+        const principal = parseFloat(inv.amount || 0);
+        const current   = parseFloat(inv.current_value || principal);
+        const pct       = principal > 0 ? ((current - principal) / principal) * 100 : 0;
+        const key       = inv.id + '_' + m;
+        if (pct >= m && !_milestoneChecked.has(key)) {
+          _milestoneChecked.add(key);
+          const name = (STRATEGIES.find(s => s.id === inv.strategy_id) || {}).name || 'Your investment';
+          setTimeout(() => showSuccess('\uD83C\uDF89 ' + name + ' is up ' + m + '% \u2014 great work!'), 600);
         }
       });
-    }
-  }
-
-  function renderTabContent(tabId) {
-    switch (tabId) {
-      case 'overview':
-        return createOverviewTab();
-      case 'active':
-        return createActiveTab();
-      case 'completed':
-        return createCompletedTab();
-      case 'all':
-        return createAllTab();
-      default:
-        return createOverviewTab();
-    }
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-     OVERVIEW TAB - INSTITUTIONAL REDESIGN
-     ═══════════════════════════════════════════════════════════════════════════ */
-  function createOverviewTab() {
-    const tab = document.createElement('div');
-    tab.className = 'overview-tab';
-    tab.style.cssText = 'display:flex; flex-direction:column; height:100%; overflow-y:auto; overflow-x:hidden;';
-    
-    const summary = getPortfolioSummary();
-    
-    tab.appendChild(createHeroCard(summary));
-    
-    if (summary.activeCount > 0) {
-      tab.appendChild(createAllocationDoughnut(summary));
-    }
-    
-    if (summary.claimableCount > 0) {
-      tab.appendChild(createClaimAllSection(summary));
-    }
-    
-    tab.appendChild(createStatsBar());
-    tab.appendChild(createMarketplace());
-    
-    return tab;
-  }
-
-  function createHeroCard(summary) {
-    const card = document.createElement('div');
-    card.id = 'vault-main-hero';
-    card.style.cssText = `
-      position: relative;
-      overflow: hidden;
-      border-radius: 16px;
-      padding: 24px;
-      margin-bottom: 20px;
-      background: linear-gradient(180deg, #1e1b4b, #020617);
-      border: 1px solid rgba(139, 92, 246, 0.3);
-      box-shadow: 0 8px 24px -6px rgba(139, 92, 246, 0.2);
-      min-height: ${CONFIG.HERO_MIN_HEIGHT}px;
-      flex-shrink: 0;
-    `;
-    
-    const changeColor = summary.profitPercent >= 0 ? '#10b981' : '#ef4444';
-    
-    card.innerHTML = `
-      <div style="position:absolute; top:16px; right:16px; display:flex; align-items:center; gap:6px; font-size:10px; color:rgba(255,255,255,0.6);">
-        <div style="width:6px; height:6px; border-radius:50%; background:#10b981; box-shadow:0 0 8px #10b981;"></div>
-        <span>Live</span>
-      </div>
-      <div style="text-align:center;">
-        <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.5); margin-bottom:6px;">Portfolio Value</div>
-        <div id="vault-total-display" style="font-family:var(--font-mono); font-size:40px; font-weight:800; color:white; letter-spacing:-1px; text-shadow:0 2px 16px rgba(139,92,246,0.4); margin-bottom:6px;">${Format.currency(summary.totalValue)}</div>
-        ${summary.totalValue > 0 ? `<div style="display:inline-flex; align-items:center; gap:6px; color:${changeColor}; font-size:13px; font-weight:600;"><i class="fas fa-arrow-${summary.profitPercent >= 0 ? 'up' : 'down'}" style="font-size:9px;"></i><span>${Format.currency(Math.abs(summary.totalProfit))} (${summary.profitPercent >= 0 ? '+' : ''}${summary.profitPercent.toFixed(2)}%)</span></div>` : ''}
-      </div>
-      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-top:16px;">
-        <div style="text-align:center; padding:8px; background:rgba(255,255,255,0.05); border-radius:8px;"><div style="font-size:10px; color:rgba(255,255,255,0.5); margin-bottom:2px;">Active</div><div style="font-size:18px; font-weight:700; color:white;">${summary.activeCount}</div></div>
-        <div style="text-align:center; padding:8px; background:rgba(255,255,255,0.05); border-radius:8px;"><div style="font-size:10px; color:rgba(255,255,255,0.5); margin-bottom:2px;">Lifetime</div><div style="font-size:18px; font-weight:700; color:#10b981;">${Format.currency(summary.lifetimeEarnings)}</div></div>
-        <div style="text-align:center; padding:8px; background:rgba(255,255,255,0.05); border-radius:8px;"><div style="font-size:10px; color:rgba(255,255,255,0.5); margin-bottom:2px;">Avg APY</div><div style="font-size:18px; font-weight:700; color:#a78bfa;">${(summary.avgAPY * 100).toFixed(1)}%</div></div>
-      </div>
-    `;
-    return card;
-  }
-
-  function createAllocationDoughnut(summary) {
-    const section = document.createElement('div');
-    section.style.cssText = 'margin-bottom:20px;';
-    
-    const activeValue = summary.totalValue;
-    const idleValue = state.balances.spot;
-    const totalAssets = activeValue + idleValue;
-    const activePercent = totalAssets > 0 ? (activeValue / totalAssets) * 100 : 0;
-    const idlePercent = 100 - activePercent;
-    
-    const activeAngle = (activePercent / 100) * 360;
-    
-    section.innerHTML = `
-      <div style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:16px; padding:20px;">
-        <h3 style="font-size:15px; font-weight:700; color:var(--color-text-primary); margin-bottom:16px;">
-          <i class="fas fa-chart-pie" style="margin-right:8px; color:#8b5cf6;"></i>Portfolio Allocation
-        </h3>
-        <div style="display:grid; grid-template-columns:120px 1fr; gap:20px; align-items:center;">
-          <div style="position:relative; width:120px; height:120px;">
-            <div style="
-              width:100%; 
-              height:100%; 
-              border-radius:50%; 
-              background: conic-gradient(
-                from 0deg,
-                #10b981 0deg ${activeAngle}deg,
-                #64748b ${activeAngle}deg 360deg
-              );
-              box-shadow: inset 0 0 20px rgba(0,0,0,0.3);
-            "></div>
-            <div style="
-              position:absolute; 
-              top:50%; 
-              left:50%; 
-              transform:translate(-50%, -50%); 
-              width:70px; 
-              height:70px; 
-              background:var(--color-surface); 
-              border-radius:50%; 
-              display:flex; 
-              align-items:center; 
-              justify-content:center;
-              flex-direction:column;
-            ">
-              <div style="font-size:20px; font-weight:700; color:#10b981;">${activePercent.toFixed(0)}%</div>
-              <div style="font-size:9px; color:var(--color-text-tertiary);">Active</div>
-            </div>
-          </div>
-          <div style="display:flex; flex-direction:column; gap:10px;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <div style="width:12px; height:12px; border-radius:3px; background:#10b981;"></div>
-                <span style="font-size:13px; color:var(--color-text-secondary);">Active Staking</span>
-              </div>
-              <span style="font-family:var(--font-mono); font-size:14px; font-weight:700; color:#10b981;">${Format.currency(activeValue)}</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <div style="width:12px; height:12px; border-radius:3px; background:#64748b;"></div>
-                <span style="font-size:13px; color:var(--color-text-secondary);">Idle Capital</span>
-              </div>
-              <span style="font-family:var(--font-mono); font-size:14px; font-weight:700; color:var(--color-text-primary);">${Format.currency(idleValue)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-    
-    return section;
-  }
-
-  function createStatsBar() {
-    const bar = document.createElement('div');
-    bar.style.cssText = 'display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:24px;';
-    const avgAPY = state.strategies.reduce((acc, s) => acc + getDynamicAPY(s), 0) / state.strategies.length;
-    bar.innerHTML = `
-      <div style="text-align:center; padding:16px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:12px;"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">TVL</div><div style="font-size:20px; font-weight:700; color:var(--color-text-primary);">${Format.currency(CONFIG.TVL_TOTAL)}</div></div>
-      <div style="text-align:center; padding:16px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:12px;"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">Investors</div><div style="font-size:20px; font-weight:700; color:var(--color-text-primary);">${CONFIG.ACTIVE_USERS.toLocaleString()}</div></div>
-    `;
-    return bar;
-  }
-
-  function createClaimAllSection(summary) {
-    const section = document.createElement('div');
-    section.style.cssText = 'margin-bottom:20px; padding:16px; background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:12px;';
-    
-    section.innerHTML = `
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-        <div>
-          <div style="font-size:15px; font-weight:700; color:#10b981; margin-bottom:4px;">
-            <i class="fas fa-gift" style="margin-right:6px;"></i>Ready to Claim
-          </div>
-          <div style="font-size:12px; color:var(--color-text-secondary);">
-            ${summary.claimableCount} position${summary.claimableCount > 1 ? 's' : ''} matured
-          </div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:2px;">Total Value</div>
-          <div style="font-family:var(--font-mono); font-size:22px; font-weight:700; color:#10b981;">${Format.currency(summary.totalClaims)}</div>
-        </div>
-      </div>
-      <button id="claim-all-btn" class="btn btn-success btn-full" style="font-size:14px; padding:10px;">
-        <i class="fas fa-hand-holding-usd" style="margin-right:6px;"></i>Claim All (${summary.claimableCount})
-      </button>
-    `;
-    
-    section.querySelector('#claim-all-btn').onclick = handleClaimAll;
-    
-    return section;
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-     ACTIVE TAB
-     ═══════════════════════════════════════════════════════════════════════════ */
-  function createActiveTab() {
-    const tab = document.createElement('div');
-    tab.className = 'active-tab';
-    tab.style.cssText = 'display:flex; flex-direction:column; height:100%;';
-    
-    const groups = getPositionGroups();
-    
-    if (groups.length === 0) {
-      tab.appendChild(createEmptyState('active'));
-      return tab;
-    }
-    
-    const scrollContainer = document.createElement('div');
-    scrollContainer.id = 'active-scroll-container';
-    scrollContainer.style.flex = '1';
-    scrollContainer.style.minHeight = '0';
-    
-    const scroller = new VirtualScroller(
-      scrollContainer,
-      groups,
-      CONFIG.VIRTUAL_SCROLL_ITEM_HEIGHT,
-      (group, index) => createStrategyGroupCard(group)
-    );
-    
-    virtualScrollers.active = scroller;
-    
-    tab.appendChild(scrollContainer);
-    
-    return tab;
-  }
-
-  function createStrategyGroupCard(group) {
-    const card = document.createElement('div');
-    card.className = 'strategy-group-card';
-    card.dataset.strategyId = group.strategy.id;
-    card.style.cssText = 'background:var(--color-surface); border:1px solid var(--color-border); border-radius:16px; padding:0; overflow:hidden; transition:all 0.3s;';
-    
-    const isExpanded = state.ui.expandedGroups.has(group.strategy.id);
-    const profitPercent = group.totalInvested > 0 ? ((group.totalProfit / group.totalInvested) * 100) : 0;
-    
-    card.innerHTML = `
-      <div class="group-header" style="padding:18px; cursor:pointer; background:${group.strategy.gradient}; position:relative;">
-        <div style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.3);"></div>
-        <div style="position:relative; z-index:1;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <div style="width:44px; height:44px; border-radius:10px; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center;"><i class="${group.strategy.icon}" style="font-size:20px; color:white;"></i></div>
-              <div>
-                <div style="font-size:16px; font-weight:700; color:white;">${group.strategy.name}</div>
-                <div style="font-size:12px; color:rgba(255,255,255,0.8);">${group.positions.length} position${group.positions.length > 1 ? 's' : ''} • ${(group.avgAPY * 100).toFixed(1)}% APY</div>
-              </div>
-            </div>
-            <i class="fas fa-chevron-${isExpanded ? 'up' : 'down'}" id="expand-icon-${group.strategy.id}" style="color:white; font-size:14px; transition:transform 0.3s;"></i>
-          </div>
-          <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; background:rgba(0,0,0,0.2); padding:10px; border-radius:8px;">
-            <div style="text-align:center;"><div style="font-size:10px; color:rgba(255,255,255,0.7); margin-bottom:2px;">Invested</div><div style="font-family:var(--font-mono); font-size:14px; font-weight:700; color:white;">${Format.currency(group.totalInvested)}</div></div>
-            <div style="text-align:center;"><div style="font-size:10px; color:rgba(255,255,255,0.7); margin-bottom:2px;">Current</div><div style="font-family:var(--font-mono); font-size:14px; font-weight:700; color:#86efac;">${Format.currency(group.totalCurrent)}</div></div>
-            <div style="text-align:center;"><div style="font-size:10px; color:rgba(255,255,255,0.7); margin-bottom:2px;">P&L</div><div style="font-family:var(--font-mono); font-size:14px; font-weight:700; color:${profitPercent >= 0 ? '#86efac' : '#fca5a5'};">${profitPercent >= 0 ? '+' : ''}${profitPercent.toFixed(2)}%</div></div>
-          </div>
-          ${group.readyToClaim > 0 ? `<div style="margin-top:10px; text-align:center; padding:6px; background:rgba(16, 185, 129, 0.3); border-radius:6px; font-size:12px; font-weight:700; color:white;"><i class="fas fa-gift" style="margin-right:4px;"></i>${group.readyToClaim} Ready</div>` : ''}
-        </div>
-      </div>
-      <div class="group-positions" id="positions-${group.strategy.id}" style="max-height:${isExpanded ? 'none' : '0'}; overflow:hidden; transition:max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
-        ${group.positions.map(pos => createPositionCard(pos, group.strategy)).join('')}
-      </div>
-    `;
-    
-    card.querySelector('.group-header').onclick = () => toggleGroupExpand(group.strategy.id);
-    
-    return card;
-  }
-
-  function toggleGroupExpand(strategyId) {
-    const isExpanded = state.ui.expandedGroups.has(strategyId);
-    
-    if (isExpanded) {
-      state.ui.expandedGroups.delete(strategyId);
-    } else {
-      state.ui.expandedGroups.add(strategyId);
-    }
-    
-    const positionsDiv = document.getElementById(`positions-${strategyId}`);
-    const icon = document.getElementById(`expand-icon-${strategyId}`);
-    
-    if (positionsDiv) {
-      if (isExpanded) {
-        positionsDiv.style.maxHeight = '0';
-        icon.className = 'fas fa-chevron-down';
-      } else {
-        positionsDiv.style.maxHeight = `${positionsDiv.scrollHeight}px`;
-        icon.className = 'fas fa-chevron-up';
-      }
-    }
-  }
-
-  function createPositionCard(pos, strategy) {
-    const badge = pos.timing.isDone ? '<span class="badge badge-success" style="position:absolute; top:10px; right:10px; font-size:10px;">🎉 Ready</span>' : '<span class="badge badge-info" style="position:absolute; top:10px; right:10px; font-size:10px;">⚡ Active</span>';
-    
-    return `
-      <div style="padding:14px; border-bottom:1px solid var(--color-border); position:relative; cursor:pointer;" onclick="Vault.showPositionDetails('${pos.id}')">
-        ${badge}
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
-          <div><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:2px;">Principal</div><div style="font-family:var(--font-mono); font-size:13px; font-weight:600; color:var(--color-text-primary);">${Format.currency(pos.amount)}</div></div>
-          <div><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:2px;">Current</div><div style="font-family:var(--font-mono); font-size:13px; font-weight:700; color:#10b981;">${Format.currency(pos.current)}</div></div>
-        </div>
-        <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
-          <div style="color:var(--color-text-secondary);"><i class="far fa-clock" style="margin-right:4px;"></i>${pos.timing.text}</div>
-          <div style="font-size:12px; font-weight:700; color:${pos.profit >= 0 ? '#10b981' : '#ef4444'};">${pos.profit >= 0 ? '+' : ''}${Format.currency(pos.profit)}</div>
-        </div>
-        ${pos.timing.isDone ? `<button onclick="Vault.claim('${pos.id}'); event.stopPropagation();" class="btn btn-success btn-full" style="margin-top:10px; font-size:12px; padding:7px;"><i class="fas fa-hand-holding-usd" style="margin-right:4px;"></i>Claim</button>` : ''}
-      </div>
-    `;
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-     COMPLETED TAB
-     ═══════════════════════════════════════════════════════════════════════════ */
-  function createCompletedTab() {
-    const tab = document.createElement('div');
-    tab.className = 'completed-tab';
-    tab.style.cssText = 'display:flex; flex-direction:column; height:100%;';
-    
-    const completed = state.investments.filter(i => i.status === 'completed');
-    
-    if (completed.length === 0) {
-      tab.appendChild(createEmptyState('completed'));
-      return tab;
-    }
-    
-    const scrollContainer = document.createElement('div');
-    scrollContainer.id = 'completed-scroll-container';
-    scrollContainer.style.flex = '1';
-    scrollContainer.style.minHeight = '0';
-    
-    const scroller = new VirtualScroller(
-      scrollContainer,
-      completed,
-      120,
-      (inv, index) => createCompletedCard(inv)
-    );
-    
-    virtualScrollers.completed = scroller;
-    
-    tab.appendChild(scrollContainer);
-    
-    return tab;
-  }
-
-  function createCompletedCard(inv) {
-    const strategy = state.strategies.find(s => s.id === inv.strategy_id) || { name: 'Unknown', color: '#8b5cf6', icon: 'fas fa-box' };
-    const profitPercent = inv.amount > 0 ? ((inv.profit || 0) / inv.amount) * 100 : 0;
-    const date = new Date(inv.created_at).toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
-    
-    const card = document.createElement('div');
-    card.style.cssText = 'background:var(--color-surface); border:1px solid var(--color-border); border-radius:12px; padding:14px; margin-bottom:12px;';
-    
-    card.innerHTML = `
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-        <div style="width:36px; height:36px; border-radius:8px; background:${strategy.color}20; color:${strategy.color}; display:flex; align-items:center; justify-content:center;"><i class="${strategy.icon}" style="font-size:14px;"></i></div>
-        <div style="flex:1;">
-          <div style="font-size:14px; font-weight:700; color:var(--color-text-primary);">${strategy.name}</div>
-          <div style="font-size:11px; color:var(--color-text-secondary);">${date}</div>
-        </div>
-        <span class="badge badge-success" style="font-size:9px;">Completed</span>
-      </div>
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; padding:10px; background:var(--color-surface-elevated); border-radius:8px;">
-        <div style="text-align:center;"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:2px;">Invested</div><div style="font-family:var(--font-mono); font-size:12px; font-weight:600; color:var(--color-text-primary);">${Format.currency(inv.amount)}</div></div>
-        <div style="text-align:center;"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:2px;">Profit</div><div style="font-family:var(--font-mono); font-size:12px; font-weight:700; color:#10b981;">${Format.currency(inv.profit || 0)}</div></div>
-        <div style="text-align:center;"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:2px;">Return</div><div style="font-family:var(--font-mono); font-size:12px; font-weight:700; color:#10b981;">${profitPercent >= 0 ? '+' : ''}${profitPercent.toFixed(2)}%</div></div>
-      </div>
-    `;
-    
-    return card;
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-     ALL TAB
-     ═══════════════════════════════════════════════════════════════════════════ */
-  function createAllTab() {
-    const tab = document.createElement('div');
-    tab.className = 'all-tab';
-    tab.style.cssText = 'display:flex; flex-direction:column; height:100%;';
-    
-    if (state.investments.length === 0) {
-      tab.appendChild(createEmptyState('all'));
-      return tab;
-    }
-    
-    const scrollContainer = document.createElement('div');
-    scrollContainer.id = 'all-scroll-container';
-    scrollContainer.style.flex = '1';
-    scrollContainer.style.minHeight = '0';
-    
-    const scroller = new VirtualScroller(
-      scrollContainer,
-      state.investments,
-      120,
-      (inv, index) => inv.status === 'active' ? createActiveInvestmentCard(inv) : createCompletedCard(inv)
-    );
-    
-    virtualScrollers.all = scroller;
-    
-    tab.appendChild(scrollContainer);
-    
-    return tab;
-  }
-
-  function createActiveInvestmentCard(inv) {
-    const strategy = state.strategies.find(s => s.id === inv.strategy_id) || { name: 'Unknown', color: '#8b5cf6', icon: 'fas fa-box' };
-    const current = calculateLiveValue(inv);
-    const profit = current - inv.amount;
-    const timing = getTimeRemaining(inv);
-    
-    const card = document.createElement('div');
-    card.style.cssText = 'background:var(--color-surface); border:1px solid var(--color-border); border-radius:12px; padding:14px; margin-bottom:12px; cursor:pointer;';
-    card.onclick = () => showPositionDetails(inv.id);
-    
-    card.innerHTML = `
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-        <div style="width:36px; height:36px; border-radius:8px; background:${strategy.color}20; color:${strategy.color}; display:flex; align-items:center; justify-content:center;"><i class="${strategy.icon}" style="font-size:14px;"></i></div>
-        <div style="flex:1;">
-          <div style="font-size:14px; font-weight:700; color:var(--color-text-primary);">${strategy.name}</div>
-          <div style="font-size:11px; color:var(--color-text-secondary);"><i class="far fa-clock" style="margin-right:4px;"></i>${timing.text}</div>
-        </div>
-        <span class="badge ${timing.isDone ? 'badge-success' : 'badge-info'}" style="font-size:9px;">${timing.isDone ? '🎉 Ready' : '⚡ Active'}</span>
-      </div>
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; padding:10px; background:var(--color-surface-elevated); border-radius:8px;">
-        <div style="text-align:center;"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:2px;">Principal</div><div style="font-family:var(--font-mono); font-size:12px; font-weight:600; color:var(--color-text-primary);">${Format.currency(inv.amount)}</div></div>
-        <div style="text-align:center;"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:2px;">Current</div><div style="font-family:var(--font-mono); font-size:12px; font-weight:700; color:#10b981;">${Format.currency(current)}</div></div>
-        <div style="text-align:center;"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:2px;">Profit</div><div style="font-family:var(--font-mono); font-size:12px; font-weight:700; color:${profit >= 0 ? '#10b981' : '#ef4444'};">${profit >= 0 ? '+' : ''}${Format.currency(profit)}</div></div>
-      </div>
-    `;
-    
-    return card;
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-     EMPTY STATES
-     ═══════════════════════════════════════════════════════════════════════════ */
-  function createEmptyState(type) {
-    const messages = {
-      active: { icon: 'fa-inbox', title: 'No Active Investments', message: 'Start investing to see your positions here' },
-      completed: { icon: 'fa-history', title: 'No Completed Investments', message: 'Your completed investments will appear here' },
-      all: { icon: 'fa-folder-open', title: 'No Investments Yet', message: 'Choose a strategy below to get started' }
-    };
-    
-    const msg = messages[type] || messages.all;
-    
-    const empty = document.createElement('div');
-    empty.style.cssText = 'text-align:center; padding:60px 20px; color:var(--color-text-tertiary);';
-    empty.innerHTML = `
-      <i class="fas ${msg.icon}" style="font-size:56px; margin-bottom:16px; opacity:0.3; display:block;"></i>
-      <div style="font-size:15px; font-weight:600; color:var(--color-text-primary); margin-bottom:6px;">${msg.title}</div>
-      <div style="font-size:12px; color:var(--color-text-secondary);">${msg.message}</div>
-    `;
-    return empty;
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-     MARKETPLACE
-     ═══════════════════════════════════════════════════════════════════════════ */
-  function createMarketplace() {
-    const section = document.createElement('div');
-    section.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;"><h3 style="font-size:15px; font-weight:700; color:var(--color-text-primary);"><i class="fas fa-store" style="margin-right:6px; color:#8b5cf6;"></i>Investment Strategies</h3></div>`;
-    
-    const grid = document.createElement('div');
-    grid.style.cssText = 'display:grid; grid-template-columns:1fr; gap:14px;';
-    
-    state.strategies.forEach(strategy => {
-      const dynamicAPY = getDynamicAPY(strategy);
-      const card = document.createElement('div');
-      card.style.cssText = 'background:var(--color-surface); border:1px solid var(--color-border); border-radius:14px; padding:16px; cursor:pointer; transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position:relative; overflow:hidden;';
-      card.onmouseenter = () => { card.style.transform = 'translateY(-4px)'; card.style.boxShadow = `0 12px 24px -6px ${strategy.color}40`; card.style.borderColor = `${strategy.color}60`; };
-      card.onmouseleave = () => { card.style.transform = 'translateY(0)'; card.style.boxShadow = 'none'; card.style.borderColor = 'var(--color-border)'; };
-      card.onclick = () => openStrategy(strategy.id);
-      
-      card.innerHTML = `
-        ${strategy.badge ? `<div style="position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.6); backdrop-filter:blur(8px); padding:3px 8px; border-radius:10px; font-size:9px; font-weight:600; border:1px solid rgba(255,255,255,0.1);">${strategy.badge}</div>` : ''}
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
-          <div style="width:44px; height:44px; border-radius:10px; background:${strategy.gradient}; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 10px ${strategy.color}40;"><i class="${strategy.icon}" style="font-size:18px; color:white;"></i></div>
-          <div style="flex:1; min-width:0;">
-            <div style="font-size:14px; font-weight:700; color:var(--color-text-primary); margin-bottom:2px;">${strategy.name}</div>
-            <div style="display:flex; align-items:center; gap:4px;"><span style="font-size:10px; color:var(--color-text-tertiary);">Risk:</span>${createRiskDots(strategy.riskLevel)}</div>
-          </div>
-        </div>
-        <p style="font-size:11px; color:var(--color-text-secondary); line-height:1.4; margin-bottom:14px; min-height:36px;">${strategy.description}</p>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
-          <div style="background:var(--color-surface-elevated); padding:10px; border-radius:8px; text-align:center;"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:3px;">APY</div><div style="font-size:17px; font-weight:700; color:#10b981;">${(dynamicAPY * 100).toFixed(1)}%</div></div>
-          <div style="background:var(--color-surface-elevated); padding:10px; border-radius:8px; text-align:center;"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:3px;">Duration</div><div style="font-size:17px; font-weight:700; color:var(--color-text-primary);">${strategy.durationDays}d</div></div>
-        </div>
-        <div style="margin-bottom:14px;"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:6px; display:flex; justify-content:space-between;"><span>7-Day Performance</span><span style="color:${strategy.color};">${(strategy.performance[6] * 100).toFixed(1)}%</span></div>${createSparkline(strategy.performance, strategy.color, 280, 28)}</div>
-        <div style="margin-bottom:12px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;"><span style="font-size:10px; color:var(--color-text-tertiary);">Capacity</span><span style="font-size:10px; color:var(--color-text-secondary); font-weight:600;">${(strategy.capacity * 100).toFixed(0)}%</span></div><div style="height:5px; background:var(--color-surface-elevated); border-radius:3px; overflow:hidden;"><div style="height:100%; width:${strategy.capacity * 100}%; background:${strategy.gradient}; transition:width 0.5s ease;"></div></div></div>
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div style="font-size:10px; color:var(--color-text-tertiary);"><i class="fas fa-users" style="margin-right:3px;"></i>${strategy.participants.toLocaleString()}</div>
-          <div class="btn btn-sm btn-primary" style="background:${strategy.gradient}; border:none; padding:5px 12px; font-size:11px;">Invest <i class="fas fa-arrow-right" style="margin-left:3px; font-size:9px;"></i></div>
-        </div>
-      `;
-      grid.appendChild(card);
     });
-    
-    section.appendChild(grid);
-    return section;
   }
 
-  /* ═══════════════════════════════════════════════════════════════════════════
-     MODALS & INTERACTIONS
-     ═══════════════════════════════════════════════════════════════════════════ */
-  function openStrategy(id) {
-    const strategy = state.strategies.find(s => s.id === id);
-    if (!strategy) return;
-    const dynamicAPY = getDynamicAPY(strategy);
-    const defaultAmount = Math.max(strategy.minInvestment, 100);
-    
-    const content = document.createElement('div');
-    content.innerHTML = `
-      <div style="text-align:center; margin-bottom:20px;">
-        <div style="width:60px; height:60px; margin:0 auto 14px; border-radius:14px; background:${strategy.gradient}; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 20px ${strategy.color}40;"><i class="${strategy.icon}" style="font-size:26px; color:white;"></i></div>
-        <h3 style="font-size:18px; font-weight:700; color:var(--color-text-primary); margin-bottom:6px;">${strategy.name}</h3>
-        <p style="font-size:12px; color:var(--color-text-secondary); line-height:1.4;">${strategy.description}</p>
-      </div>
-      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:20px;">
-        <div style="background:var(--color-surface-elevated); padding:12px; border-radius:10px; text-align:center; border:1px solid var(--color-border);"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:3px; text-transform:uppercase; letter-spacing:0.5px;">APY</div><div style="font-size:20px; font-weight:700; color:#10b981;">${(dynamicAPY * 100).toFixed(1)}%</div></div>
-        <div style="background:var(--color-surface-elevated); padding:12px; border-radius:10px; text-align:center; border:1px solid var(--color-border);"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:3px; text-transform:uppercase; letter-spacing:0.5px;">Duration</div><div style="font-size:20px; font-weight:700; color:var(--color-text-primary);">${strategy.durationDays}d</div></div>
-        <div style="background:var(--color-surface-elevated); padding:12px; border-radius:10px; text-align:center; border:1px solid var(--color-border);"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:3px; text-transform:uppercase; letter-spacing:0.5px;">Risk</div><div style="font-size:20px; font-weight:700; color:${getRiskColor(strategy.riskLevel)};">${strategy.risk}</div></div>
-      </div>
-      
-      ${strategy.acceptedAssets && strategy.acceptedAssets.length > 1 ? `
-        <div class="input-group" style="margin-bottom:14px;">
-          <label class="input-label">Fund With</label>
-          <select id="asset-select" class="input-field" style="padding:10px;">
-            <option value="usd">USD (Spot Balance: ${Format.currency(state.balances.spot)})</option>
-            ${strategy.acceptedAssets.filter(a => a !== 'usd').map(asset => {
-              const holding = state.holdings[asset] || 0;
-              const assetSymbol = asset.toUpperCase();
-              return `<option value="${asset}">${assetSymbol} (Balance: ${holding.toFixed(6)})</option>`;
-            }).join('')}
-          </select>
-        </div>
-      ` : ''}
-      
-      <div class="input-group" style="margin-bottom:18px;"><label class="input-label" style="display:flex; justify-content:space-between; align-items:center;"><span>Investment Amount</span><span style="font-size:10px; color:var(--color-text-tertiary);">Available: <span style="color:var(--color-text-primary); font-weight:600;">${Format.currency(state.balances.spot)}</span></span></label><input type="number" id="inv-amount" class="input-field financial-data" placeholder="Min $${strategy.minInvestment}" value="${defaultAmount}" style="font-size:17px; font-weight:600; text-align:center;"></div>
-      <div id="projection-preview" style="background:var(--color-surface-elevated); border-radius:10px; padding:14px; margin-bottom:18px; border:1px solid var(--color-border);"></div>
-      <label style="display:flex; align-items:start; gap:8px; margin-bottom:18px; padding:10px; background:rgba(239, 68, 68, 0.05); border:1px solid rgba(239, 68, 68, 0.2); border-radius:8px; cursor:pointer;"><input type="checkbox" id="risk-ack" style="margin-top:2px;"><span style="font-size:10px; color:var(--color-text-secondary); line-height:1.4;">I understand investments carry risk. Past performance doesn't guarantee future results.</span></label>
-      <div style="display:grid; grid-template-columns:1fr 2fr; gap:10px;"><button onclick="Modal.close()" class="btn btn-ghost btn-full">Cancel</button><button id="confirm-btn" class="btn btn-primary btn-full" disabled style="background:${strategy.gradient}; border:none;"><i class="fas fa-lock" style="margin-right:4px;"></i>Confirm</button></div>
-      <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--color-border); font-size:10px; color:var(--color-text-tertiary); text-align:center;"><i class="fas fa-shield-alt" style="color:#10b981; margin-right:3px;"></i>Protected up to ${Format.currency(CONFIG.INSURANCE_AMOUNT)}</div>
-    `;
-    
-    const input = content.querySelector('#inv-amount');
-    const confirmBtn = content.querySelector('#confirm-btn');
-    const riskCheckbox = content.querySelector('#risk-ack');
-    const projectionDiv = content.querySelector('#projection-preview');
-    const assetSelect = content.querySelector('#asset-select');
-    
-    function updateProjection() {
-      const amount = parseFloat(input.value) || 0;
-      if (amount < strategy.minInvestment) {
-        projectionDiv.innerHTML = `<div style="text-align:center; color:#f59e0b; font-size:11px;"><i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i>Minimum: ${Format.currency(strategy.minInvestment)}</div>`;
-        return;
-      }
-      const proj = calculateProjection(amount, dynamicAPY, strategy.durationDays);
-      projectionDiv.innerHTML = `<div style="text-align:center; margin-bottom:14px;"><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:3px;">Projected Final Value</div><div style="font-size:28px; font-weight:700; color:#10b981; font-family:var(--font-mono);">${Format.currency(proj.finalValue)}</div></div><div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; font-size:10px;"><div style="text-align:center;"><div style="color:var(--color-text-tertiary); margin-bottom:2px;">Gross</div><div style="color:#10b981; font-weight:600;">${Format.currency(proj.grossProfit)}</div></div><div style="text-align:center;"><div style="color:var(--color-text-tertiary); margin-bottom:2px;">Fee</div><div style="color:#ef4444; font-weight:600;">-${Format.currency(proj.platformFee)}</div></div><div style="text-align:center;"><div style="color:var(--color-text-tertiary); margin-bottom:2px;">Net</div><div style="color:#10b981; font-weight:700;">${Format.currency(proj.netProfit)}</div></div></div>`;
-    }
-    
-    riskCheckbox.onchange = () => {
-      confirmBtn.disabled = !riskCheckbox.checked;
-      confirmBtn.innerHTML = riskCheckbox.checked ? '<i class="fas fa-check-circle" style="margin-right:4px;"></i>Confirm' : '<i class="fas fa-lock" style="margin-right:4px;"></i>Confirm';
-    };
-    
-    input.oninput = () => { clearTimeout(input.timer); input.timer = setTimeout(updateProjection, 300); };
-    updateProjection();
-    
-    confirmBtn.onclick = () => {
-      const selectedAsset = assetSelect ? assetSelect.value : 'usd';
-      handleInvestment(strategy, input.value, selectedAsset, confirmBtn);
-    };
-    
-    Modal.open({ title: '', content, maxWidth: '480px' });
-  }
-
-  function showPositionDetails(invId) {
-    const inv = state.investments.find(i => i.id === invId);
-    if (!inv) return;
-    
-    const strategy = state.strategies.find(s => s.id === inv.strategy_id) || { name: 'Unknown', color: '#8b5cf6' };
-    const timing = getTimeRemaining(inv);
-    const currentValue = calculateLiveValue(inv);
-    const profit = currentValue - inv.amount;
-    
-    const content = document.createElement('div');
-    content.innerHTML = `
-      <div style="text-align:center; margin-bottom:20px;">
-        <div style="font-size:32px; margin-bottom:10px;">${timing.isDone ? '🎉' : '📊'}</div>
-        <h3 style="font-size:17px; font-weight:700; color:var(--color-text-primary);">${strategy.name}</h3>
-        <div style="font-size:12px; color:var(--color-text-secondary);">${timing.isDone ? 'Matured' : `Matures in ${timing.text}`}</div>
-      </div>
-      <div style="background:var(--color-surface-elevated); padding:18px; border-radius:10px; margin-bottom:18px;">
-        <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:14px;">
-          <div><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:3px;">Principal</div><div style="font-size:17px; font-weight:700; color:var(--color-text-primary);">${Format.currency(inv.amount)}</div></div>
-          <div><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:3px;">Current</div><div style="font-size:17px; font-weight:700; color:#10b981;">${Format.currency(currentValue)}</div></div>
-          <div><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:3px;">Profit</div><div style="font-size:17px; font-weight:700; color:${profit >= 0 ? '#10b981' : '#ef4444'};">${profit >= 0 ? '+' : ''}${Format.currency(profit)}</div></div>
-          <div><div style="font-size:10px; color:var(--color-text-tertiary); margin-bottom:3px;">APY</div><div style="font-size:17px; font-weight:700; color:var(--color-text-primary);">${(inv.apy * 100).toFixed(1)}%</div></div>
-        </div>
-      </div>
-      ${timing.isDone ? `<button onclick="Vault.claim('${inv.id}'); Modal.close();" class="btn btn-success btn-full"><i class="fas fa-hand-holding-usd" style="margin-right:6px;"></i>Claim ${Format.currency(currentValue)}</button>` : `<div style="text-align:center; padding:14px; background:rgba(239, 68, 68, 0.05); border:1px solid rgba(239, 68, 68, 0.2); border-radius:8px;"><i class="fas fa-exclamation-triangle" style="color:#f59e0b; margin-bottom:6px; font-size:18px; display:block;"></i><div style="font-size:11px; color:var(--color-text-secondary); margin-bottom:10px;">Early withdrawal: ${(CONFIG.EARLY_WITHDRAWAL_PENALTY * 100)}% penalty</div><button onclick="Vault.earlyWithdraw('${inv.id}')" class="btn btn-sm btn-ghost">Withdraw Early</button></div>`}
-    `;
-    Modal.open({ title: 'Position Details', content });
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-     CORE LOGIC (FIXED FOR PERSISTENCE)
-/* ═══════════════════════════════════════════════════════════════════════════
-   CORE LOGIC – FIXED (supabaseClient → window.supabaseClient everywhere)
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-async function handleInvestment(strategy, amountInput, asset, btn) {
-  const amount = parseFloat(amountInput);
-  if (isNaN(amount) || amount <= 0) return App.showError('Invalid amount');
-  if (amount < strategy.minInvestment) return App.showError(`Minimum: ${Format.currency(strategy.minInvestment)}`);
-
-  let availableBalance = asset === 'usd' 
-    ? state.balances.spot 
-    : (state.holdings[asset] || 0);
-
-  if (amount > availableBalance) return App.showError(`Insufficient ${asset.toUpperCase()} balance`);
-
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:6px;"></i>Processing...';
-
-  try {
-    const investmentId = generateUUID();
-    const dynamicAPY = getDynamicAPY(strategy);
-
-    const newInvestment = {
-      id: investmentId,
-      strategy_id: strategy.id,
-      amount: amount,
-      apy: dynamicAPY,
-      duration: strategy.durationDays,
-      created_at: new Date().toISOString(),
-      status: 'active',
-      profit: 0,
-      asset_type: asset
-    };
-
-    if (window.supabaseClient && state.user) {
-      // === BALANCE UPDATE ===
-      let updateData = {};
-      if (asset === 'usd') {
-  const freshBals = AppState.get('balances');
-  AppState.updateBalances({ spot: freshBals.spot - amount });
-} else {
-        const newHoldings = { ...state.holdings };
-        newHoldings[asset] = (newHoldings[asset] || 0) - amount;
-        if (newHoldings[asset] < 0.00000001) delete newHoldings[asset];
-        updateData.holdings = newHoldings;
-      }
-
-      const { error: balanceError } = await window.supabaseClient
-        .from('profiles')
-        .update(updateData)
-        .eq('id', state.user.id);
-      if (balanceError) throw balanceError;
-
-      // === INSERT INVESTMENT ===
-      const { data: insertedInvestment, error: investmentError } = await window.supabaseClient
-        .from('investments')
-        .insert({
-          user_id: state.user.id,
-          strategy_id: newInvestment.strategy_id,
-          amount: newInvestment.amount,
-          apy: newInvestment.apy,
-          duration: newInvestment.duration,
-          created_at: newInvestment.created_at,
-          status: newInvestment.status,
-          profit: newInvestment.profit,
-          asset_type: newInvestment.asset_type
-        })
-        .select()
-        .single();
-
-      if (investmentError) {
-        // rollback
-        if (asset === 'usd') {
-          await window.supabaseClient.from('profiles').update({ spot_balance: state.balances.spot }).eq('id', state.user.id);
-        } else {
-          await window.supabaseClient.from('profiles').update({ holdings: state.holdings }).eq('id', state.user.id);
-        }
-        throw investmentError;
-      }
-
-      newInvestment.id = insertedInvestment.id;
-
-      btn.innerHTML = '<i class="fas fa-hourglass-half fa-spin" style="margin-right:6px;"></i>Settling...';
-      await new Promise(r => setTimeout(r, 2000));
-
-      await syncInvestmentsFromDB();   // already uses window.supabaseClient
-    } else {
-      // local-only fallback
-      btn.innerHTML = '<i class="fas fa-hourglass-half fa-spin" style="margin-right:6px;"></i>Settling...';
-      await new Promise(r => setTimeout(r, 2000));
-      AppState.addInvestment(newInvestment);
-      state.investments = [...state.investments, newInvestment];
-    }
-
-    // === LOCAL STATE UPDATE ===
-    if (asset === 'usd') {
-      AppState.updateBalances({ spot: state.balances.spot - amount });
-    } else {
-      const newHoldings = { ...state.holdings };
-      newHoldings[asset] = (newHoldings[asset] || 0) - amount;
-      if (newHoldings[asset] < 0.00000001) delete newHoldings[asset];
-      AppState.set('holdings', newHoldings);
-      state.holdings = newHoldings;
-    }
-
-    await Modal.close();
-    render(container);
-    App.showSuccess(`Invested ${Format.currency(amount)}`);
-
-  } catch (error) {
-    console.error('[VAULT] Investment failed:', error);
-    App.showError(error.message || 'Investment failed');
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-exclamation-triangle" style="margin-right:6px;"></i>Try Again';
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   OPTIMISTIC CLAIM (instant UI + safe persistence)
-   ═══════════════════════════════════════════════════════════════════════════ */
-/* ═══════════════════════════════════════════════════════════════════════════
-   FINAL FIXED: OPTIMISTIC + NO STALE SYNC OVERWRITE + RLS-SAFE
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-async function claim(invId) {
-  const invIndex = state.investments.findIndex(i => i.id === invId);
-  if (invIndex === -1) return App.showError('Investment not found');
-
-  const inv = state.investments[invIndex];
-  const timing = getTimeRemaining(inv);
-  if (!timing.isDone) return App.showError('Position has not matured yet');
-
-  const finalValue = calculateLiveValue(inv);
-  const profit = finalValue - inv.amount;
-  const newSpotBalance = state.balances.spot + finalValue;
-
-  const confirmed = await Modal.confirm({
-    title: 'Confirm Claim',
-    message: `Claim ${Format.currency(finalValue)} now?`,
-    confirmText: 'Claim Now',
-    cancelText: 'Cancel'
-  });
-  if (!confirmed) return;
-
-  // === OPTIMISTIC (stays forever — no revert) ===
-  const updatedInvs = [...state.investments];
-  updatedInvs[invIndex] = { ...inv, status: 'completed', profit };
-
-  state.investments = updatedInvs;
-  AppState.set('investments', updatedInvs);
-  AppState.updateBalances({ spot: newSpotBalance });
-
-  render(container);
-  App.showSuccess(`✅ Claimed ${Format.currency(finalValue)}`);
-
-  // === BACKGROUND DB (no sync to prevent stale overwrite) ===
-  if (window.supabaseClient && state.user) {
-    try {
-      // Update balance
-      const { error: balanceError } = await window.supabaseClient
-        .from('profiles')
-        .update({ spot_balance: newSpotBalance })
-        .eq('id', state.user.id);
-      if (balanceError) throw balanceError;
-
-      // Update investment + return the row to detect real change
-      const { data: updatedRow, error: invError } = await window.supabaseClient
-        .from('investments')
-        .update({ status: 'completed', profit })
-        .eq('id', invId)
-        .select()
-        .single();
-
-      if (invError || !updatedRow) {
-        console.warn('[VAULT] ⚠️ Update succeeded but no row returned — check RLS policy on investments table (need WITH CHECK clause)');
-        App.showWarning('Claimed locally. Database update may need RLS fix — refresh later.');
-        return;
-      }
-
-      console.log('[VAULT] ✅ Claim fully persisted to Supabase');
-    } catch (error) {
-      console.error('[VAULT] DB claim failed:', error);
-      App.showWarning('Claimed locally only. Database sync failed (check RLS). Refresh page to retry.');
-    }
-  }
-}
-
-async function handleClaimAll() {
-  const claimable = state.investments.filter(inv => 
-    inv.status === 'active' && getTimeRemaining(inv).isDone
-  );
-  if (claimable.length === 0) return;
-
-  const totalClaims = claimable.reduce((sum, inv) => sum + calculateLiveValue(inv), 0);
-
-  const confirmed = await Modal.confirm({
-    title: 'Claim All Mature Positions',
-    message: `Claim ${claimable.length} position${claimable.length > 1 ? 's' : ''} for ${Format.currency(totalClaims)}?`,
-    confirmText: `Claim All (${claimable.length})`,
-    cancelText: 'Cancel'
-  });
-  if (!confirmed) return;
-
-  // === OPTIMISTIC ===
-  const claimableIds = new Set(claimable.map(c => c.id));
-  let totalValue = 0;
-
-  const updatedInvs = state.investments.map(inv => {
-    if (claimableIds.has(inv.id)) {
-      const fv = calculateLiveValue(inv);
-      totalValue += fv;
-      return { ...inv, status: 'completed', profit: fv - inv.amount };
-    }
-    return inv;
-  });
-
-  const newSpotBalance = state.balances.spot + totalValue;
-
-  state.investments = updatedInvs;
-  AppState.set('investments', updatedInvs);
-  AppState.updateBalances({ spot: newSpotBalance });
-
-  render(container);
-  App.showSuccess(`✅ Claimed ${claimable.length} positions — ${Format.currency(totalValue)}`);
-
-  // === BACKGROUND DB ===
-  if (window.supabaseClient && state.user) {
-    try {
-      const batchSize = 5;
-      for (let i = 0; i < claimable.length; i += batchSize) {
-        const batch = claimable.slice(i, i + batchSize);
-        await Promise.all(batch.map(async inv => {
-          const fv = calculateLiveValue(inv);
-          const { data, error } = await window.supabaseClient
-            .from('investments')
-            .update({ status: 'completed', profit: fv - inv.amount })
-            .eq('id', inv.id)
-            .select()
-            .single();
-          if (error || !data) throw new Error('Update failed or RLS blocked');
-        }));
-      }
-
-      await window.supabaseClient
-        .from('profiles')
-        .update({ spot_balance: newSpotBalance })
-        .eq('id', state.user.id);
-
-      console.log('[VAULT] ✅ Claim All fully persisted');
-    } catch (error) {
-      console.error('[VAULT] DB claim-all failed:', error);
-      App.showWarning('Claims saved locally. Database sync failed (check RLS policy).');
-    }
-  }
-}
-
-async function earlyWithdraw(invId) {
-  const invIndex = state.investments.findIndex(i => i.id === invId);
-  if (invIndex === -1) return;
-
-  const inv = state.investments[invIndex];
-  const currentValue = calculateLiveValue(inv);
-  const penalty = inv.amount * CONFIG.EARLY_WITHDRAWAL_PENALTY;
-  const finalAmount = currentValue - penalty;
-
-  const confirmed = await Modal.confirm({
-    title: 'Early Withdrawal',
-    message: `Penalty: ${(CONFIG.EARLY_WITHDRAWAL_PENALTY * 100)}%\nReceive: ${Format.currency(finalAmount)}`,
-    confirmText: 'Withdraw Anyway',
-    cancelText: 'Cancel',
-    dangerMode: true
-  });
-  if (!confirmed) return;
-
-  // === OPTIMISTIC ===
-  const updatedInvs = [...state.investments];
-  updatedInvs[invIndex] = { ...inv, status: 'completed', profit: finalAmount - inv.amount };
-
-  const newSpotBalance = state.balances.spot + finalAmount;
-
-  state.investments = updatedInvs;
-  AppState.set('investments', updatedInvs);
-  AppState.updateBalances({ spot: newSpotBalance });
-
-  render(container);
-  App.showSuccess(`Withdrawn ${Format.currency(finalAmount)} (early)`);
-
-  // === BACKGROUND DB ===
-  if (window.supabaseClient && state.user) {
+  async function syncInvestmentsFromDB() {
+    if (!window.supabaseClient) return;
+    const { user } = getState();
+    if (!user || !user.id) return;
     try {
       const { data, error } = await window.supabaseClient
-        .from('investments')
-        .update({ status: 'completed', profit: finalAmount - inv.amount })
-        .eq('id', invId)
-        .select()
-        .single();
-
-      if (error || !data) {
-        console.warn('[VAULT] ⚠️ Early withdraw update blocked — check RLS');
-        App.showWarning('Withdrawn locally. Database may need RLS fix.');
-        return;
-      }
-
-      await window.supabaseClient
-        .from('profiles')
-        .update({ spot_balance: newSpotBalance })
-        .eq('id', state.user.id);
-
-      console.log('[VAULT] ✅ Early withdraw persisted');
-    } catch (error) {
-      console.error('[VAULT] Early withdraw DB failed:', error);
-      App.showWarning('Withdrawn locally only. Database sync failed.');
-    }
-  }
-}
-  function startLiveTicker() {
-    if (tickerInterval) clearInterval(tickerInterval);
-    tickerInterval = setInterval(() => {
-      const totalDisplay = document.getElementById('vault-total-display');
-      if (totalDisplay) {
-        const summary = getPortfolioSummary();
-        totalDisplay.textContent = Format.currency(summary.totalValue);
-      }
-    }, CONFIG.TICKER_INTERVAL);
+        .from('investments').select('*').eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) { console.error('[VAULT] sync:', error.message); return; }
+      if (window.AppState) AppState.set('investments', Array.isArray(data) ? data : []);
+      checkMilestones(data);
+    } catch (err) { console.error('[VAULT] sync exception:', err.message); }
   }
 
-  /* ═══════════════════════════════════════════════════════════════════════════
-     RENDER
-     ═══════════════════════════════════════════════════════════════════════════ */
-  function render(element) {
-    if (tickerInterval) clearInterval(tickerInterval);
-    Object.values(virtualScrollers).forEach(scroller => {
-      if (scroller && scroller.destroy) scroller.destroy();
+  function openRiskDisclosure(strategy) {
+    if (!window.Modal) return;
+    const content = document.createElement('div');
+
+    const chip = el('div', 'display:inline-flex;align-items:center;gap:8px;border-radius:20px;padding:6px 14px;margin-bottom:16px;');
+    chip.style.background = strategy.accentColor + '15';
+    chip.style.border = '1px solid ' + strategy.accentColor + '35';
+    chip.innerHTML = '<span style="font-size:15px;">' + strategy.icon + '</span><span style="font-size:12px;font-weight:700;color:' + strategy.accentColor + ';">' + strategy.riskLabel + ' Risk \u00B7 ' + strategy.apy + '% projected APY \u00B7 ' + strategy.duration + ' days</span>';
+    content.appendChild(chip);
+
+    const disclosures = [
+      'This is a ' + strategy.riskLabel.toLowerCase() + ' risk strategy. Capital is deployed in financial products that can lose value.',
+      'The ' + strategy.apyRange + ' APY figure is a projection based on current market conditions. Past performance does not guarantee future results.',
+      'Your principal is locked for ' + strategy.duration + ' days. Early exit incurs a fee of up to ' + Math.round(strategy.penaltyRate * 100) + '% of the claimed amount.',
+      'NexTrade earns a ' + strategy.perfFee + '% performance fee only on the profit we generate. No fees are ever deducted from your principal.',
+      'Only invest money you are comfortable not accessing for the full term duration.'
+    ];
+
+    const box = el('div', 'border-radius:12px;padding:14px 16px;margin-bottom:16px;');
+    box.style.background = strategy.accentColor + '08';
+    box.style.border = '1px solid ' + strategy.accentColor + '30';
+    disclosures.forEach((d, i) => {
+      const row = el('div', 'display:flex;align-items:flex-start;gap:8px;');
+      row.style.marginBottom = i < disclosures.length - 1 ? '8px' : '0';
+      row.appendChild(el('span', 'font-weight:700;font-size:14px;flex-shrink:0;line-height:1.6;', '\u00B7'));
+      row.style.color = strategy.accentColor;
+      const txt = el('span', 'font-size:12px;line-height:1.6;', d);
+      txt.style.color = 'var(--color-text-secondary)';
+      row.appendChild(txt);
+      box.appendChild(row);
     });
-    virtualScrollers = {};
-    
-    if (!element) return;
-    
-    container = element;
-    container.className = 'vault-page';
-    container.style.cssText = 'display:flex; flex-direction:column; height:100%; overflow:hidden;';
-    
-    if (window.AppState) {
-      state.user = AppState.get('user');
-      const bals = AppState.get('balances');
-      state.balances = bals || { spot: 0, vault: 0 };
-      state.holdings = AppState.get('holdings') || {};
-      const rawInvs = AppState.get('investments') || [];
-      state.investments = rawInvs.filter(i => i && i.amount > 0);
-    }
-    
-    container.innerHTML = '';
-    container.appendChild(createTabNavigation());
-    
-    const contentContainer = document.createElement('div');
-    contentContainer.id = 'tab-content-container';
-    contentContainer.style.cssText = 'flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden;';
-    contentContainer.appendChild(renderTabContent(state.ui.activeTab));
-    container.appendChild(contentContainer);
-    
-    startLiveTicker();
-    if (window.Navbar) Navbar.setActive('vault');
+    content.appendChild(box);
+
+    const acceptBtn = el('button', 'width:100%;padding:15px;border-radius:12px;font-size:15px;font-weight:800;margin-bottom:8px;cursor:pointer;border:none;background:var(--color-primary);color:#fff;', "I Understand \u2014 Let's Invest");
+    acceptBtn.addEventListener('click', () => { if (window.Modal) Modal.close(); setTimeout(() => openInvestModal(strategy), 350); });
+    const cancelBtn = el('button', 'width:100%;padding:14px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--color-border);background:rgba(255,255,255,0.04);color:var(--color-text-primary);', 'Not Now');
+    cancelBtn.addEventListener('click', () => { if (window.Modal) Modal.close(); });
+    content.appendChild(acceptBtn);
+    content.appendChild(cancelBtn);
+    Modal.open({ title: 'Before You Invest', content, maxWidth: '460px' });
   }
 
-  return { 
-    render, 
-    openStrategy, 
-    claim, 
-    handleClaimAll,
-    earlyWithdraw, 
-    showPositionDetails
-  };
-})();
+  function openInvestModal(strategy) {
+    if (!window.Modal) return;
+    const { balances } = getState();
+    const spotBalance  = parseFloat((balances || {}).spot || 0);
+    const content      = document.createElement('div');
 
-if (typeof window !== 'undefined') window.Vault = Vault;
+    const chip = el('div', 'display:inline-flex;align-items:center;gap:8px;border-radius:20px;padding:6px 14px;margin-bottom:16px;');
+    chip.style.background = strategy.accentColor + '15';
+    chip.style.border = '1px solid ' + strategy.accentColor + '35';
+    chip.innerHTML = '<span>' + strategy.icon + '</span><span style="font-size:12px;font-weight:700;color:' + strategy.accentColor + ';">' + strategy.riskLabel + ' Risk \u00B7 ' + strategy.apy + '% projected APY \u00B7 ' + strategy.duration + ' days</span>';
+    content.appendChild(chip);
+
+    if (spotBalance < strategy.minAmount) {
+      const warn = el('div', 'display:flex;align-items:flex-start;gap:10px;border-radius:12px;padding:12px 14px;margin-bottom:16px;background:#ef444412;border:1px solid #ef444435;');
+      warn.innerHTML = '<i class="fas fa-exclamation-triangle" style="color:#ef4444;flex-shrink:0;margin-top:2px;"></i><div style="font-size:12px;color:#ef4444;line-height:1.5;font-weight:600;">You need at least ' + fmt(strategy.minAmount) + ' in your Spot Wallet. Current balance: ' + fmt(spotBalance) + '.</div>';
+      content.appendChild(warn);
+    }
+
+    const grid = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;');
+    [
+      { label: 'Min. Investment', value: fmt(strategy.minAmount), color: 'var(--color-primary)' },
+      { label: 'Your Balance',    value: fmt(spotBalance),        color: spotBalance >= strategy.minAmount ? '#10b981' : '#ef4444' },
+      { label: 'Projected APY',   value: strategy.apyRange,       color: strategy.accentColor },
+      { label: 'Term',            value: strategy.duration + ' days', color: 'var(--color-text-primary)' }
+    ].forEach(item => {
+      const cell = el('div', 'background:var(--color-surface-elevated);border-radius:10px;padding:12px;border:1px solid var(--color-border);');
+      cell.appendChild(el('div', 'font-size:10px;color:var(--color-text-tertiary);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.4px;', item.label));
+      cell.appendChild(el('div', 'font-size:15px;font-weight:700;', item.value)).style.color = item.color;
+      grid.appendChild(cell);
+    });
+    content.appendChild(grid);
+
+    const inputWrap = el('div', 'margin-bottom:14px;');
+    const inputLbl  = el('label', 'display:block;font-size:12px;font-weight:600;color:var(--color-text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;', 'Amount to Invest (USD)');
+    const amountInput = document.createElement('input');
+    amountInput.type = 'number'; amountInput.className = 'input-field financial-data';
+    amountInput.placeholder = String(strategy.minAmount); amountInput.min = strategy.minAmount;
+    amountInput.max = spotBalance; amountInput.autocomplete = 'off'; amountInput.inputMode = 'decimal';
+    amountInput.style.cssText = 'font-size:28px;font-weight:800;text-align:center;padding:18px;border-radius:14px;';
+    const hint = el('div', 'font-size:11px;color:var(--color-text-tertiary);margin-top:6px;text-align:center;', 'Min ' + fmt(strategy.minAmount) + ' \u00B7 Available ' + fmt(spotBalance));
+    inputWrap.appendChild(inputLbl); inputWrap.appendChild(amountInput); inputWrap.appendChild(hint);
+    content.appendChild(inputWrap);
+
+    const preview = el('div', 'border-radius:14px;padding:14px 16px;margin-bottom:16px;display:none;background:linear-gradient(135deg,#10b98112,#10b98106);border:1px solid #10b98130;');
+    const prevLbl = el('div', 'font-size:11px;color:var(--color-text-tertiary);margin-bottom:6px;', 'Projected after ' + strategy.duration + ' days');
+    const prevAmt = el('div', 'font-size:22px;font-weight:800;color:#10b981;', '');
+    const prevNote = el('div', 'font-size:10px;color:var(--color-text-tertiary);margin-top:4px;', strategy.apyRange + ' projected APY \u00B7 not guaranteed');
+    preview.appendChild(prevLbl); preview.appendChild(prevAmt); preview.appendChild(prevNote);
+    content.appendChild(preview);
+
+    amountInput.addEventListener('input', () => {
+      const v = parseFloat(amountInput.value);
+      if (!isNaN(v) && v >= strategy.minAmount) {
+        const projected = v * (1 + (strategy.apy / 100) * (strategy.duration / 365));
+        prevAmt.textContent = fmt(projected) + ' (est. +' + fmt(projected - v) + ')';
+        preview.style.display = 'block';
+      } else { preview.style.display = 'none'; }
+    });
+
+    content.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);text-align:center;margin-bottom:16px;line-height:1.6;', 'We earn a ' + strategy.perfFee + '% performance fee only on the profit we generate. Zero fees on your principal.'));
+
+    const confirmBtn = el('button', 'font-size:16px;padding:18px;border-radius:14px;font-weight:800;width:100%;border:none;color:#fff;cursor:pointer;background:var(--color-primary);', 'Invest Now');
+    confirmBtn.addEventListener('click', () => {
+      const raw = amountInput.value.trim();
+      const num = parseFloat(raw);
+      if (!raw || isNaN(num))       return showError('Please enter an amount.');
+      if (num < strategy.minAmount) return showError('Minimum is ' + fmt(strategy.minAmount) + '.');
+      if (num > spotBalance)        return showError('Insufficient balance. Available: ' + fmt(spotBalance) + '.');
+      if (window.Modal) Modal.close();
+      setTimeout(() => handleInvestment(strategy, num), 350);
+    });
+    content.appendChild(confirmBtn);
+    setTimeout(() => { try { amountInput.focus(); } catch (_) {} }, 400);
+    Modal.open({ title: 'Invest \u2014 ' + strategy.name, content, maxWidth: '460px' });
+  }
+
+  async function handleInvestment(strategy, amount) {
+    if (_isProcessing) return;
+    const { user } = getState();
+    if (!user || !user.id) return showError('Session expired. Please refresh.');
+    const freshSpot = parseFloat((getState().balances || {}).spot || 0);
+    if (amount > freshSpot) return showError('Insufficient balance. Available: ' + fmt(freshSpot) + '.');
+    const maturesAt = new Date(Date.now() + strategy.duration * 86400000).toISOString();
+    _isProcessing = true;
+    try {
+      if (window.supabaseClient) {
+        const { data: inv, error: invErr } = await window.supabaseClient
+          .from('investments').insert({
+            user_id:       user.id,
+            strategy_id:   strategy.id,
+            strategy_id: strategy.name,
+            amount:        amount,
+            current_value: amount,
+            apy:           strategy.apy,
+            status:        'active',
+            matures_at:    maturesAt,
+            created_at:    new Date().toISOString()
+          }).select().single();
+        if (invErr) throw invErr;
+
+        const newSpot = freshSpot - amount;
+        const { error: balErr } = await window.supabaseClient
+          .from('profiles').update({ spot_balance: newSpot }).eq('id', user.id).select();
+        if (balErr) {
+          console.error('[VAULT] Balance update failed. Inv ID:', inv.id, balErr.message);
+          showError('Investment saved but balance not updated. Contact support with ID: ' + String(inv.id));
+          return;
+        }
+
+        const { error: txErr } = await window.supabaseClient
+          .from('transactions').insert({
+            user_id:     user.id,
+            type:        'investment',
+            amount:      amount,
+            status:      'completed',
+            description: 'Invested in ' + strategy.name,
+            created_at:  new Date().toISOString()
+          }).select();
+        if (txErr) console.warn('[VAULT] TX log (non-fatal):', txErr.message);
+
+        if (window.AppState) AppState.updateBalances({ spot: newSpot });
+        await syncInvestmentsFromDB();
+      }
+
+      try { localStorage.setItem('nex_first_vault_done', '1'); } catch (_) {}
+      showSuccess('\u2705 ' + strategy.name + ' \u2014 ' + fmt(amount) + ' invested.');
+      switchTab('portfolio');
+    } catch (err) {
+      console.error('[VAULT] handleInvestment:', err.message);
+      showError(err.message || 'Investment failed. Please try again.');
+    } finally { _isProcessing = false; }
+  }
+
+  async function handleClaim(investment, penaltyConfirmed) {
+    if (!investment || !investment.id || _isProcessing) return;
+    const { user } = getState();
+    if (!user || !user.id) return showError('Session expired.');
+    const { penalty, receive, isEarly, daysRemaining } = calcEarlyPenalty(investment);
+
+    if (isEarly && !penaltyConfirmed) {
+      if (!window.Modal) return;
+      const content = document.createElement('div');
+      content.appendChild(el('div', 'text-align:center;font-size:44px;margin-bottom:12px;', '\u23F0'));
+      content.appendChild(el('div', 'font-size:16px;font-weight:800;color:var(--color-text-primary);text-align:center;margin-bottom:16px;', 'Early Exit Penalty'));
+      const claimAmt = parseFloat(investment.current_value || investment.amount || 0);
+      const rows = [
+        { label: 'Days remaining',   value: daysRemaining + ' day' + (daysRemaining !== 1 ? 's' : ''), color: '#f59e0b' },
+        { label: 'Investment value', value: fmt(claimAmt),     color: 'var(--color-text-primary)' },
+        { label: 'Early exit fee',   value: '-' + fmt(penalty), color: '#ef4444' },
+        { label: 'You will receive', value: fmt(receive),       color: '#10b981' }
+      ];
+      const table = el('div', 'background:var(--color-surface-elevated);border:1px solid var(--color-border);border-radius:14px;overflow:hidden;margin-bottom:14px;');
+      rows.forEach((row, i) => {
+        const rowEl = el('div', 'display:flex;align-items:center;justify-content:space-between;padding:14px 16px;' + (i < rows.length - 1 ? 'border-bottom:1px solid var(--color-border);' : ''));
+        rowEl.appendChild(el('span', 'font-size:13px;color:var(--color-text-secondary);', row.label));
+        rowEl.appendChild(el('span', 'font-size:14px;font-weight:700;', row.value)).style.color = row.color;
+        table.appendChild(rowEl);
+      });
+      content.appendChild(table);
+      content.appendChild(el('div', 'font-size:12px;color:var(--color-text-tertiary);text-align:center;margin-bottom:16px;line-height:1.5;', 'Wait ' + daysRemaining + ' more day' + (daysRemaining !== 1 ? 's' : '') + ' to claim with zero penalty.'));
+      const confirmBtn = el('button', 'background:#ef4444;color:white;border:none;padding:14px;margin-bottom:8px;border-radius:12px;width:100%;font-weight:700;cursor:pointer;', 'Accept Penalty & Claim');
+      confirmBtn.addEventListener('click', () => { if (window.Modal) Modal.close(); setTimeout(() => handleClaim(investment, true), 350); });
+      const cancelBtn = el('button', 'background:rgba(255,255,255,0.06);border:1px solid var(--color-border);color:var(--color-text-primary);padding:14px;border-radius:12px;width:100%;font-weight:700;cursor:pointer;', 'Keep Invested');
+      cancelBtn.addEventListener('click', () => { if (window.Modal) Modal.close(); });
+      content.appendChild(confirmBtn); content.appendChild(cancelBtn);
+      Modal.open({ title: '', content, maxWidth: '400px' });
+      return;
+    }
+
+    _isProcessing = true;
+    try {
+      if (window.supabaseClient) {
+        const profit = receive - parseFloat(investment.amount || 0);
+        const { error: updateErr } = await window.supabaseClient
+          .from('investments').update({ status: 'completed', profit, amount: 0 })
+          .eq('id', investment.id).eq('user_id', user.id).select();
+        if (updateErr) throw updateErr;
+
+        const freshSpot = parseFloat((getState().balances || {}).spot || 0);
+        const newSpot   = freshSpot + receive;
+        const { error: balErr } = await window.supabaseClient
+          .from('profiles').update({ spot_balance: newSpot }).eq('id', user.id).select();
+        if (balErr) throw balErr;
+
+        const { error: txErr } = await window.supabaseClient
+          .from('transactions').insert({
+            user_id:     user.id,
+            type:        'claim',
+            amount:      receive,
+            status:      'completed',
+            description: 'Claimed ' + (investment.strategy_name || 'investment') + (isEarly ? ' (Early Exit)' : ''),
+            created_at:  new Date().toISOString()
+          }).select();
+        if (txErr) console.warn('[VAULT] Claim TX record failed:', txErr);
+
+        if (window.AppState) AppState.updateBalances({ spot: newSpot });
+        await syncInvestmentsFromDB();
+      }
+
+      showSuccess(fmt(receive) + ' added to your Spot Wallet.');
+      renderPortfolioTab();
+    } catch (err) {
+      console.error('[VAULT] handleClaim error:', err);
+      showError(err.message || 'Claim failed. Please try again.');
+    } finally { _isProcessing = false; }
+  }
+
+  async function handleClaimAll() {
+    const { investments } = getState();
+    const claimable = (investments || []).filter(i => i.status === 'active' && (!i.matures_at || new Date(i.matures_at) <= Date.now()));
+    if (claimable.length === 0) return showError('No matured positions available to claim.');
+    const totalClaims = claimable.reduce((s, i) => s + parseFloat(i.current_value || i.amount || 0), 0);
+    if (!window.Modal) return;
+    const content = document.createElement('div');
+    content.innerHTML = '<div style="text-align:center;padding:10px 0;"><div style="font-size:24px;font-weight:800;color:#10b981;margin-bottom:10px;">' + fmt(totalClaims) + '</div><p style="font-size:13px;color:var(--color-text-secondary);margin:0;">Claim ' + claimable.length + ' matured position' + (claimable.length > 1 ? 's' : '') + ' to your Spot Wallet.</p></div>';
+    const confirmed = await Modal.confirm({ title: 'Claim Matured Positions', content, confirmText: 'Claim All to Wallet', cancelText: 'Cancel' });
+    if (!confirmed) return;
+    for (const inv of claimable) await handleClaim(inv, true);
+  }
+
+  function buildPlanCard(strategy, recommended) {
+    const card = el('div');
+    card.style.cssText = 'position:relative;background:var(--color-surface-elevated);border-radius:20px;overflow:hidden;margin-bottom:20px;transition:transform 0.2s ease,border-color 0.2s;cursor:pointer;';
+    card.style.border = '1px solid ' + (recommended ? strategy.accentColor + '50' : 'var(--color-border)');
+    card.addEventListener('mouseenter', () => { card.style.transform = 'translateY(-2px)'; card.style.borderColor = strategy.accentColor + '80'; });
+    card.addEventListener('mouseleave', () => { card.style.transform = ''; card.style.borderColor = recommended ? strategy.accentColor + '50' : 'var(--color-border)'; });
+
+    const accentBar = el('div');
+    accentBar.style.cssText = 'height:4px;background:linear-gradient(90deg,' + strategy.accentColor + ',' + strategy.accentColor + '80);';
+    card.appendChild(accentBar);
+
+    const body = el('div', 'padding:20px;');
+
+    const headerRow = el('div', 'display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;');
+    const left = el('div', 'display:flex;align-items:center;gap:12px;');
+    const iconBox = el('div', 'width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;');
+    iconBox.style.background = strategy.accentColor + '18';
+    iconBox.style.border = '1px solid ' + strategy.accentColor + '30';
+    iconBox.textContent = strategy.icon;
+    const titleWrap = el('div');
+    titleWrap.appendChild(el('div', 'font-size:17px;font-weight:800;color:var(--color-text-primary);margin-bottom:2px;', strategy.name));
+    titleWrap.appendChild(el('div', 'font-size:12px;color:var(--color-text-secondary);', strategy.category));
+    left.appendChild(iconBox); left.appendChild(titleWrap);
+
+    const rightCol = el('div', 'text-align:right;flex-shrink:0;');
+    if (recommended) {
+      const badge = el('div', 'font-size:9px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:0.8px;margin-bottom:6px;display:inline-block;color:#fff;', '\u2B50 FOR YOU');
+      badge.style.background = strategy.accentColor;
+      rightCol.appendChild(badge);
+    }
+    rightCol.appendChild(el('div', 'font-size:10px;color:var(--color-text-tertiary);', 'PROJ. APY'));
+    const apyVal = el('div', 'font-size:22px;font-weight:900;letter-spacing:-0.5px;', strategy.apyRange);
+    apyVal.style.color = strategy.accentColor;
+    rightCol.appendChild(apyVal);
+    headerRow.appendChild(left); headerRow.appendChild(rightCol);
+    body.appendChild(headerRow);
+
+    body.appendChild(el('div', 'font-size:13px;font-style:italic;color:var(--color-text-secondary);margin-bottom:16px;line-height:1.5;', strategy.tagline));
+
+    const statsRow = el('div', 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px;');
+    [
+      { label: 'MIN. INVEST', value: fmt(strategy.minAmount) },
+      { label: 'TERM',        value: strategy.duration + 'd' },
+      { label: 'PERF. FEE',   value: strategy.perfFee + '%' }
+    ].forEach(s => {
+      const cell = el('div', 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;text-align:center;');
+      cell.appendChild(el('div', 'font-size:17px;font-weight:800;color:var(--color-text-primary);', s.value));
+      cell.appendChild(el('div', 'font-size:9px;color:var(--color-text-tertiary);margin-top:3px;letter-spacing:0.6px;', s.label));
+      statsRow.appendChild(cell);
+    });
+    body.appendChild(statsRow);
+
+    const mechSection = el('div', 'margin-bottom:20px;');
+    mechSection.appendChild(el('div', 'font-size:11px;font-weight:700;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;', 'How We Generate Your Return'));
+    strategy.mechanics.forEach(m => {
+      const mechRow = el('div', 'display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;');
+      const iconWrap = el('div', 'width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:2px;');
+      iconWrap.style.background = strategy.accentColor + '15';
+      iconWrap.textContent = m.icon;
+      const textWrap = el('div', 'flex:1;min-width:0;');
+      const mTitle = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;');
+      mTitle.appendChild(el('span', 'font-size:12px;font-weight:700;color:var(--color-text-primary);', m.title));
+      const pctLabel = el('span', 'font-size:11px;font-weight:700;', m.pct + '%');
+      pctLabel.style.color = strategy.accentColor;
+      mTitle.appendChild(pctLabel);
+      textWrap.appendChild(mTitle);
+      const barBg = el('div', 'height:3px;background:rgba(255,255,255,0.08);border-radius:2px;margin-bottom:5px;');
+      const barFill = el('div');
+      barFill.style.cssText = 'height:100%;border-radius:2px;';
+      barFill.style.width = m.pct + '%';
+      barFill.style.background = strategy.accentColor;
+      barBg.appendChild(barFill);
+      textWrap.appendChild(barBg);
+      textWrap.appendChild(el('div', 'font-size:11px;color:var(--color-text-secondary);line-height:1.5;', m.desc));
+      mechRow.appendChild(iconWrap); mechRow.appendChild(textWrap);
+      mechSection.appendChild(mechRow);
+    });
+    body.appendChild(mechSection);
+
+    const hlWrap = el('div', 'background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px 14px;margin-bottom:20px;');
+    strategy.highlights.forEach((h, i) => {
+      const row = el('div', 'display:flex;align-items:flex-start;gap:8px;');
+      row.style.marginBottom = i < strategy.highlights.length - 1 ? '7px' : '0';
+      const tick = el('span', 'font-size:12px;flex-shrink:0;margin-top:1px;', '\u2713');
+      tick.style.color = strategy.accentColor;
+      row.appendChild(tick);
+      row.appendChild(el('span', 'font-size:12px;color:var(--color-text-secondary);line-height:1.4;', h));
+      hlWrap.appendChild(row);
+    });
+    body.appendChild(hlWrap);
+
+    const cta = el('button', 'width:100%;padding:15px;font-size:15px;font-weight:800;border:none;border-radius:13px;cursor:pointer;transition:all 0.2s;letter-spacing:-0.2px;');
+    cta.style.background = recommended ? strategy.accentColor : 'rgba(255,255,255,0.07)';
+    cta.style.color      = recommended ? '#fff' : 'var(--color-text-primary)';
+    cta.textContent      = recommended ? 'Invest in ' + strategy.name + ' \u2192' : 'View ' + strategy.name + ' \u2192';
+    cta.addEventListener('click', e => { e.stopPropagation(); openRiskDisclosure(strategy); });
+    body.appendChild(cta);
+    card.appendChild(body);
+    return card;
+  }
+
+  function buildActiveInvestmentItem(investment, isCompleted) {
+    const strategy   = STRATEGIES.find(s => s.id === investment.strategy_id) || { name: investment.strategy_name || 'Investment', accentColor: '#3b82f6', icon: '\uD83D\uDCBC', duration: 30, penaltyRate: 0.1 };
+    const amount     = parseFloat(investment.amount || 0);
+    const currentVal = parseFloat(investment.current_value || amount);
+    const gain       = currentVal - amount;
+    const gainPct    = amount > 0 ? (gain / amount) * 100 : 0;
+    const isMatured  = investment.matures_at && new Date(investment.matures_at) <= new Date();
+    const matureDate = investment.matures_at ? new Date(investment.matures_at) : null;
+
+    const itemEl = el('div');
+    itemEl.style.cssText = 'border-radius:16px;padding:16px;margin-bottom:12px;';
+    if (isCompleted) {
+      itemEl.style.background = 'rgba(30,41,59,0.4)';
+      itemEl.style.border = '1px solid var(--color-border)';
+      itemEl.style.opacity = '0.75';
+    } else {
+      itemEl.style.background = 'var(--color-surface-elevated)';
+      itemEl.style.border = '1px solid ' + (isMatured ? '#10b98160' : strategy.accentColor + '40');
+      itemEl.style.boxShadow = '0 4px 16px rgba(0,0,0,0.12)';
+    }
+
+    const headerRow = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;');
+    const leftSide  = el('div', 'display:flex;align-items:center;gap:12px;');
+    const iconEl    = el('div', 'font-size:22px;', strategy.icon);
+    const nameWrap  = el('div');
+    nameWrap.appendChild(el('div', 'font-size:14px;font-weight:700;color:var(--color-text-primary);', investment.strategy_name || strategy.name));
+    const statusColor = isCompleted ? 'var(--color-text-tertiary)' : (isMatured ? '#10b981' : '#f59e0b');
+    nameWrap.appendChild(el('div', 'font-size:11px;font-weight:700;margin-top:2px;', (isCompleted ? 'Completed' : (isMatured ? '\u2713 Ready to Claim' : '\u25CF Active')))).style.color = statusColor;
+    leftSide.appendChild(iconEl); leftSide.appendChild(nameWrap);
+    const gainBadge = el('div', 'font-size:13px;font-weight:800;', (gain >= 0 ? '+' : '') + gainPct.toFixed(2) + '%');
+    gainBadge.style.color = gain >= 0 ? '#10b981' : '#ef4444';
+    headerRow.appendChild(leftSide); headerRow.appendChild(gainBadge);
+    itemEl.appendChild(headerRow);
+
+    const statsGrid = el('div', 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;');
+    [
+      { label: 'Invested',     value: fmt(amount),    color: 'var(--color-text-primary)' },
+      { label: 'Current Est.', value: fmt(currentVal), color: 'var(--color-text-primary)' },
+      { label: 'Gain',         value: (gain >= 0 ? '+' : '') + fmt(gain), color: gain >= 0 ? '#10b981' : '#ef4444' }
+    ].forEach(s => {
+      const cell = el('div', 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px;text-align:center;');
+      const val = el('div', 'font-size:13px;font-weight:700;', s.value);
+      val.style.color = s.color;
+      cell.appendChild(val);
+      cell.appendChild(el('div', 'font-size:9px;color:var(--color-text-tertiary);margin-top:3px;letter-spacing:0.5px;', s.label));
+      statsGrid.appendChild(cell);
+    });
+    itemEl.appendChild(statsGrid);
+
+    if (!isCompleted && matureDate) {
+      const createdAt = new Date(investment.created_at || Date.now());
+      const totalMs   = matureDate - createdAt;
+      const pct       = Math.max(0, Math.min(100, ((Date.now() - createdAt) / totalMs) * 100));
+      const daysLeft  = Math.max(0, Math.ceil((matureDate - Date.now()) / 86400000));
+      const pw = el('div', 'margin-bottom:14px;');
+      const pRow = el('div', 'display:flex;justify-content:space-between;margin-bottom:5px;');
+      pRow.appendChild(el('span', 'font-size:10px;color:var(--color-text-tertiary);', 'Term progress'));
+      pRow.appendChild(el('span', 'font-size:10px;color:var(--color-text-tertiary);', isMatured ? 'Matured!' : daysLeft + ' days left'));
+      pw.appendChild(pRow);
+      const barBg = el('div', 'height:4px;background:rgba(255,255,255,0.08);border-radius:2px;');
+      const barFill = el('div');
+      barFill.style.cssText = 'height:100%;border-radius:2px;';
+      barFill.style.width = pct + '%';
+      barFill.style.background = isMatured ? '#10b981' : strategy.accentColor;
+      barBg.appendChild(barFill);
+      pw.appendChild(barBg);
+      itemEl.appendChild(pw);
+    }
+
+    if (isCompleted) {
+      itemEl.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);text-align:right;', 'Closed ' + new Date(investment.updated_at || investment.created_at).toLocaleDateString()));
+      return itemEl;
+    }
+
+    const btnRow = el('div', 'display:flex;gap:8px;');
+    if (isMatured) {
+      const claimBtn = el('button', 'flex:1;padding:12px;font-size:14px;font-weight:800;border:none;border-radius:10px;cursor:pointer;background:#10b981;color:#fff;', 'Claim to Wallet');
+      claimBtn.addEventListener('click', () => handleClaim(investment, true));
+      btnRow.appendChild(claimBtn);
+    } else {
+      const { daysRemaining } = calcEarlyPenalty(investment);
+      const earlyBtn = el('button', 'flex:1;padding:12px;font-size:13px;font-weight:700;border-radius:10px;cursor:pointer;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);color:#ef4444;', 'Early Exit (' + daysRemaining + 'd left)');
+      earlyBtn.addEventListener('click', () => handleClaim(investment, false));
+      btnRow.appendChild(earlyBtn);
+    }
+    itemEl.appendChild(btnRow);
+    return itemEl;
+  }
+
+  function renderExploreTab(container) {
+    container.innerHTML = '';
+    const recommendedId = getRecommendedId();
+    const profile = (() => { try { return localStorage.getItem('nex_investor_profile'); } catch (_) { return null; } })();
+
+    if (profile) {
+      const isPlanA  = profile === 'steady-accumulator';
+      const banner   = el('div', 'display:flex;align-items:center;gap:12px;border-radius:14px;padding:12px 14px;margin-bottom:20px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);');
+      const bIcon    = el('div', 'width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;');
+      bIcon.style.background = isPlanA ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)';
+      bIcon.textContent = isPlanA ? '\u{1F6E1}\uFE0F' : '\u26A1';
+      const bTxt = el('div', 'flex:1;');
+      bTxt.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);margin-bottom:2px;', 'Recommended based on your profile'));
+      bTxt.appendChild(el('div', 'font-size:13px;font-weight:700;color:var(--color-text-primary);', isPlanA ? 'Steady Accumulator \u2014 Plan A' : 'Alpha Seeker \u2014 Plan B'));
+      banner.appendChild(bIcon); banner.appendChild(bTxt);
+      container.appendChild(banner);
+    }
+
+    const sorted = [...STRATEGIES].sort((a, b) => (b.id === recommendedId ? 1 : 0) - (a.id === recommendedId ? 1 : 0));
+    sorted.forEach(s => container.appendChild(buildPlanCard(s, s.id === recommendedId)));
+  }
+
+  function renderPortfolioTab() {
+    if (!_container) return;
+    const panel = _container.querySelector('[data-vault-panel="portfolio"]');
+    if (!panel) return;
+    panel.innerHTML = '';
+
+    const { investments } = getState();
+    const active    = (investments || []).filter(i => i.status === 'active');
+    const completed = (investments || []).filter(i => i.status === 'completed' || i.status === 'claimed');
+
+    if (active.length === 0 && completed.length === 0) {
+      const empty = el('div', 'text-align:center;padding:48px 20px;');
+      empty.appendChild(el('div', 'font-size:52px;margin-bottom:16px;', '\uD83C\uDF31'));
+      empty.appendChild(el('div', 'font-size:18px;font-weight:800;color:var(--color-text-primary);margin-bottom:8px;letter-spacing:-0.3px;', 'No active investments'));
+      empty.appendChild(el('div', 'font-size:14px;color:var(--color-text-secondary);margin-bottom:24px;line-height:1.5;', 'Start with $1,500. Your money works while you sleep.'));
+      const startBtn = el('button', 'padding:14px 28px;font-size:14px;font-weight:700;border-radius:12px;cursor:pointer;background:var(--color-primary);color:#fff;border:none;', 'Explore Plans');
+      startBtn.addEventListener('click', () => switchTab('explore'));
+      empty.appendChild(startBtn);
+      panel.appendChild(empty);
+      return;
+    }
+
+    if (active.length > 0) {
+      const totalInvested = active.reduce((s, i) => s + parseFloat(i.amount || 0), 0);
+      const totalCurrent  = active.reduce((s, i) => s + parseFloat(i.current_value || i.amount || 0), 0);
+      const totalGain     = totalCurrent - totalInvested;
+      const totalGainPct  = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
+      const matured       = active.filter(i => i.matures_at && new Date(i.matures_at) <= new Date());
+
+      const summaryCard = el('div', 'border-radius:16px;padding:16px;margin-bottom:20px;background:linear-gradient(135deg,rgba(16,185,129,0.1),rgba(16,185,129,0.04));border:1px solid rgba(16,185,129,0.2);');
+      const sumRow = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:' + (matured.length > 0 ? '12px' : '0') + ';');
+      const sumLeft = el('div');
+      sumLeft.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;', 'Portfolio Value'));
+      sumLeft.appendChild(el('div', 'font-size:24px;font-weight:800;color:var(--color-text-primary);letter-spacing:-0.5px;', fmt(totalCurrent)));
+      const gainEl = el('div', 'font-size:13px;font-weight:700;margin-top:2px;', (totalGain >= 0 ? '+' : '') + fmt(totalGain) + ' (' + totalGainPct.toFixed(2) + '%)');
+      gainEl.style.color = totalGain >= 0 ? '#10b981' : '#ef4444';
+      sumLeft.appendChild(gainEl);
+      const sumRight = el('div', 'text-align:right;');
+      sumRight.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px;', 'Active'));
+      sumRight.appendChild(el('div', 'font-size:24px;font-weight:800;color:var(--color-text-primary);', String(active.length)));
+      sumRow.appendChild(sumLeft); sumRow.appendChild(sumRight);
+      summaryCard.appendChild(sumRow);
+
+      if (matured.length > 0) {
+        const maturedVal = matured.reduce((s, i) => s + parseFloat(i.current_value || i.amount || 0), 0);
+        const claimBar = el('div', 'display:flex;align-items:center;justify-content:space-between;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.25);border-radius:10px;padding:10px 12px;');
+        claimBar.appendChild(el('span', 'font-size:13px;font-weight:700;color:#10b981;', '\u2713 ' + matured.length + ' ready to claim \u2014 ' + fmt(maturedVal)));
+        const claimAllBtn = el('button', 'font-size:12px;font-weight:700;color:#10b981;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:7px;padding:6px 12px;cursor:pointer;', 'Claim All');
+        claimAllBtn.addEventListener('click', handleClaimAll);
+        claimBar.appendChild(claimAllBtn);
+        summaryCard.appendChild(claimBar);
+      }
+      panel.appendChild(summaryCard);
+      panel.appendChild(el('div', 'font-size:13px;font-weight:700;color:var(--color-text-primary);margin-bottom:12px;', 'Active Positions'));
+      active.forEach(inv => panel.appendChild(buildActiveInvestmentItem(inv, false)));
+    }
+
+    if (completed.length > 0) {
+      panel.appendChild(el('div', 'font-size:13px;font-weight:700;color:var(--color-text-tertiary);margin:20px 0 12px;', 'Completed'));
+      completed.slice(0, 5).forEach(inv => panel.appendChild(buildActiveInvestmentItem(inv, true)));
+    }
+  }
+
+  function switchTab(tab) {
+    if (!_container) return;
+    _activeTab = tab;
+    _container.querySelectorAll('[data-vault-tab]').forEach(btn => {
+      const active = btn.dataset.vaultTab === tab;
+      btn.style.background = active ? 'var(--color-primary)' : 'transparent';
+      btn.style.color      = active ? '#fff' : 'var(--color-text-secondary)';
+    });
+    _container.querySelectorAll('[data-vault-panel]').forEach(p => {
+      p.style.display = p.dataset.vaultPanel === tab ? 'block' : 'none';
+    });
+    if (tab === 'portfolio') renderPortfolioTab();
+  }
+
+  async function render(element) {
+    if (!element) return;
+    _container = element;
+    _destroyed = false;
+
+    element.style.cssText = [
+      'overflow-y: auto',
+      'overflow-x: hidden',
+      'height: 100%',
+      'width: 100%',
+      'padding: 0',
+      '-webkit-overflow-scrolling: touch',
+      'position: relative'
+    ].join(';');
+
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
+    element.innerHTML = '';
+
+    const { investments } = getState();
+    if ((investments || []).some(i => i.status === 'active')) _activeTab = 'portfolio';
+
+    const vaultWrapper = document.createElement('div');
+    vaultWrapper.style.paddingBottom = '16px';
+
+    const pageHeader = el('div', 'padding:20px 16px 8px;');
+    
+    pageHeader.appendChild(el('p', 'font-size:13px;color:var(--color-text-secondary);margin:0;line-height:1.4;', 'Institutional-grade strategies. Performance fee only on profit.'));
+    vaultWrapper.appendChild(pageHeader);
+
+    const tabBarContainer = el('div');
+    tabBarContainer.style.cssText = [
+      'position: sticky',
+      'top: 0',
+      'z-index: 50',
+      'padding: 10px 16px',
+      'background: var(--color-app-bg, #0a0c10)',
+      'box-shadow: 0 4px 12px -2px rgba(0,0,0,0.6)'
+    ].join(';');
+
+    const tabBar = el('div', 'display:flex;background:var(--color-surface);padding:4px;border-radius:12px;border:1px solid var(--color-border);');
+    const activeCount = (investments || []).filter(i => i.status === 'active').length;
+    [
+      { id: 'explore',   label: 'Explore Plans' },
+      { id: 'portfolio', label: 'My Portfolio' + (activeCount > 0 ? ' (' + activeCount + ')' : '') }
+    ].forEach(tab => {
+      const btn = el('button');
+      btn.dataset.vaultTab = tab.id;
+      const isActive = tab.id === _activeTab;
+      btn.style.cssText = 'flex:1;padding:10px;border:none;border-radius:8px;font-size:13px;font-weight:700;transition:all 0.2s;cursor:pointer;background:' + (isActive ? 'var(--color-primary)' : 'transparent') + ';color:' + (isActive ? '#fff' : 'var(--color-text-secondary)') + ';';
+      btn.textContent = tab.label;
+      btn.addEventListener('click', () => switchTab(tab.id));
+      tabBar.appendChild(btn);
+    });
+    tabBarContainer.appendChild(tabBar);
+    vaultWrapper.appendChild(tabBarContainer);
+
+    const contentWrapper = el('div', 'padding:16px 16px 0;position:relative;z-index:10;');
+    const explorePanel = el('div');
+    explorePanel.dataset.vaultPanel = 'explore';
+    explorePanel.style.display = _activeTab === 'explore' ? 'block' : 'none';
+    renderExploreTab(explorePanel);
+    contentWrapper.appendChild(explorePanel);
+
+    const portfolioPanel = el('div');
+    portfolioPanel.dataset.vaultPanel = 'portfolio';
+    portfolioPanel.id = 'vault-tab-active-content';
+    portfolioPanel.style.display = _activeTab === 'portfolio' ? 'block' : 'none';
+    contentWrapper.appendChild(portfolioPanel);
+
+    vaultWrapper.appendChild(contentWrapper);
+    element.appendChild(vaultWrapper);
+
+    if (_activeTab === 'portfolio') renderPortfolioTab();
+    if (window.Navbar) Navbar.setActive('vault');
+    syncInvestmentsFromDB();
+  }
+
+  function destroy() {
+    _destroyed = true;
+    if (_container) _container.style.overflowY = '';
+    _container = null;
+    _milestoneChecked.clear();
+  }
+
+  function cleanup() { destroy(); }
+
+  function refresh() {
+    if (_destroyed || !_container) return;
+    syncInvestmentsFromDB().then(() => { if (_activeTab === 'portfolio') renderPortfolioTab(); });
+  }
+
+  window.Vault = { render, refresh, destroy, cleanup, openInvestModal, handleClaimAll, syncInvestmentsFromDB };
+
+})();

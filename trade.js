@@ -122,7 +122,7 @@ const Trade = (() => {
           <label class="input-label">Amount Sent (USD equivalent)</label>
           <input type="number" id="dep-amount" class="input-field financial-data" placeholder="0.00" min="10">
           <div style="font-size:11px; color:var(--color-text-secondary); margin-top:6px;">
-            <i class="fas fa-info-circle"></i> Balance updates after admin confirmation (10–30 mins).
+            <i class="fas fa-info-circle"></i> Balance updates after 1 confirmation (10–30 mins).
           </div>
         </div>
         <button id="confirm-dep-btn" class="btn btn-primary btn-full">I Have Made The Transfer</button>

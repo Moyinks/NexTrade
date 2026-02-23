@@ -1,597 +1,1573 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#0f172a">
-    <title>NexTrade | Secure Access</title>
-    <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="NexTrade-192.png">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>NexTrade — Institutional Wealth, Simplified</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --bg:       #0B0E11;
+      --surface:  #151921;
+      --elevated: #1E232F;
+      --primary:  #3B82F6;
+      --primary-glow: rgba(59,130,246,0.18);
+      --success:  #10B981;
+      --danger:   #EF4444;
+      --text:     #F8FAFC;
+      --muted:    #64748B;
+      --sub:      #94A3B8;
+      --border:   rgba(255,255,255,0.08);
+      --border-hi: rgba(255,255,255,0.14);
+    }
 
-    <style>
-        :root { 
-            --bg-dark: #0f172a; 
-            --primary: #4f46e5; 
-            --primary-hover: #4338ca;
-            --text-main: #f8fafc; 
-            --text-muted: #94a3b8; 
-            --card-bg: #1e293b;
-            --input-bg: #1e293b;
-            --border-color: #334155;
-            --danger: #ef4444;
-            --success: #10b981;
-        }
-        
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    *, *::before, *::after {
+      margin: 0; padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
 
-        body { 
-            background-color: var(--bg-dark); 
-            color: var(--text-main); 
-            font-family: 'Inter', sans-serif; 
-            margin: 0; 
-            height: 100dvh;
-            width: 100vw;
-            overflow: hidden;
-            display: flex;
-            align-items: center; 
-            justify-content: center;
-        }
+    html, body {
+      height: 100%; width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      overflow: hidden;
+    }
 
-        .auth-card { 
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            padding: 1.5rem;
-        }
+    /* ── ROOT SHELL ─────────────────────────────────────────────── */
 
-        .auth-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            width: 100%;
-            max-width: 400px;
-            margin: 0 auto;
-        }
+    #app {
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
 
-        @media (min-width: 640px) {
-            body { padding: 0; }
-            .auth-card {
-                background: var(--card-bg);
-                max-width: 420px;
-                height: auto;
-                max-height: 90vh;
-                border-radius: 20px;
-                border: 1px solid var(--border-color);
-                padding: 2.5rem;
-                box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5);
-                display: block;
-            }
-            .auth-content { display: block; height: auto; }
-            .legal-footer { margin-top: 1.5rem; position: static; }
-        }
+    /* ── LANDING STAGE ──────────────────────────────────────────── */
 
-        .logo { 
-            font-size: 1.8rem; 
-            font-weight: 800; 
-            margin-bottom: 0.25rem; 
-            display: flex; align-items: center; justify-content: center; 
-            gap: 10px; color: white; 
-            letter-spacing: -0.5px;
-        }
-        .logo i { color: var(--primary); font-size: 1.6rem; }
-        .subtitle { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem; text-align: center; font-weight: 500; }
-        
-        .tabs { 
-            background: var(--input-bg); padding: 4px; border-radius: 10px; 
-            display: flex; margin-bottom: 1.5rem; border: 1px solid var(--border-color); 
-        }
-        .tab { flex: 1; padding: 10px; border: none; background: none; color: var(--text-muted); font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 0.9rem; }
-        .tab.active { background: var(--bg-dark); color: white; border: 1px solid var(--border-color); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-        
-        .form-group { text-align: left; margin-bottom: 1rem; }
-        .label { display: block; font-size: 0.85rem; margin-bottom: 6px; color: var(--text-muted); font-weight: 500; }
-        .label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-        .forgot-link { font-size: 0.8rem; color: var(--primary); cursor: pointer; text-decoration: none; font-weight: 600; }
-        
-        .input-wrapper { position: relative; }
-        .input-wrapper .left-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 1rem; pointer-events: none; }
-        .input-wrapper .toggle-password { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); cursor: pointer; padding: 5px; }
+    #landing {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+    #landing::-webkit-scrollbar { display: none; }
 
-        .input { 
-            width: 100%; 
-            background: var(--input-bg); 
-            border: 1px solid var(--border-color); 
-            padding: 13px 40px 13px 40px; 
-            border-radius: 10px; 
-            color: white; 
-            font-size: 0.95rem; 
-            outline: none; 
-            transition: border-color 0.2s; 
-        }
-        .input:focus { border-color: var(--primary); }
-        .input.otp { text-align: center; letter-spacing: 0.5em; font-family: monospace; font-size: 1.2rem; padding: 13px; }
-        
-        .checkbox-group {
-            display: flex; align-items: flex-start; gap: 10px; margin-top: 1rem;
-            font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;
-        }
-        .checkbox-group input { accent-color: var(--primary); width: 16px; height: 16px; margin-top: 2px; flex-shrink: 0; }
-        .link-text { color: var(--primary); cursor: pointer; text-decoration: none; font-weight: 600; }
+    #landing.exit {
+      opacity: 0;
+      transform: scale(0.97);
+      pointer-events: none;
+    }
 
-        .btn { 
-            width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 10px; 
-            font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 1.25rem; 
-        }
-        .btn:active { transform: scale(0.98); }
-        .btn:disabled { opacity: 0.7; cursor: not-allowed; }
+    /* GRADIENT MESH BACKGROUND — visible behind all sections */
+    .mesh {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 70% 45% at 15% 20%,  rgba(37,99,235,0.22) 0%, transparent 65%),
+        radial-gradient(ellipse 55% 35% at 85% 80%,  rgba(16,185,129,0.10) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 30% at 90% 10%,  rgba(139,92,246,0.10) 0%, transparent 55%),
+        var(--bg);
+      animation: meshDrift 18s ease-in-out infinite alternate;
+    }
 
-        .error-msg { color: var(--danger); font-size: 0.85rem; margin-top: 1rem; display: none; text-align: center; padding: 8px; background: rgba(239,68,68,0.1); border-radius: 8px; }
-        .success-msg { color: var(--success); font-size: 0.85rem; margin-top: 1rem; display: none; text-align: center; padding: 8px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; }
-        .hidden { display: none !important; }
+    @keyframes meshDrift {
+      0%   { background-position: 0% 0%; }
+      100% { background-position: 3% 4%; }
+    }
 
-        .legal-footer { text-align: center; font-size: 0.75rem; color: var(--text-muted); margin-top: auto; padding-top: 1rem; opacity: 0.6; }
+    /* ── HERO ───────────────────────────────────────────────────── */
 
-        /* MODALS */
-        .modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); z-index: 2000;
-            display: flex; align-items: flex-end;
-            opacity: 0; pointer-events: none; transition: opacity 0.2s;
-        }
-        .modal-overlay.active { opacity: 1; pointer-events: all; }
-        
-        .modal-content {
-            background: var(--card-bg); width: 100%;
-            border-top-left-radius: 20px; border-top-right-radius: 20px;
-            border-top: 1px solid var(--border-color);
-            display: flex; flex-direction: column;
-            transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-            padding-bottom: 20px;
-        }
-        @media(min-width: 640px) {
-            .modal-overlay { align-items: center; justify-content: center; }
-            .modal-content { width: 90%; max-width: 450px; border-radius: 16px; transform: translateY(20px); border: 1px solid var(--border-color); }
-        }
-        .modal-overlay.active .modal-content { transform: translateY(0); }
+    .hero {
+      position: relative;
+      z-index: 1;
+      padding: 52px 24px 40px;
+      display: flex;
+      flex-direction: column;
+      min-height: 80dvh;
+    }
 
-        .modal-header { padding: 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
-        .modal-header h3 { margin: 0; font-size: 1.1rem; color: white; font-weight: 700; }
-        .close-modal { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; padding: 0 10px; cursor: pointer; }
-        
-        .modal-body { padding: 1.5rem; color: var(--text-muted); font-size: 0.9rem; line-height: 1.6; }
-        .otp-display { text-align: center; margin: 1.5rem 0; }
-        .resend-link { text-align: center; margin-top: 1rem; font-size: 0.85rem; color: var(--primary); cursor: pointer; text-decoration: underline; }
-    </style>
+    .logo-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 48px;
+      opacity: 0;
+      animation: fadeUp 0.6s ease 0.1s forwards;
+    }
+
+    .logo-icon {
+      width: 38px; height: 38px;
+      background: var(--primary);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; color: white;
+      box-shadow: 0 0 20px rgba(59,130,246,0.35);
+    }
+
+    .logo-text {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .logo-text span { color: var(--primary); }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(16,185,129,0.12);
+      border: 1px solid rgba(16,185,129,0.25);
+      border-radius: 100px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--success);
+      letter-spacing: 0.3px;
+      margin-bottom: 20px;
+      width: fit-content;
+      opacity: 0;
+      animation: fadeUp 0.6s ease 0.2s forwards;
+    }
+
+    .hero-h1 {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: clamp(36px, 9vw, 48px);
+      line-height: 1.12;
+      letter-spacing: -0.5px;
+      margin-bottom: 18px;
+      opacity: 0;
+      animation: fadeUp 0.7s ease 0.3s forwards;
+    }
+
+    .hero-h1 em {
+      font-style: italic;
+      background: linear-gradient(110deg, #60a5fa, #a78bfa 50%, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-sub {
+      font-size: 15px;
+      color: var(--sub);
+      line-height: 1.65;
+      margin-bottom: 36px;
+      max-width: 340px;
+      opacity: 0;
+      animation: fadeUp 0.7s ease 0.4s forwards;
+    }
+
+    .hero-ctas {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 48px;
+      opacity: 0;
+      animation: fadeUp 0.7s ease 0.5s forwards;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 16px;
+      padding: 17px 24px;
+      font-size: 16px;
+      font-weight: 700;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      box-shadow: 0 4px 20px rgba(59,130,246,0.30);
+      letter-spacing: -0.2px;
+    }
+
+    .btn-primary:active { transform: scale(0.97); box-shadow: 0 2px 8px rgba(59,130,246,0.2); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--sub);
+      border: 1px solid var(--border-hi);
+      border-radius: 16px;
+      padding: 16px 24px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-ghost:active {
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    /* Floating stats bar */
+    .stats-bar {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--border-hi);
+      border-radius: 16px;
+      overflow: hidden;
+      background: rgba(21,25,33,0.7);
+      backdrop-filter: blur(20px);
+      opacity: 0;
+      animation: fadeUp 0.7s ease 0.65s forwards;
+    }
+
+    .stat-item {
+      flex: 1;
+      padding: 14px 12px;
+      text-align: center;
+      position: relative;
+    }
+
+    .stat-item + .stat-item::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 20%; bottom: 20%;
+      width: 1px;
+      background: var(--border);
+    }
+
+    .stat-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--text);
+      letter-spacing: -0.5px;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── SCROLL INDICATOR ───────────────────────────────────────── */
+
+    .scroll-hint {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      margin-top: auto;
+      padding-top: 24px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      opacity: 0;
+      animation: fadeIn 1s ease 1.2s forwards;
+    }
+
+    .scroll-dot {
+      width: 20px; height: 30px;
+      border: 1.5px solid var(--muted);
+      border-radius: 10px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 5px;
+    }
+
+    .scroll-dot::after {
+      content: '';
+      width: 4px; height: 6px;
+      background: var(--sub);
+      border-radius: 2px;
+      animation: scrollBounce 2s ease-in-out infinite;
+    }
+
+    @keyframes scrollBounce {
+      0%, 100% { transform: translateY(0); opacity: 1; }
+      60%       { transform: translateY(8px); opacity: 0.3; }
+    }
+
+    /* ── HOW IT WORKS ───────────────────────────────────────────── */
+
+    .section {
+      position: relative;
+      z-index: 1;
+      padding: 56px 24px;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--primary);
+      margin-bottom: 14px;
+    }
+
+    .section-h2 {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: -0.3px;
+      margin-bottom: 8px;
+    }
+
+    .section-sub {
+      font-size: 14px;
+      color: var(--sub);
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    /* Steps */
+    .steps { display: flex; flex-direction: column; gap: 0; }
+
+    .step {
+      display: flex;
+      gap: 16px;
+      position: relative;
+    }
+
+    .step-left {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .step-num {
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1.5px solid var(--border-hi);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--primary);
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .step-num.done {
+      background: rgba(16,185,129,0.12);
+      border-color: rgba(16,185,129,0.4);
+      color: var(--success);
+    }
+
+    .step-line {
+      width: 1.5px;
+      flex: 1;
+      background: linear-gradient(to bottom, var(--border-hi), transparent);
+      margin: 6px 0;
+    }
+
+    .step-right {
+      padding-bottom: 32px;
+      padding-top: 6px;
+    }
+
+    .step-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 5px;
+      letter-spacing: -0.2px;
+    }
+
+    .step-desc {
+      font-size: 13.5px;
+      color: var(--sub);
+      line-height: 1.6;
+    }
+
+    .step-tag {
+      display: inline-block;
+      background: rgba(59,130,246,0.10);
+      border: 1px solid rgba(59,130,246,0.2);
+      color: #93c5fd;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 100px;
+      margin-top: 8px;
+    }
+
+    /* ── STRATEGIES PREVIEW ─────────────────────────────────────── */
+
+    .strategies-section {
+      position: relative;
+      z-index: 1;
+      padding: 0 24px 56px;
+    }
+
+    .plan-cards { display: flex; flex-direction: column; gap: 14px; }
+
+    .plan-card {
+      background: var(--surface);
+      border: 1px solid var(--border-hi);
+      border-radius: 18px;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.15s ease;
+    }
+
+    .plan-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+    }
+
+    .plan-card.green::before  { background: linear-gradient(90deg, #10b981, #34d399); }
+    .plan-card.amber::before  { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+
+    .plan-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .plan-icon {
+      width: 42px; height: 42px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+
+    .plan-icon.green { background: rgba(16,185,129,0.12); }
+    .plan-icon.amber { background: rgba(245,158,11,0.12); }
+
+    .plan-apy {
+      text-align: right;
+    }
+
+    .plan-apy-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 26px;
+      font-weight: 500;
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+
+    .plan-apy-val.green { color: var(--success); }
+    .plan-apy-val.amber { color: #f59e0b; }
+
+    .plan-apy-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .plan-name {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin-bottom: 4px;
+    }
+
+    .plan-desc {
+      font-size: 13px;
+      color: var(--sub);
+      line-height: 1.55;
+    }
+
+    .plan-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .plan-meta {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .plan-meta strong {
+      color: var(--sub);
+      font-weight: 600;
+    }
+
+    .plan-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 100px;
+      letter-spacing: 0.3px;
+    }
+
+    .plan-badge.green {
+      background: rgba(16,185,129,0.12);
+      color: var(--success);
+      border: 1px solid rgba(16,185,129,0.25);
+    }
+
+    .plan-badge.amber {
+      background: rgba(245,158,11,0.12);
+      color: #f59e0b;
+      border: 1px solid rgba(245,158,11,0.25);
+    }
+
+    /* ── TRUST STRIP ────────────────────────────────────────────── */
+
+    .trust-strip {
+      position: relative;
+      z-index: 1;
+      padding: 0 24px 80px;
+    }
+
+    .trust-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .trust-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .trust-icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+    }
+
+    .trust-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.1px;
+    }
+
+    .trust-desc {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── AUTH STAGE ─────────────────────────────────────────────── */
+
+    #auth {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 24px;
+      padding-top: max(24px, env(safe-area-inset-top));
+      background: var(--bg);
+      opacity: 0;
+      transform: translateY(40px);
+      pointer-events: none;
+      transition: opacity 0.45s cubic-bezier(0.4,0,0.2,1),
+                  transform 0.45s cubic-bezier(0.4,0,0.2,1);
+      z-index: 10;
+      max-width: 440px;
+      margin: 0 auto;
+    }
+
+    #auth.visible {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: all;
+    }
+
+    .auth-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+
+    .btn-back {
+      width: 40px; height: 40px;
+      background: var(--surface);
+      border: 1px solid var(--border-hi);
+      border-radius: 12px;
+      color: var(--text);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.15s;
+    }
+
+    .btn-back:active { background: var(--elevated); }
+
+    .auth-logo {
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+    }
+
+    .auth-logo span { color: var(--primary); }
+
+    .auth-body { flex: 1; overflow-y: auto; scrollbar-width: none; }
+    .auth-body::-webkit-scrollbar { display: none; }
+
+    .auth-title {
+      font-family: 'Instrument Serif', serif;
+      font-size: 28px;
+      letter-spacing: -0.3px;
+      margin-bottom: 6px;
+    }
+
+    .auth-subtitle {
+      font-size: 14px;
+      color: var(--sub);
+      margin-bottom: 28px;
+    }
+
+    .field { margin-bottom: 18px; }
+
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--sub);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      margin-bottom: 8px;
+    }
+
+    .input-field {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      font-size: 16px;
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text);
+      transition: border-color 0.2s, background 0.2s;
+      outline: none;
+    }
+
+    .input-field:focus {
+      border-color: var(--primary);
+      background: var(--elevated);
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      cursor: pointer;
+    }
+
+    .check-box {
+      width: 20px; height: 20px;
+      border-radius: 6px;
+      border: 2px solid var(--border-hi);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+
+    .check-box i { font-size: 10px; display: none; }
+
+    .check-label {
+      font-size: 13px;
+      color: var(--sub);
+    }
+
+    .check-label span {
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .forgot-link {
+      display: block;
+      text-align: right;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--primary);
+      cursor: pointer;
+      margin-top: -10px;
+      margin-bottom: 20px;
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 16px;
+      padding: 18px;
+      font-size: 16px;
+      font-weight: 700;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.2s;
+      margin-top: 8px;
+      letter-spacing: -0.2px;
+      box-shadow: 0 4px 20px rgba(59,130,246,0.28);
+    }
+
+    .btn-submit:active { transform: scale(0.97); }
+    .btn-submit:disabled { opacity: 0.4; filter: grayscale(0.5); cursor: not-allowed; }
+
+    /* OTP */
+    .otp-group {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin: 28px 0 16px;
+    }
+
+    .otp-group input {
+      width: 46px; height: 54px;
+      text-align: center;
+      font-size: 22px;
+      font-weight: 700;
+      font-family: 'DM Mono', monospace;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .otp-group input:focus { border-color: var(--primary); }
+
+    .btn-text {
+      width: 100%;
+      background: none;
+      border: none;
+      color: var(--primary);
+      font-size: 14px;
+      font-weight: 600;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      padding: 8px;
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - 48px);
+      max-width: 400px;
+      padding: 16px 20px;
+      border-radius: 14px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: 'DM Sans', sans-serif;
+      z-index: 9999;
+      display: none;
+      text-align: center;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    }
+
+    /* Legal Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 8000;
+      padding: 24px;
+    }
+
+    .modal-card {
+      background: var(--elevated);
+      border-radius: 24px;
+      padding: 28px 24px;
+      border: 1px solid var(--border-hi);
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .modal-card h3 {
+      font-family: 'Instrument Serif', serif;
+      font-size: 22px;
+      margin-bottom: 12px;
+    }
+
+    .modal-card p {
+      font-size: 14px;
+      color: var(--sub);
+      line-height: 1.65;
+      margin-bottom: 24px;
+    }
+
+    .hidden { display: none !important; }
+
+    /* ── ANIMATIONS ─────────────────────────────────────────────── */
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    /* Staggered scroll-section reveals */
+    .reveal {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .reveal.in {
+      opacity: 1;
+      transform: none;
+    }
+
+    /* ── BOTTOM CTA ─────────────────────────────────────────────── */
+
+    .bottom-cta {
+      position: relative;
+      z-index: 1;
+      padding: 0 24px 0;
+    }
+
+    .bottom-cta-inner {
+      background: linear-gradient(145deg, #0d2050 0%, #08173c 60%, #040d24 100%);
+      border: 1px solid rgba(59,130,246,0.22);
+      border-radius: 28px;
+      padding: 40px 28px 36px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 40px;
+    }
+
+    /* glow behind the CTA card */
+    .bottom-cta-inner::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% 110%, rgba(59,130,246,0.22) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    .bottom-cta-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--success);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 18px;
+    }
+
+    .pulse-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 0 rgba(16,185,129,0.5);
+      animation: pulse 2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse {
+      0%  { box-shadow: 0 0 0 0 rgba(16,185,129,0.55); }
+      60% { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+      100%{ box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+    }
+
+    .bottom-cta-h2 {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: 34px;
+      line-height: 1.12;
+      letter-spacing: -0.4px;
+      margin-bottom: 14px;
+      position: relative;
+    }
+
+    .bottom-cta-h2 em {
+      font-style: italic;
+      background: linear-gradient(110deg, #60a5fa, #a78bfa 50%, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .bottom-cta-sub {
+      font-size: 14px;
+      color: var(--sub);
+      line-height: 1.6;
+      margin-bottom: 28px;
+      position: relative;
+    }
+
+    .bottom-cta-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+    }
+
+    /* ── SITE FOOTER ─────────────────────────────────────────────── */
+
+    .site-footer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 0 0 40px;
+      text-align: center;
+    }
+
+    .footer-wordmark {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .footer-icon {
+      width: 28px; height: 28px;
+      background: var(--primary);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      color: white;
+      box-shadow: 0 0 12px rgba(59,130,246,0.3);
+    }
+
+    .footer-name {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+    }
+
+    .footer-name span { color: var(--primary); }
+
+    .footer-tagline {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-style: italic;
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.2px;
+    }
+
+    .footer-legal {
+      font-size: 10px;
+      color: var(--muted);
+      opacity: 0.6;
+      line-height: 1.6;
+      max-width: 280px;
+    }
+
+  </style>
 </head>
 <body>
 
-    <div class="auth-card">
-        
-        <div class="auth-content">
-            <div class="logo"><i class="fas fa-chart-line"></i><span>NexTrade</span></div>
-            <p class="subtitle">Institutional-Grade Wealth Management</p>
+  <div id="toast"></div>
 
-            <div class="tabs" id="authTabs">
-                <button class="tab active" onclick="switchTab('login')">Sign In</button>
-                <button class="tab" onclick="switchTab('signup')">Create Account</button>
+  <div id="app">
+
+    <!-- Background Mesh -->
+    <div class="mesh"></div>
+
+    <!-- ════════════════════════════════════════════════════════════
+         LANDING
+    ════════════════════════════════════════════════════════════ -->
+    <div id="landing">
+
+      <!-- HERO -->
+      <section class="hero">
+
+        <div class="logo-mark">
+          <div class="logo-icon"><i class="fa-solid fa-bolt"></i></div>
+          <div class="logo-text">Nex<span>Trade</span></div>
+        </div>
+
+        <div class="hero-eyebrow">
+          <i class="fa-solid fa-circle-dot" style="font-size:8px;"></i>
+          Live — 2,341 investors active now
+        </div>
+
+        <h1 class="hero-h1">Institutional wealth,<br><em>finally for you.</em></h1>
+
+        <p class="hero-sub">
+          Deploy your money into the same strategies hedge funds use — automated, transparent, and starting at $1,500.
+        </p>
+
+        <div class="hero-ctas">
+          <button class="btn-primary" onclick="enterAuth('signup')">
+            Create Free Account →
+          </button>
+          <button class="btn-ghost" onclick="enterAuth('login')">
+            I already have an account
+          </button>
+        </div>
+
+        <div class="stats-bar">
+          <div class="stat-item">
+            <div class="stat-val">22%</div>
+            <div class="stat-label">Base APY</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val">$0</div>
+            <div class="stat-label">Principal Fees</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val">30d</div>
+            <div class="stat-label">Shortest Term</div>
+          </div>
+        </div>
+
+        <div class="scroll-hint">
+          <div class="scroll-dot"></div>
+          SCROLL TO LEARN MORE
+        </div>
+
+      </section>
+
+      <!-- HOW IT WORKS -->
+      <section class="section reveal" id="section-how">
+        <div class="section-label">Getting Started</div>
+        <h2 class="section-h2">You'll be live in<br>under 5 minutes</h2>
+        <p class="section-sub">No financial background needed. Here's exactly what to do.</p>
+
+        <div class="steps">
+
+          <div class="step">
+            <div class="step-left">
+              <div class="step-num">01</div>
+              <div class="step-line"></div>
             </div>
-
-            <form id="loginForm">
-                <div class="form-group">
-                    <label class="label">Email Address</label>
-                    <div class="input-wrapper">
-                        <i class="fas fa-envelope left-icon"></i>
-                        <input type="email" id="loginEmail" class="input" required placeholder="name@example.com">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <div class="label-row">
-                        <label class="label" style="margin:0;">Password</label>
-                        <span class="forgot-link" onclick="toggleForgotPassword(true)">Forgot Password?</span>
-                    </div>
-                    <div class="input-wrapper">
-                        <i class="fas fa-lock left-icon"></i>
-                        <input type="password" id="loginPassword" class="input" required placeholder="••••••••">
-                        <i class="fas fa-eye toggle-password"></i>
-                    </div>
-                </div>
-                <button type="submit" class="btn" id="loginBtn">Secure Sign In</button>
-            </form>
-
-            <form id="forgotForm" class="hidden">
-                <div style="text-align:center; margin-bottom:1.5rem;">
-                    <i class="fas fa-key" style="font-size:2rem; color:var(--primary); margin-bottom:1rem;"></i>
-                    <h3 style="margin:0; color:white;">Reset Password</h3>
-                    <p style="font-size:0.85rem; color:var(--text-muted);">Enter your email to receive a reset link.</p>
-                </div>
-                <div class="form-group">
-                    <label class="label">Email Address</label>
-                    <div class="input-wrapper">
-                        <i class="fas fa-envelope left-icon"></i>
-                        <input type="email" id="forgotEmail" class="input" required placeholder="name@example.com">
-                    </div>
-                </div>
-                <button type="submit" class="btn" id="forgotBtn">Send Recovery Link</button>
-                <div style="text-align:center; margin-top:1rem;">
-                    <span class="forgot-link" style="color:var(--text-muted);" onclick="toggleForgotPassword(false)">Back to Login</span>
-                </div>
-            </form>
-
-            <form id="signupForm" class="hidden">
-                <div class="form-group">
-                    <label class="label">Full Name</label>
-                    <div class="input-wrapper">
-                        <i class="fas fa-user left-icon"></i>
-                        <input type="text" id="signupName" class="input" required placeholder="John Doe">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="label">Email Address</label>
-                    <div class="input-wrapper">
-                        <i class="fas fa-envelope left-icon"></i>
-                        <input type="email" id="signupEmail" class="input" required placeholder="name@example.com">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="label">Create Password</label>
-                    <div class="input-wrapper">
-                        <i class="fas fa-shield-alt left-icon"></i>
-                        <input type="password" id="signupPassword" class="input" placeholder="Min. 8 chars" required>
-                        <i class="fas fa-eye toggle-password"></i>
-                    </div>
-                </div>
-
-                <div class="checkbox-group">
-                    <input type="checkbox" id="termsCheck" required>
-                    <span>
-                        I accept the 
-                        <span class="link-text" onclick="openModal('terms'); event.stopPropagation();">Terms</span> 
-                        & 
-                        <span class="link-text" onclick="openModal('privacy'); event.stopPropagation();">Privacy Policy</span>.
-                    </span>
-                </div>
-
-                <button type="submit" class="btn" id="signupBtn">Create Portfolio</button>
-            </form>
-
-            <div id="errorMsg" class="error-msg"></div>
-            <div id="successMsg" class="success-msg"></div>
-        </div>
-
-        <div class="legal-footer">
-            &copy; 2026 NexTrade Financial LLC.
-        </div>
-    </div>
-
-    <div id="otpModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Verify Your Email</h3>
+            <div class="step-right">
+              <div class="step-title">Create your account</div>
+              <div class="step-desc">Enter your name, email, and a password. Verify with a 6-digit code sent to your inbox. Takes about 90 seconds.</div>
+              <span class="step-tag">⚡ Takes 90 seconds</span>
             </div>
-            <div class="modal-body">
-                <p>We've sent a 6-digit confirmation code to <strong id="otpEmailDisplay" style="color:white;"></strong>.</p>
-                
-                <form id="otpForm">
-                    <div class="form-group">
-                        <label class="label" style="text-align:center;">Enter Confirmation Code</label>
-                        <input type="text" id="otpInput" class="input otp" placeholder="123456" maxlength="6" inputmode="numeric" required autocomplete="one-time-code">
-                    </div>
-                    <button type="submit" class="btn" id="otpBtn">Verify & Sign In</button>
-                </form>
+          </div>
 
-                <div class="resend-link" onclick="window.location.reload()">Wrong email? Start over</div>
+          <div class="step">
+            <div class="step-left">
+              <div class="step-num">02</div>
+              <div class="step-line"></div>
             </div>
-        </div>
-    </div>
+            <div class="step-right">
+              <div class="step-title">Take the investor quiz</div>
+              <div class="step-desc">Two quick questions help us recommend the right strategy for you — conservative growth or aggressive alpha. No wrong answers.</div>
+              <span class="step-tag">📊 2 questions only</span>
+            </div>
+          </div>
 
-    <div id="termsModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header"><h3>Terms of Service</h3><button class="close-modal" onclick="closeModal('terms')">&times;</button></div>
-            <div class="modal-body"><p>By accessing NexTrade, you agree to our terms regarding high-frequency trading risks...</p></div>
-        </div>
-    </div>
-    <div id="privacyModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header"><h3>Privacy Policy</h3><button class="close-modal" onclick="closeModal('privacy')">&times;</button></div>
-            <div class="modal-body"><p>We collect only necessary financial data for KYC compliance...</p></div>
-        </div>
-    </div>
+          <div class="step">
+            <div class="step-left">
+              <div class="step-num">03</div>
+              <div class="step-line"></div>
+            </div>
+            <div class="step-right">
+              <div class="step-title">Fund your wallet</div>
+              <div class="step-desc">Add at least $1,500 to your Spot Wallet. You can move it into a yield strategy whenever you're ready — no pressure.</div>
+              <span class="step-tag">💳 Min. $1,500</span>
+            </div>
+          </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js"></script>
+          <div class="step">
+            <div class="step-left">
+              <div class="step-num done"><i class="fa-solid fa-check" style="font-size:12px;"></i></div>
+            </div>
+            <div class="step-right">
+              <div class="step-title">Deploy your first strategy</div>
+              <div class="step-desc">Choose Steady Accumulator or Alpha Seeker. Confirm. Your money starts working immediately — you can track earnings live.</div>
+            </div>
+          </div>
 
-    <script>
-    // ============================================
-    // 1. INITIALIZATION & STATE
-    // ============================================
+        </div>
+      </section>
+
+      <!-- STRATEGIES PREVIEW -->
+      <section class="strategies-section reveal" id="section-plans">
+        <div class="section-label" style="padding: 0 0 14px;">Our Strategies</div>
+        <h2 class="section-h2" style="margin-bottom: 6px;">Two plans.<br>Both built for results.</h2>
+        <p class="section-sub">Performance fee only on profit. Zero fees on your principal. Ever.</p>
+
+        <div class="plan-cards">
+
+          <div class="plan-card green">
+            <div class="plan-card-top">
+              <div class="plan-icon green">🛡️</div>
+              <div class="plan-apy">
+                <div class="plan-apy-val green">22%</div>
+                <div class="plan-apy-label">Proj. APY</div>
+              </div>
+            </div>
+            <div class="plan-name">Steady Accumulator</div>
+            <div class="plan-desc">Stablecoin lending + ETH staking + liquidity provision. Zero leverage. Capital only in audited protocols.</div>
+            <div class="plan-footer">
+              <div class="plan-meta"><strong>90 days</strong> · Min $1,500 · 15% perf. fee</div>
+              <div class="plan-badge green">Low Risk</div>
+            </div>
+          </div>
+
+          <div class="plan-card amber">
+            <div class="plan-card-top">
+              <div class="plan-icon amber">⚡</div>
+              <div class="plan-apy">
+                <div class="plan-apy-val amber">65%</div>
+                <div class="plan-apy-label">Proj. APY</div>
+              </div>
+            </div>
+            <div class="plan-name">Alpha Seeker</div>
+            <div class="plan-desc">Quant momentum signals + funding rate arbitrage + volatile-pair liquidity. Algo-driven, 24/7.</div>
+            <div class="plan-footer">
+              <div class="plan-meta"><strong>30 days</strong> · Min $1,500 · 20% perf. fee</div>
+              <div class="plan-badge amber">Med–High Risk</div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- TRUST -->
+      <section class="trust-strip reveal" id="section-trust">
+        <div class="trust-grid">
+          <div class="trust-item">
+            <div class="trust-icon" style="background:rgba(59,130,246,0.12); color:#60a5fa;">
+              <i class="fa-solid fa-lock"></i>
+            </div>
+            <div class="trust-title">Bank-Grade Security</div>
+            <div class="trust-desc">AES-256 encryption. Supabase-backed auth. Your data never leaves.</div>
+          </div>
+          <div class="trust-item">
+            <div class="trust-icon" style="background:rgba(16,185,129,0.12); color:var(--success);">
+              <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div class="trust-title">Zero Principal Fees</div>
+            <div class="trust-desc">We only earn when you earn. No hidden charges on your capital.</div>
+          </div>
+          <div class="trust-item">
+            <div class="trust-icon" style="background:rgba(245,158,11,0.12); color:#f59e0b;">
+              <i class="fa-solid fa-chart-line"></i>
+            </div>
+            <div class="trust-title">Live Earnings Ticker</div>
+            <div class="trust-desc">Watch your balance grow in real time. Full transparency.</div>
+          </div>
+          <div class="trust-item">
+            <div class="trust-icon" style="background:rgba(139,92,246,0.12); color:#a78bfa;">
+              <i class="fa-solid fa-rotate"></i>
+            </div>
+            <div class="trust-title">Auto-Renewing Terms</div>
+            <div class="trust-desc">Strategies renew automatically unless you opt out. Keep compounding.</div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- BOTTOM CTA ──────────────────────────────────────────── -->
+      <section class="bottom-cta reveal" id="section-cta">
+
+        <div class="bottom-cta-inner">
+
+          <div class="bottom-cta-eyebrow">
+            <span class="pulse-dot"></span>
+            Ready when you are
+          </div>
+
+          <h2 class="bottom-cta-h2">
+            Start building<br><em>your portfolio.</em>
+          </h2>
+
+          <p class="bottom-cta-sub">
+            Join thousands already compounding with institutional-grade strategies.
+          </p>
+
+          <div class="bottom-cta-btns">
+            <button class="btn-primary" onclick="enterAuth('signup')">
+              Create Free Account &rarr;
+            </button>
+            <button class="btn-ghost" onclick="enterAuth('login')">
+              Sign In
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Footer wordmark -->
+        <footer class="site-footer">
+          <div class="footer-wordmark">
+            <div class="footer-icon"><i class="fa-solid fa-bolt"></i></div>
+            <div class="footer-name">Nex<span>Trade</span></div>
+          </div>
+          <div class="footer-tagline">Next, trade.</div>
+          <div class="footer-legal">
+            Performance fee only on profit &nbsp;&middot;&nbsp; Capital at risk &nbsp;&middot;&nbsp; Not financial advice
+          </div>
+        </footer>
+
+      </section>
+
+    </div>
+    <!-- /landing -->
+
+
+    <!-- ════════════════════════════════════════════════════════════
+         AUTH STAGE  (identical logic to Gemini's version)
+    ════════════════════════════════════════════════════════════ -->
+    <div id="auth">
+
+      <div class="auth-nav">
+        <button class="btn-back" onclick="resetView()">
+          <i class="fa-solid fa-chevron-left"></i>
+        </button>
+        <div class="auth-logo">Nex<span>Trade</span></div>
+        <div style="width:40px;"></div>
+      </div>
+
+      <div class="auth-body">
+
+        <div class="auth-title" id="formTitle">Create Account</div>
+        <div class="auth-subtitle" id="formSubtitle">Let's get your portfolio started.</div>
+
+        <!-- SIGNUP FORM -->
+        <div id="signupForm">
+          <div class="field">
+            <label>Full Name</label>
+            <input type="text" id="regName" class="input-field" placeholder="Momoa Johnson" enterkeyhint="next">
+          </div>
+          <div class="field">
+            <label>Email Address</label>
+            <input type="email" id="regEmail" class="input-field" placeholder="you@example.com" enterkeyhint="next">
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input type="password" id="regPassword" class="input-field" placeholder="••••••••" enterkeyhint="done">
+          </div>
+          <div class="checkbox-row" onclick="openLegal()">
+            <div class="check-box" id="customCheck">
+              <i class="fa-solid fa-check"></i>
+            </div>
+            <div class="check-label">
+              I agree to the <span>Risk Disclosure</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- LOGIN FORM -->
+        <div id="loginForm" class="hidden">
+          <div class="field">
+            <label>Email Address</label>
+            <input type="email" id="logEmail" class="input-field" placeholder="you@example.com" enterkeyhint="next">
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input type="password" id="logPassword" class="input-field" placeholder="••••••••" enterkeyhint="done">
+          </div>
+          <div class="forgot-link" onclick="handleForgotPassword()">Forgot Password?</div>
+        </div>
+
+        <!-- OTP FORM -->
+        <div id="otpForm" class="hidden">
+          <p style="text-align:center; color:var(--sub); margin-bottom:8px; font-size:14px; line-height:1.6;">
+            Enter the 6-digit code sent to<br>
+            <strong id="displayEmail" style="color:var(--text);"></strong>
+          </p>
+          <div class="otp-group" id="otpInputs">
+            <input type="text" maxlength="1" inputmode="numeric">
+            <input type="text" maxlength="1" inputmode="numeric">
+            <input type="text" maxlength="1" inputmode="numeric">
+            <input type="text" maxlength="1" inputmode="numeric">
+            <input type="text" maxlength="1" inputmode="numeric">
+            <input type="text" maxlength="1" inputmode="numeric">
+          </div>
+          <button class="btn-text" onclick="handleResendOtp()">Resend Code</button>
+        </div>
+
+        <button class="btn-submit" id="submitBtn" onclick="handleAction()">Continue</button>
+
+      </div>
+    </div>
+    <!-- /auth -->
+
+  </div>
+
+  <!-- Legal Modal -->
+  <div class="modal-overlay" id="legalModal">
+    <div class="modal-card">
+      <h3>Risk Disclosure</h3>
+      <p>Investing involves risk. NexTrade uses automated strategies that can be volatile. By continuing, you acknowledge that you are investing capital that is at risk. Past performance does not guarantee future results.</p>
+      <button class="btn-submit" onclick="confirmLegal()" style="margin-top:0;">I Understand & Accept</button>
+    </div>
+  </div>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+
+  <script>
+    // ── SCROLL REVEAL ──────────────────────────────────────────────
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          observer.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.12 });
+
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+
+    // ── AUTH STATE ────────────────────────────────────────────────
+    let mode = 'signup';
+    let termsAccepted = false;
     let pendingEmail = '';
-    let isSupabaseReady = false;
 
+
+    // ── INIT — check existing session ─────────────────────────────
     async function init() {
-        let attempts = 0;
-        while (!window.supabaseClient && attempts < 20) {
-            await new Promise(r => setTimeout(r, 100));
-            attempts++;
-        }
-
-        if (!window.supabaseClient) {
-            showError('Configuration failed. Check config.js');
-            return;
-        }
-
-        isSupabaseReady = true;
-        console.log('✅ Auth Ready');
-
-        // Auto-Redirect if already logged in
-        const { data } = await window.supabaseClient.auth.getSession();
-        if (data.session) {
-            // 🔥 FIX: Mark fresh login before redirect
-            sessionStorage.setItem('nextrade_fresh_login', 'true');
-            window.location.href = 'index.html';
-        }
+      let attempts = 0;
+      while (!window.supabaseClient && attempts < 20) {
+        await new Promise(r => setTimeout(r, 100));
+        attempts++;
+      }
+      if (!window.supabaseClient) {
+        showToast('Configuration failed. Check config.js');
+        return;
+      }
+      const { data } = await window.supabaseClient.auth.getSession();
+      if (data.session) {
+        sessionStorage.setItem('nextrade_fresh_login', 'true');
+        window.location.href = 'index.html';
+      }
     }
-
     init();
 
-    // ============================================
-    // 2. UI CONTROLLERS
-    // ============================================
-    window.switchTab = (tab) => {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        event.currentTarget.classList.add('active');
-        
-        document.getElementById('loginForm').classList.toggle('hidden', tab !== 'login');
-        document.getElementById('signupForm').classList.toggle('hidden', tab !== 'signup');
-        document.getElementById('forgotForm').classList.add('hidden');
-        
-        clearMsgs();
+
+    // ── LANDING → AUTH TRANSITION ─────────────────────────────────
+    window.enterAuth = (newMode) => {
+      mode = newMode;
+
+      const landing = document.getElementById('landing');
+      landing.classList.add('exit');
+
+      if (mode === 'login') {
+        document.getElementById('formTitle').textContent    = 'Welcome back';
+        document.getElementById('formSubtitle').textContent = 'Enter your credentials to continue.';
+        document.getElementById('signupForm').classList.add('hidden');
+        document.getElementById('loginForm').classList.remove('hidden');
+      }
+
+      setTimeout(() => {
+        landing.style.display = 'none';
+        document.getElementById('auth').classList.add('visible');
+      }, 280);
     };
 
-    window.toggleForgotPassword = (show) => {
-        document.getElementById('loginForm').classList.toggle('hidden', show);
-        document.getElementById('forgotForm').classList.toggle('hidden', !show);
-        document.getElementById('authTabs').classList.toggle('hidden', show);
-        clearMsgs();
+
+    // ── AUTH → LANDING RESET ──────────────────────────────────────
+    window.resetView = () => location.reload();
+
+
+    // ── LEGAL MODAL ───────────────────────────────────────────────
+    window.openLegal = () => {
+      document.getElementById('legalModal').style.display = 'flex';
     };
 
-    window.openModal = (id) => document.getElementById(id+'Modal').classList.add('active');
-    window.closeModal = (id) => document.getElementById(id+'Modal').classList.remove('active');
+    window.confirmLegal = () => {
+      termsAccepted = true;
+      const box = document.getElementById('customCheck');
+      box.style.borderColor = 'var(--success)';
+      box.style.background  = 'var(--success)';
+      box.querySelector('i').style.display = 'block';
+      document.getElementById('legalModal').style.display = 'none';
+    };
 
-    document.querySelectorAll('.toggle-password').forEach(icon => {
-        icon.onclick = function() {
-            const input = this.previousElementSibling;
-            input.type = input.type === 'password' ? 'text' : 'password';
-            this.classList.toggle('fa-eye');
-            this.classList.toggle('fa-eye-slash');
-        }
+
+    // ── TOAST ─────────────────────────────────────────────────────
+    window.showToast = (msg, type = 'danger') => {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.background = type === 'danger' ? 'var(--danger)' : 'var(--success)';
+      t.style.color = 'white';
+      t.style.display = 'block';
+      setTimeout(() => t.style.display = 'none', 4000);
+    };
+
+
+    // ── KEYBOARD UX ───────────────────────────────────────────────
+    document.addEventListener('keyup', (e) => {
+      if (e.key !== 'Enter') return;
+      const a = document.activeElement;
+      if (a.id === 'regName')     document.getElementById('regEmail').focus();
+      else if (a.id === 'regEmail')    document.getElementById('regPassword').focus();
+      else if (a.id === 'logEmail')    document.getElementById('logPassword').focus();
+      else if (a.id === 'regPassword' || a.id === 'logPassword') {
+        a.blur(); handleAction();
+      }
     });
 
-    // ============================================
-    // 3. AUTH LOGIC (🔥 FIXED WITH SESSION MARKERS)
-    // ============================================
 
-    // --- LOGIN ---
-    document.getElementById('loginForm').onsubmit = async (e) => {
-        e.preventDefault();
-        const btn = document.getElementById('loginBtn');
-        setLoading(btn, true);
-        clearMsgs();
+    // ── OTP INPUT ─────────────────────────────────────────────────
+    const otpInputs = document.querySelectorAll('#otpInputs input');
+    otpInputs.forEach((input, i) => {
+      input.addEventListener('input', (e) => {
+        e.target.value = e.target.value.replace(/[^0-9]/g, '');
+        if (e.target.value && i < 5) otpInputs[i + 1].focus();
+        if (Array.from(otpInputs).every(x => x.value)) handleAction();
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !e.target.value && i > 0) otpInputs[i - 1].focus();
+      });
+    });
 
-        const email = document.getElementById('loginEmail').value.trim();
-        const password = document.getElementById('loginPassword').value;
+    function getOtpValue() {
+      return Array.from(otpInputs).map(i => i.value).join('');
+    }
 
-        const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
 
-        if (error) {
-            showError(error.message);
-            setLoading(btn, false);
-        } else {
-            // 🔥 FIX: Mark fresh login
+    // ── SUPABASE AUTH LOGIC (identical to Gemini) ─────────────────
+    window.handleAction = async () => {
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      const orig = btn.textContent;
+      btn.textContent = 'Processing…';
+
+      try {
+        if (!window.supabaseClient) throw new Error('Connection error. Please refresh.');
+
+        // SIGN UP
+        if (mode === 'signup') {
+          if (!termsAccepted) throw new Error('Please accept the Risk Disclosure first.');
+          const name     = document.getElementById('regName').value.trim();
+          const email    = document.getElementById('regEmail').value.trim();
+          const password = document.getElementById('regPassword').value;
+          if (!name || !email || !password) throw new Error('Please fill in all fields.');
+
+          const { data, error } = await window.supabaseClient.auth.signUp({
+            email, password, options: { data: { full_name: name } }
+          });
+          if (error) throw error;
+
+          if (data.session) {
             sessionStorage.setItem('nextrade_fresh_login', 'true');
-            
-            // Wait a bit for session to propagate
-            await new Promise(r => setTimeout(r, 300));
             window.location.href = 'index.html';
+            return;
+          }
+
+          // OTP flow
+          pendingEmail = email;
+          mode = 'otp';
+          document.getElementById('displayEmail').textContent = email;
+          document.getElementById('signupForm').classList.add('hidden');
+          document.getElementById('otpForm').classList.remove('hidden');
+          document.getElementById('formTitle').textContent    = 'Verify Email';
+          document.getElementById('formSubtitle').textContent = 'Check your inbox for the 6-digit code.';
+          btn.textContent = 'Verify Code';
+          btn.disabled = false;
         }
+
+        // LOGIN
+        else if (mode === 'login') {
+          const email    = document.getElementById('logEmail').value.trim();
+          const password = document.getElementById('logPassword').value;
+          if (!email || !password) throw new Error('Please enter email and password.');
+
+          const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+
+          sessionStorage.setItem('nextrade_fresh_login', 'true');
+          window.location.href = 'index.html';
+        }
+
+        // VERIFY OTP
+        else if (mode === 'otp') {
+          const token = getOtpValue();
+          if (token.length !== 6) throw new Error('Please enter the full 6-digit code.');
+
+          const { error } = await window.supabaseClient.auth.verifyOtp({
+            email: pendingEmail, token, type: 'signup'
+          });
+          if (error) throw error;
+
+          // Wait for session propagation (original logic preserved)
+          let sessionReady = false;
+          let attempts = 0;
+          while (!sessionReady && attempts < 10) {
+            await new Promise(r => setTimeout(r, 500));
+            const { data: sd } = await window.supabaseClient.auth.getSession();
+            if (sd.session) sessionReady = true;
+            attempts++;
+          }
+
+          if (!sessionReady) throw new Error('Session timeout. Please try logging in manually.');
+
+          showToast('Account Verified! Welcome aboard.', 'success');
+          sessionStorage.setItem('nextrade_fresh_login', 'true');
+          localStorage.setItem('nex_onboarded', 'false');
+          setTimeout(() => window.location.href = 'index.html', 600);
+        }
+
+      } catch (err) {
+        showToast(err.message);
+        btn.disabled = false;
+        btn.textContent = orig;
+      }
     };
 
-    // --- SIGNUP ---
-    document.getElementById('signupForm').onsubmit = async (e) => {
-        e.preventDefault();
-        const btn = document.getElementById('signupBtn');
-        const email = document.getElementById('signupEmail').value.trim();
-        const password = document.getElementById('signupPassword').value;
-        const name = document.getElementById('signupName').value.trim();
-
-        if(!document.getElementById('termsCheck').checked) {
-            showError('Please accept Terms.');
-            return;
-        }
-        
-        setLoading(btn, true);
-        clearMsgs();
-
-        const { data, error } = await window.supabaseClient.auth.signUp({
-            email, 
-            password,
-            options: { 
-                data: { 
-                    full_name: name,
-                } 
-            }
+    window.handleResendOtp = async () => {
+      try {
+        const { error } = await window.supabaseClient.auth.resend({
+          type: 'signup', email: pendingEmail
         });
-
-        if (error) {
-            showError(error.message);
-            setLoading(btn, false);
-            return;
-        }
-
-        // If session exists immediately (auto-confirm enabled)
-        if (data.session) {
-            // 🔥 FIX: Mark fresh login
-            sessionStorage.setItem('nextrade_fresh_login', 'true');
-            
-            await new Promise(r => setTimeout(r, 300));
-            window.location.href = 'index.html';
-            return;
-        }
-
-        // Otherwise, show OTP modal
-        setLoading(btn, false);
-        pendingEmail = email;
-        document.getElementById('otpEmailDisplay').textContent = email;
-        openModal('otp');
+        if (error) throw error;
+        showToast('A new code has been sent.', 'success');
+        otpInputs.forEach(i => i.value = '');
+        otpInputs[0].focus();
+      } catch (err) {
+        showToast(err.message);
+      }
     };
 
-    // --- OTP VERIFICATION (🔥 FIXED WITH RETRY LOGIC + SESSION MARKER) ---
-    document.getElementById('otpForm').onsubmit = async (e) => {
-        e.preventDefault();
-        const btn = document.getElementById('otpBtn');
-        const token = document.getElementById('otpInput').value.trim();
-
-        if (token.length !== 6) {
-            alert('Please enter a valid 6-digit code');
-            return;
-        }
-
-        setLoading(btn, true);
-
-        try {
-            // Step 1: Verify OTP
-            const { data, error } = await window.supabaseClient.auth.verifyOtp({
-                email: pendingEmail,
-                token: token,
-                type: 'signup'
-            });
-
-            if (error) throw error;
-
-            // Step 2: Wait for session to propagate (CRITICAL FIX)
-            console.log('OTP verified, waiting for session...');
-            
-            let sessionReady = false;
-            let attempts = 0;
-            const maxAttempts = 10;
-
-            while (!sessionReady && attempts < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-                const { data: sessionData } = await window.supabaseClient.auth.getSession();
-                
-                if (sessionData.session) {
-                    sessionReady = true;
-                    console.log('✅ Session ready!');
-                } else {
-                    attempts++;
-                    console.log(`Waiting for session... attempt ${attempts}/${maxAttempts}`);
-                }
-            }
-
-            if (!sessionReady) {
-                throw new Error('Session timeout. Please try logging in manually.');
-            }
-
-            // Step 3: Redirect with confidence
-            // 🔥 FIX: Mark fresh login before redirect
-            sessionStorage.setItem('nextrade_fresh_login', 'true');
-            window.location.href = 'index.html';
-
-        } catch (err) {
-            console.error('OTP Verification Error:', err);
-            alert('Verification Failed: ' + (err.message || 'Unknown error'));
-            setLoading(btn, false);
-            
-            // Reset input
-            document.getElementById('otpInput').value = '';
-            document.getElementById('otpInput').focus();
-        }
-    };
-
-    // --- FORGOT PASSWORD ---
-    document.getElementById('forgotForm').onsubmit = async (e) => {
-        e.preventDefault();
-        const btn = document.getElementById('forgotBtn');
-        const email = document.getElementById('forgotEmail').value.trim();
-        
-        setLoading(btn, true);
-
+    window.handleForgotPassword = async () => {
+      const email = document.getElementById('logEmail').value.trim();
+      if (!email) {
+        showToast('Enter your email address first.');
+        document.getElementById('logEmail').focus();
+        return;
+      }
+      try {
         const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin + '/index.html?reset=true',
+          redirectTo: window.location.origin + '/index.html?reset=true'
         });
-
-        setLoading(btn, false);
-        
-        if (error) {
-            showError(error.message);
-        } else {
-            document.getElementById('forgotForm').reset();
-            showSuccess('Recovery link sent! Check your inbox.');
-            setTimeout(() => toggleForgotPassword(false), 3000);
-        }
+        if (error) throw error;
+        showToast('Password reset link sent to your email.', 'success');
+      } catch (err) {
+        showToast(err.message);
+      }
     };
-
-    // ============================================
-    // HELPERS
-    // ============================================
-    function setLoading(btn, loading) {
-        if (loading) {
-            btn.dataset.text = btn.innerText;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing';
-            btn.disabled = true;
-        } else {
-            btn.innerText = btn.dataset.text || 'Submit';
-            btn.disabled = false;
-        }
-    }
-
-    function showError(msg) {
-        const el = document.getElementById('errorMsg');
-        el.textContent = msg;
-        el.style.display = 'block';
-        document.getElementById('successMsg').style.display = 'none';
-    }
-
-    function showSuccess(msg) {
-        const el = document.getElementById('successMsg');
-        el.textContent = msg;
-        el.style.display = 'block';
-        document.getElementById('errorMsg').style.display = 'none';
-    }
-
-    function clearMsgs() {
-        document.getElementById('errorMsg').style.display = 'none';
-        document.getElementById('successMsg').style.display = 'none';
-    }
-
-    // Auto-submit OTP when 6 digits are entered
-    document.getElementById('otpInput').addEventListener('input', function(e) {
-        // Remove non-digits
-        this.value = this.value.replace(/\D/g, '');
-        
-        if (this.value.length === 6) {
-            // Small delay for better UX
-            setTimeout(() => {
-                document.getElementById('otpForm').requestSubmit();
-            }, 200);
-        }
-    });
-    </script>
-
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('NexTrade PWA Ready'))
-                    .catch(err => console.log('PWA Setup Failed', err));
-            });
-        }
-    </script>
+  </script>
 
 </body>
 </html>
