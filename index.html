@@ -215,8 +215,6 @@
   }
 </style>
 
-  <meta name="description" content="NexTrade - Institutional-grade crypto investment platform" />
-  <meta name="theme-color" content="#0a0c10" />
   <title>NexTrade</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -304,6 +302,37 @@
 </head>
 
 <body>
+
+<!-- PWA Install Banners — first in body, fixed-position, layout-safe -->
+
+<!-- iOS Install Banner -->
+<div id="pwa-ios-banner" role="dialog" aria-label="Install NexTrade">
+  <div class="pwa-ios-icon">
+    <img src="/pwa1.png" alt="NexTrade" onerror="this.style.display='none'">
+  </div>
+  <div class="pwa-ios-body">
+    <div class="pwa-ios-title">Add NexTrade to Home Screen</div>
+    <div class="pwa-ios-msg">
+      Tap <span class="pwa-ios-share">&#x2191;</span> <strong>Share</strong>,
+      then <strong>"Add to Home Screen"</strong> for the full app experience.
+    </div>
+  </div>
+  <button class="pwa-ios-close" onclick="dismissPWABanner()" aria-label="Dismiss">&#x2715;</button>
+</div>
+
+<!-- Android / Chrome Install Banner -->
+<div id="pwa-android-banner" role="dialog" aria-label="Install NexTrade">
+  <div class="pwa-android-icon">
+    <img src="/pwa1.png" alt="NexTrade">
+  </div>
+  <div class="pwa-android-body">
+    <div class="pwa-android-title">NexTrade</div>
+    <div class="pwa-android-sub">Add to home screen</div>
+  </div>
+  <button class="pwa-android-btn" onclick="triggerAndroidInstall()">Install</button>
+  <button class="pwa-android-close" onclick="dismissPWABanner()" aria-label="Dismiss">&#x2715;</button>
+</div>
+
   <div id="loading-screen">
     <div class="loader-content">
       <div class="loader-logo">
@@ -522,36 +551,6 @@
   if (window.CacheManager) CacheManager.stopBackgroundChecker();
 });
   </script>
-  <!-- ── STEP 3: PASTE THESE HTML ELEMENTS just before closing </body> ─────── -->
-
-<!-- iOS Install Banner (Safari / iPhone / iPad) -->
-<div id="pwa-ios-banner" role="dialog" aria-label="Install NexTrade">
-  <div class="pwa-ios-icon">
-    <img src="/pwa1.png" alt="NexTrade" onerror="this.style.display='none'">
-  </div>
-  <div class="pwa-ios-body">
-    <div class="pwa-ios-title">Add NexTrade to Home Screen</div>
-    <div class="pwa-ios-msg">
-      Tap <span class="pwa-ios-share">&#x2191;</span> <strong>Share</strong>,
-      then <strong>"Add to Home Screen"</strong> for the full app experience.
-    </div>
-  </div>
-  <button class="pwa-ios-close" onclick="dismissPWABanner()" aria-label="Dismiss">&#x2715;</button>
-</div>
-
-<!-- Android / Chrome Install Banner -->
-<div id="pwa-android-banner" role="dialog" aria-label="Install NexTrade">
-  <div class="pwa-android-icon">
-    <img src="/pwa1.png" alt="NexTrade">
-  </div>
-  <div class="pwa-android-body">
-    <div class="pwa-android-title">NexTrade</div>
-    <div class="pwa-android-sub">Add to home screen</div>
-  </div>
-  <button class="pwa-android-btn" onclick="triggerAndroidInstall()">Install</button>
-  <button class="pwa-android-close" onclick="dismissPWABanner()" aria-label="Dismiss">&#x2715;</button>
-</div>
-
 
 </body>
 </html>

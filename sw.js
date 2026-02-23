@@ -48,6 +48,20 @@ const BYPASS_HOSTS = [
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  MESSAGE — handle SKIP_WAITING so new SW activates immediately
+//  The page posts { type: 'SKIP_WAITING' } when a new SW is found.
+//  Without this handler, the new SW sits in 'waiting' forever and Chrome
+//  may not consider the PWA installable on subsequent visits.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  INSTALL — precache all local static assets
 // ═══════════════════════════════════════════════════════════════════════════════
 
