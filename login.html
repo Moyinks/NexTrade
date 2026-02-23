@@ -1202,6 +1202,35 @@
       max-width: 280px;
     }
 
+
+    /* ── STANDALONE PWA: status bar safe-area fix ───────────────────────────
+       viewport-fit:cover removes browser chrome but the status bar still sits
+       on top. Android env(safe-area-inset-top) returns 0 on non-notch devices
+       even though ~24-32px of status bar is covering the content. Force a
+       guaranteed minimum that clears the bar on every phone. */
+
+    @media (display-mode: standalone) {
+      #auth {
+        /* 56px = 32px status bar + 24px breathing room */
+        padding-top: max(56px, calc(env(safe-area-inset-top) + 24px)) !important;
+      }
+      .hero {
+        padding-top: max(64px, calc(env(safe-area-inset-top) + 16px));
+      }
+    }
+
+    /* iOS notch / Dynamic Island — env() IS reliable on iOS so we push higher */
+    @supports (-webkit-touch-callout: none) {
+      @media (display-mode: standalone) {
+        #auth {
+          padding-top: max(64px, calc(env(safe-area-inset-top) + 24px)) !important;
+        }
+        .hero {
+          padding-top: max(72px, calc(env(safe-area-inset-top) + 20px));
+        }
+      }
+    }
+
   </style>
 </head>
 <body>
