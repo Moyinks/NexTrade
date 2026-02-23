@@ -240,7 +240,12 @@
       /* We explicitly DO NOT set height here to avoid conflicts with layout.css */
     }
 
-    /* MATURE LOADING SCREEN */
+    /* ── SPLASH / LOADING SCREEN ──────────────────────────────────────────
+       Designed to be a seamless continuation of Chrome's auto-generated
+       PWA splash. Chrome shows pwa2.png centered on #0B0E11 background.
+       We match that exactly, then grow the logo slightly and fade in the
+       spinner — making Chrome splash → HTML splash feel like one screen. */
+
     #loading-screen {
       position: fixed;
       inset: 0;
@@ -249,8 +254,9 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: #0a0c10;
-      transition: opacity 0.4s ease-out;
+      /* Match manifest background_color exactly */
+      background: #0B0E11;
+      transition: opacity 0.5s ease-out;
     }
 
     #loading-screen.hidden {
@@ -259,45 +265,74 @@
     }
 
     .loader-content {
-      text-align: center;
-      animation: fadeIn 0.5s ease-out;
-    }
-
-    .loader-logo {
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 24px;
-      font-size: 2rem;
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      color: white;
     }
 
-    .loader-logo i {
-      color: #2563eb; /* Primary Blue */
-      font-size: 1.8rem;
+    /* The brand image — sized to feel intentional, not accidental */
+    .loader-brand-img {
+      width: min(72vw, 280px);
+      height: min(72vw, 280px);
+      object-fit: contain;
+      /* Pulse-in: starts at Chrome's auto-splash size (~33vw), grows to 72vw */
+      animation: splashGrow 0.55s cubic-bezier(0.34, 1.2, 0.64, 1) forwards;
+      margin-bottom: 32px;
     }
 
-    .spinner-ring {
-      width: 28px;
-      height: 28px;
-      border: 3px solid rgba(255, 255, 255, 0.1);
-      border-top-color: #2563eb;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin: 0 auto 16px;
+    @keyframes splashGrow {
+      from { opacity: 0.7; transform: scale(0.72); }
+      to   { opacity: 1;   transform: scale(1); }
+    }
+
+    /* Thin progress line at bottom — cleaner than a spinner for a splash */
+    .loader-bar-track {
+      width: min(56vw, 200px);
+      height: 2px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .loader-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa);
+      border-radius: 2px;
+      animation: barFill 1.8s ease-in-out forwards;
+    }
+
+    @keyframes barFill {
+      0%   { width: 0%; }
+      60%  { width: 75%; }
+      90%  { width: 92%; }
+      100% { width: 92%; } /* Holds — JS sets to 100% on success */
     }
 
     .loader-text {
-      color: rgba(255, 255, 255, 0.5);
-      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.35);
+      font-size: 0.78rem;
       font-weight: 500;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-family: 'Inter', sans-serif;
     }
 
+    /* Backup spinner — shown only if pwa2.png fails to load */
+    .loader-spinner-fallback {
+      display: none;
+      width: 40px; height: 40px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+      margin-bottom: 32px;
+    }
+
+    .loader-brand-img.errored + .loader-spinner-fallback { display: block; }
+
     @keyframes spin { 100% { transform: rotate(360deg); } }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 
@@ -335,12 +370,20 @@
 
   <div id="loading-screen">
     <div class="loader-content">
-      <div class="loader-logo">
-        <i class="fas fa-chart-line"></i>
-        <span>NexTrade</span>
+      <!-- Use actual brand image so HTML splash matches Chrome auto-splash visually -->
+      <img
+        class="loader-brand-img"
+        src="/pwa2.png"
+        alt="NexTrade"
+        onerror="this.classList.add('errored'); this.style.display='none';"
+      >
+      <!-- Fallback icon if image 404s -->
+      <div class="loader-spinner-fallback"></div>
+
+      <div class="loader-bar-track">
+        <div class="loader-bar-fill" id="loaderBar"></div>
       </div>
-      <div class="spinner-ring"></div>
-      <div class="loader-text">Authenticating...</div>
+      <div class="loader-text" id="loaderText">Authenticating</div>
     </div>
   </div>
 
@@ -517,33 +560,32 @@
 
       if (!ok) {
         console.error('❌ App failed to initialize in time');
-        document.querySelector('.loader-text').textContent = 'Connection Error. Reloading...';
-        document.querySelector('.loader-text').style.color = '#ef4444';
+        const errText = document.getElementById('loaderText');
+        if (errText) { errText.textContent = 'Connection error'; errText.style.color = '#ef4444'; }
         return;
       }
 
       // 2. Initialize App
       try {
-        // Bootstraps must verify the DOM before App starts
         await Bootstraps.init();
         await App.init();
-        
-        // 3. Graceful Transition
-        const screen = document.getElementById('loading-screen');
-        const text = document.querySelector('.loader-text');
-        text.textContent = 'Welcome Back';
-        text.style.color = '#10b981'; // Success Green
+
+        // 3. Complete progress bar then dismiss
+        const bar = document.getElementById('loaderBar');
+        if (bar) { bar.style.transition = 'width 0.25s ease'; bar.style.width = '100%'; }
 
         setTimeout(() => {
-          screen.classList.add('hidden');
-          setTimeout(() => screen.remove(), 400); // Cleanup DOM
-        }, 600);
-        
+          const screen = document.getElementById('loading-screen');
+          if (screen) {
+            screen.classList.add('hidden');
+            setTimeout(() => screen.remove(), 500);
+          }
+        }, 350);
+
         console.log('NexTrade Ready');
       } catch (err) {
         console.error('Init Error:', err);
-        // We let the app handle auth errors internally (redirect to login)
-     
+        // Auth errors handled internally — app redirects to login
       }
     })();
     window.addEventListener('beforeunload', () => {
