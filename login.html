@@ -1756,13 +1756,32 @@
         showToast('Configuration failed. Check config.js');
         return;
       }
-      const { data } = await window.supabaseClient.auth.getSession();
+            const { data } = await window.supabaseClient.auth.getSession();
       if (data.session) {
         sessionStorage.setItem('nextrade_fresh_login', 'true');
         window.location.href = 'index.html';
+        return;
+      }
+
+      // SHORT-TERM MEMORY: Remember if we were on the OTP screen before we opened the mail app!
+      const savedMode = sessionStorage.getItem('saved_auth_mode');
+      if (savedMode === 'otp') {
+        pendingEmail = sessionStorage.getItem('saved_auth_email');
+        mode = 'otp';
+        
+        // Hide the landing page and show the OTP form directly
+        document.getElementById('landing').style.display = 'none';
+        document.getElementById('auth').classList.add('visible');
+        document.getElementById('signupForm').classList.add('hidden');
+        document.getElementById('otpForm').classList.remove('hidden');
+        
+        document.getElementById('formTitle').textContent = 'Verify Email';
+        document.getElementById('formSubtitle').textContent = 'Check your inbox for the 6-digit code.';
+        document.getElementById('displayEmail').textContent = pendingEmail;
       }
     }
     init();
+
 
 
     // ── LANDING → AUTH TRANSITION ─────────────────────────────────
@@ -1865,10 +1884,15 @@
           const password = document.getElementById('regPassword').value;
           if (!name || !email || !password) throw new Error('Please fill in all fields.');
 
-          const { data, error } = await window.supabaseClient.auth.signUp({
+                    const { data, error } = await window.supabaseClient.auth.signUp({
             email, password, options: { data: { full_name: name } }
           });
           if (error) throw error;
+
+          // THE CLUE: If identities is empty, Supabase is secretly telling us the email is taken!
+          if (data.user && data.user.identities && data.user.identities.length === 0) {
+            throw new Error('This email is already registered. Please log in.');
+          }
 
           if (data.session) {
             sessionStorage.setItem('nextrade_fresh_login', 'true');
@@ -1879,7 +1903,13 @@
           // OTP flow
           pendingEmail = email;
           mode = 'otp';
+          
+          // SAVE TO MEMORY: So if the phone goes to sleep, we remember!
+          sessionStorage.setItem('saved_auth_mode', 'otp');
+          sessionStorage.setItem('saved_auth_email', email);
+          
           document.getElementById('displayEmail').textContent = email;
+
           document.getElementById('signupForm').classList.add('hidden');
           document.getElementById('otpForm').classList.remove('hidden');
           document.getElementById('formTitle').textContent    = 'Verify Email';
