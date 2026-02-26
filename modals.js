@@ -166,12 +166,18 @@ const Modal = (() => {
       }
     });
 
-    backdrop.addEventListener('pointerup', (e) => {
-      if (startedOnBackdrop && card && card.dataset.dismissible !== 'false') {
+        backdrop.addEventListener('pointerup', (e) => {
+      if (startedOnBackdrop) {
+        // Only block the close if a card exists AND it explicitly says do not dismiss
+        if (card && card.dataset.dismissible === 'false') {
+          startedOnBackdrop = false;
+          return;
+        }
         close();
       }
       startedOnBackdrop = false;
     });
+
 
     // Failsafe: if the finger drags off the backdrop and releases
     backdrop.addEventListener('pointercancel', () => {
@@ -298,33 +304,26 @@ const Modal = (() => {
     close();
   }
 
-  // ── IDEMPOTENT TEARDOWN ────────────────────────────────────────────────────
+  // ── RACE-CONDITION PROOF TEARDOWN ──────────────────────────────────────────
 
   function close() {
-    if (!overlay || _isClosing || !overlay.classList.contains('ntm-open')) return;
+    if (!overlay || !overlay.classList.contains('ntm-open')) return;
     
-    _isClosing = true;
     overlay.classList.remove('ntm-open');
 
-    const onEnd = (e) => {
-      // Ignore inner bubbled transitions, only tear down on the main backdrop finish
-      if (e && e.target !== backdrop && e.target !== card) return;
+    // Take a "snapshot" of the exact card we are closing right now.
+    const cardToClose = card;
 
-      backdrop.removeEventListener('transitionend', onEnd);
-      if (card) {
-        card.removeEventListener('transitionend', onEnd);
-        if (card.parentNode) card.remove();
+    // Wait for the CSS fade-out animation to finish (280ms in CSS + tiny buffer)
+    setTimeout(() => {
+      if (cardToClose && cardToClose.parentNode) {
+        cardToClose.remove();
+      }
+      // ONLY clear the global card variable if a NEW card hasn't already replaced it!
+      if (card === cardToClose) {
         card = null;
       }
-      _isClosing = false;
-    };
-
-    backdrop.addEventListener('transitionend', onEnd);
-
-    // Fallback if browser throttles the transition event
-    setTimeout(() => {
-      if (_isClosing) onEnd();
-    }, 450);
+    }, 320); 
   }
 
   return { open, confirm, close };

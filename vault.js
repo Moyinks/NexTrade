@@ -419,7 +419,7 @@
 
   function buildPlanCard(strategy, recommended) {
     const card = el('div');
-    card.style.cssText = 'position:relative;background:var(--color-surface-elevated);border-radius:20px;overflow:hidden;margin-bottom:20px;transition:transform 0.2s ease,border-color 0.2s;cursor:pointer;';
+    card.style.cssText = 'position:relative;background:var(--color-surface-elevated);border-radius:20px;overflow:hidden;margin-bottom:95px;transition:transform 0.2s ease,border-color 0.2s;cursor:pointer;';
     card.style.border = '1px solid ' + (recommended ? strategy.accentColor + '50' : 'var(--color-border)');
     card.addEventListener('mouseenter', () => { card.style.transform = 'translateY(-2px)'; card.style.borderColor = strategy.accentColor + '80'; });
     card.addEventListener('mouseleave', () => { card.style.transform = ''; card.style.borderColor = recommended ? strategy.accentColor + '50' : 'var(--color-border)'; });
