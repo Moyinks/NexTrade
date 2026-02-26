@@ -727,7 +727,8 @@
     // padding-bottom:80px clears the fixed navbar.
     // NO extra horizontal padding — .app-main CSS class already provides 16px on each side.
     const scroller = el('div');
-    scroller.style.cssText = 'flex:1; min-height:0; width:100%; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; padding-bottom:16px;';
+    scroller.style.cssText = 'flex:1; min-height:0; width:100%; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; padding-bottom:110px;';
+
 
     scroller.appendChild(buildHero());
     scroller.appendChild(buildQuickActions());

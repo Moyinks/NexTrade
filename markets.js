@@ -40,7 +40,9 @@ const Market = (() => {
     container.className = 'market-page';
     container.style.overflowY = 'auto';
     container.style.webkitOverflowScrolling = 'touch';
-    container.style.height = 'calc(100vh - var(--navbar-height-mobile) - var(--space-4))';
+    // Tell the page to take up the full screen, ignoring the old navbar height
+container.style.height = '100dvh'; 
+
 
     console.log('[MARKET] 🎯 Rendering market page...');
 

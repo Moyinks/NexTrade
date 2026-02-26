@@ -3,7 +3,8 @@
  * * ARCHITECTURE UPDATE:
  * 1. REMOVED: Conflicting "sticky" positioning (Layout.css handles structure).
  * 2. REMOVED: 140px padding hack (Flexbox now handles viewport filling).
- * 3. PRESERVED: Touch targets, safe-area insets, and font scaling.
+ * 3. REMOVED: All .app-footer height/padding overrides — footer is fully ghosted in layout.css.
+ * 4. PRESERVED: Touch targets, safe-area insets, and font scaling.
  */
 
 /* ============================================
@@ -44,9 +45,7 @@
     font-size: var(--text-3xl);
   }
 
-  .app-footer {
-    height: var(--navbar-height);
-  }
+  /* .app-footer height override removed — footer is ghosted, not in layout flow */
 
   .strategy-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -249,9 +248,7 @@
     padding-top: max(var(--space-4), env(safe-area-inset-top));
   }
 
-  .app-footer {
-    padding-bottom: max(0px, env(safe-area-inset-bottom));
-  }
+  /* .app-footer safe-area padding removed — footer is ghosted */
 }
 
 /* ============================================
