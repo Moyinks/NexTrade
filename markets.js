@@ -351,9 +351,12 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
       const price = fullData?.current_price || 0;
       const isUp = change24h >= 0;
 
+      // FIX: coin.id was interpolated into an onclick string — executable JS context.
+      // A compromised API response could inject arbitrary JS. Use data-attribute + delegation.
+      const safeId = encodeURIComponent(String(coin.id || ''));
       return `
-        <div onclick="Market.showCoinDetails('${coin.id}')" style="
-          min-width:140px; 
+        <div data-trending-coin="${safeId}" style="
+          min-width:140px;
           background: var(--color-surface);
           border: 1px solid var(--color-border);
           border-radius: 12px;
@@ -362,9 +365,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
           transition: all 0.2s;
           position: relative;
           overflow: hidden;
-        " 
-        onmouseover="this.style.borderColor='var(--color-primary)'; this.style.transform='translateY(-2px)';" 
-        onmouseout="this.style.borderColor='var(--color-border)'; this.style.transform='translateY(0)';">
+        ">
           
           <div style="position:absolute; top:8px; right:8px; font-size:10px; font-weight:700; color:var(--color-text-tertiary); background:var(--color-surface-elevated); padding:2px 6px; border-radius:4px;">
             #${index + 1}
@@ -409,6 +410,16 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
         ${cards}
       </div>
     `;
+
+    // Event delegation — handles clicks on all [data-trending-coin] cards.
+    // Decodes the coin id from the data attribute (was encoded to prevent XSS
+    // when the attribute was built from API data).
+    trendingContainer.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-trending-coin]');
+      if (!card) return;
+      const coinId = decodeURIComponent(card.dataset.trendingCoin || '');
+      if (coinId) showCoinDetails(coinId);
+    }, { once: false });
 
     setTimeout(() => renderTrendingSparklines(), 100);
   }

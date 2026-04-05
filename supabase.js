@@ -1,51 +1,44 @@
 /**
- * NexTrade — Supabase Connection Module (Infrastructure Layer)
- * * RESPONSIBILITIES:
- * 1. Validates configuration credentials (URL/Key).
- * 2. Initializes the Supabase JS Client using the global SDK.
- * 3. Exposes the authenticated client as a global singleton: 'window.supabaseClient'.
- * 4. Fails loudly if dependencies are missing to prevent silent runtime errors.
+ * NexTrade — Supabase Verification Module
+ * ══════════════════════════════════════════════════════════════════════════════
+ * HISTORY:
+ * The original supabase.js tried to read window.Config.SUPABASE_URL, which was
+ * never set — config.js sets window.SUPABASE_CONFIG and window.supabaseClient
+ * directly. The result was that supabase.js always failed its own guard and
+ * exited silently, making the entire module dead code while still being loaded.
+ *
+ * FIX:
+ * config.js is the single place the Supabase client is initialized. This module
+ * now simply verifies that initialization succeeded and logs a clear error if it
+ * didn't, so failures are visible instead of silent. It does NOT create a second
+ * client — duplicate clients cause session conflicts.
  */
 
 (function () {
   'use strict';
 
-  // 1. Dependency Check: Ensure the Supabase SDK script is loaded in index.html
-  if (typeof window.supabase === 'undefined') {
-    console.error('❌ Supabase: SDK not found. Please ensure the CDN script is loaded before this file.');
-    return;
+  // config.js initializes supabaseClient before this file loads (see index.html
+  // script order). Give it a short polling window in case of timing edge cases.
+  let attempts = 0;
+  const MAX_ATTEMPTS = 20; // 2 seconds total
+
+  function verify() {
+    if (window.supabaseClient) {
+      console.log('[SUPABASE] ✅ Client verified — initialized by config.js');
+      return;
+    }
+
+    attempts++;
+    if (attempts < MAX_ATTEMPTS) {
+      setTimeout(verify, 100);
+    } else {
+      console.error(
+        '[SUPABASE] ❌ Client not initialized after ' + MAX_ATTEMPTS + ' attempts. ' +
+        'Check config.js — SUPABASE_CONFIG.url and .anonKey must be set correctly.'
+      );
+    }
   }
 
-  // 2. Configuration Check: Ensure Config.js has loaded
-  // We check for both window.Config and the specific keys to be safe.
-  const config = window.Config || {};
-  const SUPABASE_URL = config.SUPABASE_URL;
-  const SUPABASE_KEY = config.SUPABASE_ANON_KEY;
-
-  if (!SUPABASE_URL || !SUPABASE_KEY || SUPABASE_URL.includes('YOUR_')) {
-    console.error('❌ Supabase: Invalid or missing API credentials in Config.js.');
-    return;
-  }
-
-  // 3. Client Initialization
-  // Options allow for better session persistence and auto-refresh handling.
-  try {
-    const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true
-      }
-    });
-
-    // 4. Global Exposure
-    // This is the variable consistent with app.js and wallet.js
-    window.supabaseClient = client;
-    
-    console.log('⚡ Supabase: Connection initialized successfully.');
-
-  } catch (err) {
-    console.error('❌ Supabase: Client initialization failed.', err);
-  }
+  verify();
 
 })();

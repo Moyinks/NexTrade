@@ -1,7 +1,17 @@
 /**
- * NexTrade — Authentication Module
- * Login and signup functionality with Supabase
- * Self-invoking module pattern
+ * NexTrade — Auth Module
+ * ══════════════════════════════════════════════════════════════════════════════
+ * NOTE: This module is NOT loaded by login.html or index.html.
+ * The active auth system is the inline JS in login.html which calls
+ * window.supabaseClient.auth directly. This file is a secondary implementation
+ * that was abandoned when login.html was refactored. Kept here in case a
+ * future refactor wants to extract auth into its own module.
+ *
+ * FIXES applied (previously broken even if loaded):
+ * - SupabaseClient.signIn/signUp → window.supabaseClient.auth.*
+ * - Loader.show/hide → removed (Loader not in scope on login page)
+ * - Modal.alert → Modal.open (alert method doesn't exist on Modal)
+ * - App.handleLogin(user) → App.handleLogin() (no argument needed)
  */
 
 const Auth = (() => {
@@ -303,21 +313,19 @@ const Auth = (() => {
     submitBtn.textContent = 'Signing in...';
 
     try {
-      Loader.show();
-      const result = await SupabaseClient.signIn(email, password);
-      Loader.hide();
-
-      if (result.success) {
-        await App.handleLogin(result.user);
+      if (!window.supabaseClient) throw new Error('Connection error. Please refresh.');
+      const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      if (data.session) {
+        if (window.App) App.handleLogin();
       } else {
-        showError('login-password', result.error || 'Invalid email or password');
+        showError('login-password', 'Login failed. Please try again.');
         submitBtn.disabled = false;
         submitBtn.textContent = 'Sign In';
       }
     } catch (error) {
-      Loader.hide();
       console.error('Login error:', error);
-      showError('login-password', 'An error occurred. Please try again.');
+      showError('login-password', error.message || 'An error occurred. Please try again.');
       submitBtn.disabled = false;
       submitBtn.textContent = 'Sign In';
     }
@@ -355,28 +363,30 @@ const Auth = (() => {
     submitBtn.textContent = 'Creating account...';
 
     try {
-      Loader.show();
-      const result = await SupabaseClient.signUp(email, password);
-      Loader.hide();
-
-      if (result.success) {
-        await Modal.alert({
-          title: 'Account Created',
-          message: 'Your account has been created successfully. Please check your email to verify your account.',
-          type: 'success',
-          buttonText: 'Continue'
-        });
-
-        await App.handleLogin(result.user);
+      if (!window.supabaseClient) throw new Error('Connection error. Please refresh.');
+      const { data, error } = await window.supabaseClient.auth.signUp({ email, password });
+      if (error) throw error;
+      // If identities is empty, the email is already registered
+      if (data.user && data.user.identities && data.user.identities.length === 0) {
+        throw new Error('This email is already registered. Please sign in.');
+      }
+      if (data.session) {
+        // Email confirmation disabled — go straight to app
+        if (window.App) App.handleLogin();
       } else {
-        showError('signup-confirm', result.error || 'Failed to create account');
+        // Email confirmation required — show message via Modal.open (not Modal.alert which doesn't exist)
+        if (window.Modal) {
+          const msg = document.createElement('p');
+          msg.style.cssText = 'color:var(--color-text-secondary);font-size:14px;line-height:1.6;margin:0;';
+          msg.textContent = 'Account created. Check your email and click the verification link to continue.';
+          Modal.open({ title: 'Check Your Email', content: msg });
+        }
         submitBtn.disabled = false;
         submitBtn.textContent = 'Create Account';
       }
     } catch (error) {
-      Loader.hide();
       console.error('Signup error:', error);
-      showError('signup-confirm', 'An error occurred. Please try again.');
+      showError('signup-confirm', error.message || 'An error occurred. Please try again.');
       submitBtn.disabled = false;
       submitBtn.textContent = 'Create Account';
     }
