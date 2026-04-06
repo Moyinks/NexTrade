@@ -7,6 +7,14 @@
  * 3. Optimistic rendering (show cached data immediately)
  * 4. Graceful degradation (stale > empty)
  * 5. Zero "No Results Found" errors
+ *
+ * FIX (C2): buildUIFromCache() was synchronous and accessed
+ * CacheManager.getMarketData().data and CacheManager.getTrendingCoins().data
+ * without await. Both functions are async and return Promises. Accessing
+ * .data on a Promise returns undefined, which fell through to the || []
+ * fallback. The cache was loaded but the data was silently discarded.
+ * The function is now async. Both calls are awaited. Call sites in render()
+ * are also awaited.
  * ══════════════════════════════════════════════════════════════
  */
 
@@ -61,8 +69,12 @@ container.style.height = '100dvh';
       showLoadingScreen();
       isInitialLoad = false;
     } else {
-      // Build UI immediately with cached data
-      buildUIFromCache();
+      // FIX (C2): buildUIFromCache is now async — must await here so the
+      // optimistic render completes before loadAllData is called. Without
+      // this await, buildUIFromCache returned a Promise immediately and the
+      // cache data was never populated into marketData / trendingData before
+      // the UI was handed off.
+      await buildUIFromCache();
     }
 
     try {
@@ -85,7 +97,8 @@ container.style.height = '100dvh';
       const fallbackStatus = CacheManager.getCacheStatus();
       if (fallbackStatus.marketData.cached) {
         console.log('[MARKET] 📦 Using cached data after error');
-        buildUIFromCache();
+        // FIX (C2): await here too — same bug existed in the error fallback path.
+        await buildUIFromCache();
       } else {
         showErrorScreen(error.message);
       }
@@ -96,7 +109,17 @@ container.style.height = '100dvh';
   // OPTIMISTIC RENDERING
   // ============================================
 
-  function buildUIFromCache() {
+  // FIX (C2): Function is now async. Both CacheManager calls are awaited.
+  // Previously: CacheManager.getMarketData().data
+  //   → getMarketData() returns Promise<{success, data, ...}>
+  //   → .data on a Promise is undefined
+  //   → undefined || [] = []
+  //   → marketData set to [], rendering nothing from cache
+  // Now: (await CacheManager.getMarketData()).data
+  //   → resolves the Promise first
+  //   → .data accesses the actual result object's data property
+  //   → correct array of coins is used
+  async function buildUIFromCache() {
     console.log('[MARKET] 📦 Building UI from cache...');
 
     const cacheStatus = CacheManager.getCacheStatus();
@@ -109,14 +132,16 @@ container.style.height = '100dvh';
 
     // Use cached market data
     if (cacheStatus.marketData.cached) {
-      marketData = CacheManager.getMarketData().data || [];
+      const marketResult = await CacheManager.getMarketData();
+      marketData = marketResult.data || [];
       const filtered = applyFilter(marketData, currentFilter);
       renderMarketItems(filtered);
     }
 
     // Use cached trending
     if (cacheStatus.trending.cached) {
-      trendingData = CacheManager.getTrendingCoins().data || [];
+      const trendingResult = await CacheManager.getTrendingCoins();
+      trendingData = trendingResult.data || [];
       renderTrendingCards();
     }
 

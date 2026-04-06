@@ -1,7 +1,29 @@
 /**
- * NexTrade — Vault Module v6.1
+ * NexTrade — Vault Module v6.2
  * ══════════════════════════════════════════════════════════════════════════════
- * FIXES:
+ * FIXES (v6.1 → v6.2):
+ * 1. Transfer types registered in CREDIT_TYPES / DEBIT_TYPES — 'transfer_in'
+ *    and 'transfer_out' are now recognised by deriveSpotBalanceFromLedger().
+ *    wallets.js (v5.1) writes these types when recording internal spot↔vault
+ *    transfers. Without registration here, any vault operation (invest or claim)
+ *    that calls deriveSpotBalanceFromLedger() after a transfer would silently
+ *    ignore the transfer entries, re-inflating or deflating spot incorrectly.
+ *
+ * 2. Pending withdrawals included in derivation — deriveSpotBalanceFromLedger()
+ *    now executes a second query for pending withdrawals (status='pending',
+ *    type='withdraw') and merges them with completed transactions before
+ *    reduction. Previously, filtering to status='completed' only caused pending
+ *    withdrawals to be invisible to derivation. On next vault operation the
+ *    pre-withdrawal balance was restored, allowing the withdrawn funds to
+ *    reappear. This mirrors the identical fix applied in trade.js.
+ *
+ * 3. Ledger entry failure is now fatal in handleInvestment and handleClaim —
+ *    previously a failed transactions.insert() was swallowed with console.warn
+ *    and execution continued. An investment or claim with no audit trail would
+ *    leave the balance in a state that could not be correctly re-derived. Now
+ *    both throw, aborting the operation.
+ *
+ * FIXES (v6.1, carried forward):
  * 1. strategy_id duplicate key — JS silently took the last value (the name string),
  *    so every lookup by id failed. Fixed: one key, correct value.
  * 2. strategy_name — was read everywhere but never written. Now inserted.
@@ -343,19 +365,22 @@
           .single();
         if (invErr) throw invErr;
 
-        // 2. Insert ledger entry (debit — funds leave spot wallet)
+        // 2. Insert ledger entry (debit — funds leave spot wallet).
+        //    FIX (v6.2 — D3): now fatal. Previously swallowed with console.warn
+        //    and execution continued, leaving a trade with no audit trail whose
+        //    balance could not be correctly re-derived.
         const { error: txErr } = await window.supabaseClient
           .from('transactions')
           .insert({
-            user_id:     user.id,
-            type:        'investment',
-            amount:      amount,
-            status:      'completed',
-            description: 'Invested in ' + strategy.name,
+            user_id:      user.id,
+            type:         'investment',
+            amount:       amount,
+            status:       'completed',
+            description:  'Invested in ' + strategy.name,
             reference_id: String(inv.id),
-            created_at:  new Date().toISOString()
+            created_at:   new Date().toISOString()
           });
-        if (txErr) console.warn('[VAULT] Ledger entry failed (non-fatal):', txErr.message);
+        if (txErr) throw txErr; // FIX: was console.warn + continue
 
         // 3. Derive new spot balance from ledger and update profiles
         const newSpot = await deriveSpotBalanceFromLedger(user.id, freshSpot);
@@ -433,8 +458,8 @@
         const principal = parseFloat(investment.amount || 0);
         const profit    = receive - principal;
 
-        // 1. Mark investment completed — amount is preserved (append-only principle)
-        //    FIX: was update({ amount: 0 }) which destroyed the audit trail
+        // 1. Mark investment completed — amount is preserved (append-only principle).
+        //    FIX: was update({ amount: 0 }) which destroyed the audit trail.
         const { error: updateErr } = await window.supabaseClient
           .from('investments')
           .update({
@@ -446,7 +471,9 @@
           .eq('user_id', user.id);
         if (updateErr) throw updateErr;
 
-        // 2. Insert ledger credit entry — this is the canonical record of the claim
+        // 2. Insert ledger credit entry — this is the canonical record of the claim.
+        //    FIX (v6.2 — D3): now fatal. Previously swallowed with console.warn
+        //    and execution continued, leaving a claim with no audit trail.
         const { error: txErr } = await window.supabaseClient
           .from('transactions')
           .insert({
@@ -458,7 +485,7 @@
             reference_id: String(investment.id),
             created_at:   new Date().toISOString()
           });
-        if (txErr) console.warn('[VAULT] Claim ledger entry failed:', txErr.message);
+        if (txErr) throw txErr; // FIX: was console.warn + continue
 
         // 3. Derive new spot balance from ledger
         const freshSpot = parseFloat((getState().balances || {}).spot || 0);
@@ -487,22 +514,54 @@
   // LEDGER BALANCE DERIVATION
   // ============================================
 
-  // Local copy of the derivation logic — same as app.js but available to vault
-  // without a circular dependency. Both read from the same transactions table.
-  const CREDIT_TYPES = new Set(['deposit', 'sell', 'claim']);
-  const DEBIT_TYPES  = new Set(['withdraw', 'buy', 'investment']);
+  // Local copy of the derivation logic — same as trade.js.
+  // Both read from the same transactions table.
+  //
+  // FIX (v6.2): 'transfer_in' / 'transfer_out' added so that internal
+  // spot↔vault transfers recorded by wallets.js are correctly reflected
+  // when this function re-derives the spot balance after an invest/claim.
+  const CREDIT_TYPES = new Set(['deposit', 'sell', 'claim', 'transfer_in']);
+  const DEBIT_TYPES  = new Set(['withdraw', 'buy', 'investment', 'transfer_out']);
 
   async function deriveSpotBalanceFromLedger(userId, storedBalance) {
-    const { data: txs, error } = await window.supabaseClient
+    // FIX (v6.2 — D2): Two queries instead of one.
+    //
+    // Query 1: All COMPLETED transactions — canonical settled ledger.
+    //
+    // Query 2: PENDING withdrawals only. A pending withdrawal means "the user
+    // requested a payout that admin has not yet processed, but the funds are
+    // locked." Counting them as debits here prevents the re-login / re-derive
+    // balance restoration bug where deriveSpotBalanceFromLedger ignores the
+    // pending withdrawal (status != completed), then overwrites spot_balance
+    // with the pre-withdrawal amount on the next invest or claim.
+    //
+    // Pending deposits deliberately excluded — external transfers require
+    // admin confirmation before they may be credited.
+
+    const { data: completedTxs, error: err1 } = await window.supabaseClient
       .from('transactions')
       .select('type, amount')
       .eq('user_id', userId)
       .eq('status', 'completed');
 
-    if (error) throw error;
+    if (err1) throw err1;
 
-    const rows       = txs || [];
-    const hasBaseCredits = rows.some(tx => tx.type === 'deposit' || tx.type === 'claim');
+    const { data: pendingWithdrawals, error: err2 } = await window.supabaseClient
+      .from('transactions')
+      .select('type, amount')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .in('type', ['withdraw']);
+
+    if (err2) throw err2;
+
+    const rows = [...(completedTxs || []), ...(pendingWithdrawals || [])];
+
+    // Guard: if no base credits exist in completed transactions, fall back to
+    // the stored balance. Covers new accounts and pre-ledger-migration accounts.
+    const hasBaseCredits = (completedTxs || []).some(
+      tx => tx.type === 'deposit' || tx.type === 'claim'
+    );
     if (!hasBaseCredits) return Math.max(0, parseFloat(storedBalance) || 0);
 
     return Math.max(0, rows.reduce((bal, tx) => {

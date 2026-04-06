@@ -1,7 +1,28 @@
 /**
- * NexTrade — Trade & Transaction Engine v2.0
+ * NexTrade — Trade & Transaction Engine v2.1
  * ══════════════════════════════════════════════════════════════════════════════
- * FIXES:
+ * FIXES (v2.0 → v2.1):
+ * 6. Deposit gating — openDeposit() now checks APP_CONFIG.features.realDeposit
+ *    before rendering. If false, user sees a clear "not available" message
+ *    instead of placeholder addresses. Belt-and-suspenders: runtime placeholder
+ *    string detection also blocks display even if flag is misconfigured.
+ * 7. Pending withdrawals in ledger derivation — deriveSpotBalance() now fetches
+ *    pending withdrawals in addition to completed transactions. Pending
+ *    withdrawals count as debits. This prevents the re-login balance restoration
+ *    bug where a pending withdrawal was invisible to derivation (status filter
+ *    was 'completed' only) and the pre-withdrawal balance was restored each
+ *    session. Pending deposits still do NOT count — they require admin
+ *    confirmation before crediting.
+ * 8. Ledger entry failure is now fatal — txErr in openSpotTrade previously
+ *    called console.error and continued execution. The trade would succeed
+ *    with no audit trail. Now throws to rollback.
+ * 9. Transfer types registered — CREDIT_TYPES now includes 'transfer_in',
+ *    DEBIT_TYPES includes 'transfer_out'. wallets.js writes these types when
+ *    recording internal transfers. Without registration here, any subsequent
+ *    deriveSpotBalance call after a transfer would silently ignore the transfer
+ *    ledger entries, re-inflating the balance.
+ *
+ * FIXES (v1 → v2.0, carried forward):
  * 1. initiateStripeCheckout — was called but never defined. Removed.
  *    Stripe tab replaced with honest "coming soon" state. No fake security copy.
  * 2. Deposit reference — each deposit session generates a unique reference code
@@ -55,24 +76,68 @@ const Trade = (() => {
     }
   };
 
+  // Strings that indicate an address was never replaced with a real value.
+  // Used as a runtime guard in openDeposit() even if the feature flag is set.
+  const PLACEHOLDER_PATTERNS = [
+    'YourEth', 'yourBitcoin', 'yourTron',
+    'YourERC', 'YourTRC', 'AddressHere', 'YourAddress'
+  ];
+
   // ============================================
   // LEDGER DERIVATION (shared with vault.js pattern)
   // ============================================
 
-  const CREDIT_TYPES = new Set(['deposit', 'sell', 'claim']);
-  const DEBIT_TYPES  = new Set(['withdraw', 'buy', 'investment']);
+  // FIX (v2.1): 'transfer_in' / 'transfer_out' added so that internal
+  // spot↔vault transfers written by wallets.js are correctly reflected
+  // when this function re-derives the spot balance.
+  const CREDIT_TYPES = new Set(['deposit', 'sell', 'claim', 'transfer_in']);
+  const DEBIT_TYPES  = new Set(['withdraw', 'buy', 'investment', 'transfer_out']);
 
   async function deriveSpotBalance(userId, storedBalance) {
-    const { data: txs, error } = await window.supabaseClient
+    // FIX (v2.1 — D2): Two queries instead of one.
+    //
+    // Query 1: All COMPLETED transactions. These are the canonical ledger
+    // entries for every operation that has been fully settled.
+    //
+    // Query 2: PENDING withdrawals only. A pending withdrawal means "the user
+    // requested a payout and admin has not yet processed it, but the funds are
+    // locked." Counting pending withdrawals as debits here prevents the
+    // re-login balance restoration bug: previously, status='completed' filter
+    // caused deriveSpotBalance to ignore the pending withdrawal, so the
+    // pre-withdrawal balance was written back to profiles on the next
+    // derivation call (e.g., next trade). The user effectively got their
+    // pending-withdraw funds back in the UI.
+    //
+    // Pending deposits deliberately do NOT count — external crypto transfers
+    // require admin confirmation before crediting. Counting them before
+    // confirmation would allow balance inflation by submitting fake deposits.
+
+    const { data: completedTxs, error: err1 } = await window.supabaseClient
       .from('transactions')
       .select('type, amount')
       .eq('user_id', userId)
       .eq('status', 'completed');
 
-    if (error) throw error;
+    if (err1) throw err1;
 
-    const rows       = txs || [];
-    const hasBaseCredits = rows.some(tx => tx.type === 'deposit' || tx.type === 'claim');
+    const { data: pendingWithdrawals, error: err2 } = await window.supabaseClient
+      .from('transactions')
+      .select('type, amount')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .in('type', ['withdraw']);
+
+    if (err2) throw err2;
+
+    const rows = [...(completedTxs || []), ...(pendingWithdrawals || [])];
+
+    // Guard: if there are no base credits (deposits or claims) in completed
+    // transactions, fall back to the stored balance. This covers new accounts
+    // that have never had a completed deposit, and accounts where all history
+    // was created before the ledger-first migration.
+    const hasBaseCredits = (completedTxs || []).some(
+      tx => tx.type === 'deposit' || tx.type === 'claim'
+    );
     if (!hasBaseCredits) return Math.max(0, parseFloat(storedBalance) || 0);
 
     return Math.max(0, rows.reduce((bal, tx) => {
@@ -121,6 +186,27 @@ const Trade = (() => {
       if (window.App) App.showError('Session not found. Please refresh.');
       return;
     }
+
+    // ── FIX (v2.1 — C1): Deposit gating ─────────────────────────────────
+    // Check the feature flag first. If realDeposit is not enabled, show a
+    // clear "not available" message. This is the primary gate.
+    if (!window.APP_CONFIG || !APP_CONFIG.features || !APP_CONFIG.features.realDeposit) {
+      if (window.App) App.showError('Deposits are not currently available. Please contact support.');
+      return;
+    }
+
+    // Belt-and-suspenders: even if the flag is enabled, block if any address
+    // still contains a placeholder string. This catches the case where
+    // realDeposit was set to true but the addresses were never replaced.
+    const hasPlaceholder = Object.values(DEPOSIT_ADDRESSES).some(coin =>
+      PLACEHOLDER_PATTERNS.some(p => coin.address.includes(p))
+    );
+    if (hasPlaceholder) {
+      if (window.App) App.showError('Deposit addresses are not configured. Contact the administrator.');
+      console.error('[TRADE] openDeposit blocked: placeholder addresses detected in DEPOSIT_ADDRESSES.');
+      return;
+    }
+    // ── END FIX ──────────────────────────────────────────────────────────
 
     // One reference per deposit session — admin matches this to the transfer
     const depositRef = generateDepositReference(user.id);
@@ -437,7 +523,9 @@ const Trade = (() => {
         if (!freshUser || !freshUser.id) throw new Error('User session lost');
 
         if (window.supabaseClient) {
-          // 1. Insert withdrawal ledger entry (pending — admin must approve payout)
+          // 1. Insert withdrawal ledger entry (pending — admin must approve payout).
+          //    FIX (v2.1 — D2): deriveSpotBalance now includes pending withdrawals
+          //    as debits, so this entry will prevent balance restoration on re-login.
           const { error: txError } = await window.supabaseClient
             .from('transactions')
             .insert({
@@ -453,11 +541,12 @@ const Trade = (() => {
           // 2. Pending withdrawals don't change the derived balance until 'completed'.
           //    However, we lock the funds optimistically by treating the pending
           //    withdrawal as a debit in local AppState. This prevents double-withdrawal
-          //    in the same session.
+          //    in the same session (before a page reload triggers re-derivation).
           const currentSpot = parseFloat((getUserState().balances || {}).spot || 0);
           const lockedSpot  = Math.max(0, currentSpot - num);
 
-          // Write locked balance to DB (will be corrected by ledger derivation on next login)
+          // Write locked balance to DB. On next re-derivation this will be
+          // correctly computed from the pending withdrawal ledger entry above.
           const { error: balError } = await window.supabaseClient
             .from('profiles')
             .update({ spot_balance: lockedSpot, updated_at: new Date().toISOString() })
@@ -673,7 +762,11 @@ const Trade = (() => {
         }
 
         if (window.supabaseClient) {
-          // 1. Insert ledger entry (source of truth)
+          // 1. Insert ledger entry (source of truth).
+          //    FIX (v2.1 — D3): txErr is now fatal. Previously, a failed ledger
+          //    insert was swallowed (console.error only) and execution continued,
+          //    leaving the trade with no audit trail and the balance in an
+          //    undefined derivation state. Now the entire operation aborts.
           const txAmount = isBuy ? val : (val * coin.current_price);
           const { error: txErr } = await window.supabaseClient
             .from('transactions')
@@ -685,8 +778,7 @@ const Trade = (() => {
               status:      'completed',
               created_at:  new Date().toISOString()
             });
-          // Non-fatal: holdings will still be updated. Log for admin.
-          if (txErr) console.error('[TRADE] Ledger entry failed:', txErr);
+          if (txErr) throw txErr; // FIX: was console.error + continue
 
           // 2. Derive new spot balance from ledger
           const newSpot = await deriveSpotBalance(freshUser.id, freshSpot);

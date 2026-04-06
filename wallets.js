@@ -1,7 +1,29 @@
 /**
- * NexTrade — Wallet (Institutional Terminal) v5.0 - ASSET MODAL ADDED
+ * NexTrade — Wallet (Institutional Terminal) v5.1
  * ═══════════════════════════════════════════════════════════════════════════
- * CRITICAL FIXES:
+ * FIXES (v5.0 → v5.1):
+ * 1. Internal transfer now writes a ledger entry — previously openTransferModal
+ *    updated profiles.spot_balance and profiles.vault_balance directly with no
+ *    record in the transactions table. The next time deriveSpotBalance ran (on
+ *    any subsequent buy/sell/invest/claim), it would re-derive the spot balance
+ *    from ledger, find no transfer record, and restore the pre-transfer amount.
+ *    This created phantom funds equal to the transferred amount.
+ *
+ *    Fix: before updating profiles, one transactions.insert() is executed:
+ *      - spot → vault: type = 'transfer_out' (spot debited)
+ *      - vault → spot: type = 'transfer_in'  (spot credited)
+ *    vault_balance has no ledger derivation function; it remains a stored value
+ *    updated directly. The ledger entry covers the spot side, which is the only
+ *    side that deriveSpotBalance reads. CREDIT_TYPES and DEBIT_TYPES in trade.js
+ *    and vault.js are updated to recognise these two new type strings.
+ *
+ * 2. Fresh DB read before transfer execution — amount was validated against
+ *    state.balances captured when the modal opened. If the user had a concurrent
+ *    session or a pending operation that changed the balance, the in-memory
+ *    snapshot could be stale. Now reads spot_balance and vault_balance fresh from
+ *    profiles immediately before execution and re-validates.
+ *
+ * PRIOR FIXES (v5.0, carried forward):
  * 1. Added showAssetDetails() modal with P/L estimation
  * 2. Integrated Buy/Sell buttons with Trade module
  * 3. Fixed asset click handlers
@@ -995,13 +1017,15 @@ const Wallet = (() => {
     
     confirmBtn.onclick = async () => {
       const from = fromSelect.value;
-      const to = toSelect.value;
+      const to   = toSelect.value;
       const amount = parseFloat(amountInput.value);
       
       if (!amount || amount <= 0) return App.showError('Invalid amount');
       
-      const maxAmount = from === 'spot' ? state.balances.spot : state.balances.vault;
-      if (amount > maxAmount) return App.showError('Insufficient balance');
+      // Pre-flight check against current in-memory state (modal-open snapshot).
+      // A fresh DB check happens below before the actual DB write.
+      const snapshotMax = from === 'spot' ? state.balances.spot : state.balances.vault;
+      if (amount > snapshotMax) return App.showError('Insufficient balance');
       
       const confirmed = await Modal.confirm({
         title: 'Confirm Transfer',
@@ -1016,24 +1040,94 @@ const Wallet = (() => {
       confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
       
       try {
-        const newBalances = { ...state.balances };
-        newBalances[from] -= amount;
-        newBalances[to] += amount;
+        // ── FIX (v5.1 — D1, step 1): Fresh DB read ──────────────────────────
+        // Re-read actual balances from DB immediately before execution.
+        // The modal-open snapshot could be stale if a concurrent session or
+        // a background operation changed the balance since the modal opened.
+        let freshSpot  = state.balances.spot;
+        let freshVault = state.balances.vault;
         
         if (window.supabaseClient && state.user) {
-          const updateData = from === 'spot' 
-            ? { spot_balance: newBalances.spot, vault_balance: newBalances.vault }
-            : { vault_balance: newBalances.vault, spot_balance: newBalances.spot };
+          const { data: freshProfile, error: readErr } = await window.supabaseClient
+            .from('profiles')
+            .select('spot_balance, vault_balance')
+            .eq('id', state.user.id)
+            .single();
+          if (readErr) throw readErr;
+          freshSpot  = parseFloat(freshProfile.spot_balance)  || 0;
+          freshVault = parseFloat(freshProfile.vault_balance) || 0;
+        }
+        
+        // Re-validate against fresh balances before touching anything
+        const freshMax = from === 'spot' ? freshSpot : freshVault;
+        if (amount > freshMax) {
+          throw new Error('Insufficient balance. Balance changed since dialog opened.');
+        }
+        // ── END fresh DB read ────────────────────────────────────────────────
+        
+        const newBalances = { spot: freshSpot, vault: freshVault };
+        newBalances[from] -= amount;
+        newBalances[to]   += amount;
+        
+        if (window.supabaseClient && state.user) {
+          // ── FIX (v5.1 — D1, step 2): Ledger entry ──────────────────────────
+          // Insert a transaction record for the spot side of this transfer.
+          //
+          // Why one entry, not two:
+          //   deriveSpotBalance() derives the SPOT balance only. vault_balance
+          //   has no ledger derivation — it is a stored column updated directly
+          //   in profiles. So we write exactly one entry that describes what
+          //   happened to the spot wallet:
+          //
+          //   spot → vault: type = 'transfer_out'
+          //     DEBIT_TYPES includes 'transfer_out' → spot decremented
+          //
+          //   vault → spot: type = 'transfer_in'
+          //     CREDIT_TYPES includes 'transfer_in' → spot incremented
+          //
+          // Without this entry, the next call to deriveSpotBalance (triggered
+          // by any subsequent buy/sell/invest/claim) would recompute spot from
+          // a ledger with no transfer record, restoring the pre-transfer amount
+          // and creating phantom funds equal to the transfer.
+          const ledgerType = from === 'spot' ? 'transfer_out' : 'transfer_in';
+          const { error: txError } = await window.supabaseClient
+            .from('transactions')
+            .insert({
+              user_id:     state.user.id,
+              type:        ledgerType,
+              amount:      amount,
+              status:      'completed',
+              description: 'Transfer ' + (from === 'spot' ? 'Spot → Vault' : 'Vault → Spot'),
+              created_at:  new Date().toISOString()
+            });
+          if (txError) throw txError;
+          // ── END ledger entry ─────────────────────────────────────────────────
           
+          // Update both balances in a single profiles write
           const { error } = await window.supabaseClient
             .from('profiles')
-            .update(updateData)
+            .update({
+              spot_balance:  newBalances.spot,
+              vault_balance: newBalances.vault,
+              updated_at:    new Date().toISOString()
+            })
             .eq('id', state.user.id);
-          
           if (error) throw error;
         }
         
         AppState.updateBalances(newBalances);
+        
+        // Also record locally in AppState transactions so activity tab updates
+        if (window.AppState) {
+          AppState.addTransaction({
+            id:         'tx_' + Date.now(),
+            type:       from === 'spot' ? 'transfer_out' : 'transfer_in',
+            amount:     amount,
+            status:     'completed',
+            description: 'Transfer ' + (from === 'spot' ? 'Spot → Vault' : 'Vault → Spot'),
+            created_at: new Date().toISOString()
+          });
+        }
         
         await Modal.close();
         render(container);
@@ -1041,7 +1135,7 @@ const Wallet = (() => {
         
       } catch (error) {
         console.error('[WALLET] Transfer failed:', error);
-        App.showError('Transfer failed');
+        App.showError(error.message || 'Transfer failed');
         confirmBtn.disabled = false;
         confirmBtn.innerHTML = 'Transfer';
       }
