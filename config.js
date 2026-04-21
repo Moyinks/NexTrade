@@ -182,7 +182,7 @@ const APP_CONFIG = {
     // realDeposit: controls whether the deposit UI is accessible.
     // trade.js openDeposit() gates on this flag. Set to true only after
     // real deposit addresses are in place (see DEPLOYMENT CHECKLIST above).
-    realDeposit: false,
+    realDeposit: true,
 
     emailVerification: false
   },
