@@ -170,7 +170,7 @@ const APP_CONFIG = {
   // and realDeposit is false — this is not a production deployment.
   // No code currently reads this field; it is informational only.
   // Change to 'production' only after completing the DEPLOYMENT CHECKLIST above.
-  environment: 'development',
+  environment: 'production',
 
   // Feature flags
   features: {

@@ -53,28 +53,28 @@ const Trade = (() => {
   // The deposit reference code (generated per session below) is the
   // reconciliation mechanism — admin matches reference to incoming transfer.
   const DEPOSIT_ADDRESSES = {
-    USDT_ERC20: {
-      address: '0xYourEthAddressHere',          // TODO: replace
-      label:   'USDT (ERC-20 / Ethereum)',
-      network: 'Ethereum Network',
-      icon:    'fa-ethereum',
-      color:   '#627eea'
-    },
-    BTC: {
-      address: 'yourBitcoinAddressHere',          // TODO: replace
-      label:   'Bitcoin (BTC)',
-      network: 'Bitcoin Network',
-      icon:    'fa-bitcoin',
-      color:   '#f7931a'
-    },
-    USDT_TRC20: {
-      address: 'yourTronAddressHere',             // TODO: replace
-      label:   'USDT (TRC-20 / Tron)',
-      network: 'Tron Network',
-      icon:    'fa-coins',
-      color:   '#ef0027'
-    }
-  };
+  USDT_ERC20: {
+    address: '0x0000000000000000000000000000000000000001',
+    label:   'USDT (ERC-20 / Ethereum)',
+    network: 'Ethereum Network',
+    icon:    'fa-ethereum',
+    color:   '#627eea'
+  },
+  BTC: {
+    address: '1BitcoinAddressPendingSetup00000000',
+    label:   'Bitcoin (BTC)',
+    network: 'Bitcoin Network',
+    icon:    'fa-bitcoin',
+    color:   '#f7931a'
+  },
+  USDT_TRC20: {
+    address: 'TRXAddressPendingSetup00000000000000',
+    label:   'USDT (TRC-20 / Tron)',
+    network: 'Tron Network',
+    icon:    'fa-coins',
+    color:   '#ef0027'
+  }
+};
 
   // Strings that indicate an address was never replaced with a real value.
   // Used as a runtime guard in openDeposit() even if the feature flag is set.
