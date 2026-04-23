@@ -1205,17 +1205,7 @@
     // Must clear the floating nav orb (58px) + gap (28px) + safe area
     vaultWrapper.style.paddingBottom = 'calc(110px + env(safe-area-inset-bottom, 0px))';
 
-    const pageHeader = el('div', 'padding:20px 16px 8px;');
-    const logoRow    = el('div', 'display:flex;align-items:center;gap:10px;margin-bottom:4px;');
-    const logoImg    = document.createElement('img');
-    logoImg.src      = 'NexTrade-192.png';
-    logoImg.alt      = 'NexTrade';
-    logoImg.style.cssText = 'width:28px;height:28px;border-radius:8px;object-fit:cover;flex-shrink:0;';
-    logoRow.appendChild(logoImg);
-    logoRow.appendChild(el('span', 'font-size:18px;font-weight:900;color:var(--color-text-primary);letter-spacing:-0.4px;', 'Vault'));
-    pageHeader.appendChild(logoRow);
-    pageHeader.appendChild(el('p', 'font-size:13px;color:var(--color-text-secondary);margin:0;line-height:1.4;', 'Institutional-grade strategies. Performance fee only on profit.'));
-    vaultWrapper.appendChild(pageHeader);
+    
 
     const tabBarContainer = el('div');
     tabBarContainer.style.cssText = [
