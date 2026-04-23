@@ -149,10 +149,18 @@
           .eq('id', user.id);
       }
 
+      const currentBalances = (window.AppState && typeof AppState.get === 'function')
+        ? (AppState.get('balances') || {})
+        : {};
+      const parsedVault = Number.parseFloat(profile.vault_balance);
+      const vaultBalance = Number.isFinite(Number(currentBalances.vault))
+        ? Math.max(0, Number(currentBalances.vault) || 0)
+        : Math.max(0, Number.isFinite(parsedVault) ? parsedVault : 0);
+
       const balanceState = {
         spot:  derivedSpot,
-        vault: parseFloat(profile.vault_balance) || 0,
-        total: derivedSpot + (parseFloat(profile.vault_balance) || 0)
+        vault: vaultBalance,
+        total: derivedSpot + vaultBalance
       };
 
       if (window.AppState) {
@@ -166,11 +174,10 @@
 
     } catch (err) {
       console.error('[APP] ❌ Profile Sync Error:', err);
-      // Don't block the app — set user at minimum so navigation works
+      // Keep the last known balances on transient failures so the UI never
+      // flashes to zero while the network or profile row is unavailable.
       if (window.AppState) {
-        AppState.set('user',     user);
-        AppState.set('balances', { spot: 0, vault: 0, total: 0 });
-        AppState.set('holdings', {});
+        AppState.set('user', user);
       }
     }
   }
@@ -213,7 +220,8 @@
       }
     } catch (err) {
       console.error('[APP] ❌ Investment Sync Error:', err);
-      if (window.AppState) AppState.set('investments', []);
+      // Do not clear the live list on transient errors; keep the last known
+      // positions so the vault balance stays stable until the next successful sync.
     }
   }
 

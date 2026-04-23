@@ -331,7 +331,17 @@ const Card = (() => {
 
     const name = document.createElement('div');
     name.className = 'investment-strategy-name';
-    name.textContent = investment.strategy_name;
+    const strategyName = (() => {
+      if (investment && typeof investment.strategy_name === 'string' && investment.strategy_name.trim()) {
+        return investment.strategy_name;
+      }
+      const strategyId = investment && investment.strategy_id;
+      if (typeof strategyId === 'string' && strategyId.trim()) {
+        return strategyId.replace(/[-_]+/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+      }
+      return 'Investment';
+    })();
+    name.textContent = strategyName;
 
     const status = document.createElement('span');
     status.className = 'investment-status';

@@ -22,6 +22,8 @@
   const PERSIST_KEY      = 'nextrade_state_v1';
   const keySubscribers   = Object.create(null);
   const globalSubscribers = [];
+  let _batchDepth = 0;
+  const _pendingNotifyKeys = new Set();
 
   // ============================================
   // 1. INITIAL STATE FACTORY
@@ -79,14 +81,19 @@
     }
 
     const vaultTotal = active.reduce((sum, inv) => {
-      if (!inv || typeof inv.amount !== 'number' || inv.amount <= 0) {
-        console.warn('[STATE] Invalid investment, skipping:', inv);
+      if (!inv) {
         return sum;
       }
       try {
+        const principal = parseFloat(inv.amount);
+        if (!Number.isFinite(principal) || principal <= 0) {
+          console.warn('[STATE] Invalid investment, skipping:', inv);
+          return sum;
+        }
+
         const now      = Date.now();
         const start    = new Date(inv.created_at).getTime();
-        if (isNaN(start)) return sum + inv.amount;
+        if (isNaN(start)) return sum + principal;
 
         const durationMs    = (inv.duration || inv.durationDays || 30) * 24 * 60 * 60 * 1000;
         const end           = start + durationMs;
@@ -95,20 +102,41 @@
 
         // vault.js stores apy as an integer percent (e.g. 22 = 22%).
         // Convert to decimal fraction for calculation.
-        const rawApy = typeof inv.apy === 'number' ? inv.apy : 0;
-        const apy    = rawApy > 1 ? rawApy / 100 : rawApy; // handle both formats safely
+        const rawApy = parseFloat(inv.apy);
+        const apy    = Number.isFinite(rawApy) ? (rawApy > 1 ? rawApy / 100 : rawApy) : 0;
 
-        const profit       = inv.amount * apy * elapsedYearFraction;
-        const currentValue = inv.amount + profit;
-        return sum + (isNaN(currentValue) ? inv.amount : currentValue);
+        const profit       = principal * apy * elapsedYearFraction;
+        const currentValue = principal + profit;
+        return sum + (isNaN(currentValue) ? principal : currentValue);
       } catch (err) {
         console.error('[STATE] Error computing investment value:', err);
-        return sum + inv.amount;
+        return sum + (parseFloat(inv.amount) || 0);
       }
     }, 0);
 
     _state.balances.vault = vaultTotal;
     _state.balances.total = (_state.balances.spot || 0) + vaultTotal;
+  };
+
+  const emit = (key) => {
+    if (!key) return;
+    if (_batchDepth > 0) {
+      _pendingNotifyKeys.add(key);
+      return;
+    }
+    notify(key);
+  };
+
+  const flushPendingNotifications = () => {
+    if (_batchDepth > 0 || _pendingNotifyKeys.size === 0) return;
+    const keys = Array.from(_pendingNotifyKeys);
+    _pendingNotifyKeys.clear();
+    const seen = new Set();
+    keys.forEach(key => {
+      if (seen.has(key)) return;
+      seen.add(key);
+      notify(key);
+    });
   };
 
   // ============================================
@@ -212,15 +240,15 @@
           obj = obj[parts[i]];
         }
         obj[parts[parts.length - 1]] = value;
-        notify(parts[0]);
+        emit(parts[0]);
       } else {
         _state[key] = value;
-        notify(key);
+        emit(key);
       }
 
       if (key === 'investments') {
         syncVaultData();
-        notify('balances');
+        emit('balances');
       }
 
       saveToStorage();
@@ -231,7 +259,7 @@
       if (newBalances.vault !== undefined) _state.balances.vault = parseFloat(newBalances.vault) || 0;
       syncVaultData();
       saveToStorage();
-      notify('balances');
+      emit('balances');
     },
 
     addTransaction(tx) {
@@ -239,7 +267,7 @@
       const entry = { ...tx, created_at: tx.created_at || new Date().toISOString() };
       _state.transactions.unshift(entry);
       saveToStorage();
-      notify('transactions');
+      emit('transactions');
     },
 
     addInvestment(inv) {
@@ -247,8 +275,8 @@
       _state.investments.unshift(inv);
       syncVaultData();
       saveToStorage();
-      notify('investments');
-      notify('balances');
+      emit('investments');
+      emit('balances');
     },
 
     /**
@@ -282,6 +310,16 @@
 
     setLoading:     (v) => AppState.set('ui.isLoading', !!v),
     selectStrategy: (s) => AppState.set('ui.selectedStrategy', s),
+
+    async batch(fn) {
+      _batchDepth += 1;
+      try {
+        return await fn();
+      } finally {
+        _batchDepth = Math.max(0, _batchDepth - 1);
+        if (_batchDepth === 0) flushPendingNotifications();
+      }
+    },
 
     // Manual debug hooks
     save:   saveToStorage,
