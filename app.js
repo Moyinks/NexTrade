@@ -386,22 +386,186 @@
     if (window.Storage)  Storage.setLastPage(pageId);
   }
 
-  function showToast(message, type) {
-    const el = document.createElement('div');
-    el.textContent = message;
-    el.style.cssText = `
-      position:fixed;top:20px;left:50%;transform:translateX(-50%);
-      background:${type === 'error' ? '#ef4444' : '#10b981'};color:white;
-      padding:12px 24px;border-radius:8px;font-weight:600;font-family:sans-serif;
-      box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:99999;
-      opacity:0;transition:opacity 0.3s ease;pointer-events:none;
+  // ── TOAST SYSTEM ────────────────────────────────────────────────────────────
+  // Premium fintech-grade notifications: glassmorphic card, left accent bar,
+  // icon badge, title + message, progress bar, stacking, click-to-dismiss.
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const TOAST_CFG = {
+    success: { color: '#10B981', bg: 'rgba(16,185,129,0.1)',  icon: 'fa-circle-check',          title: 'Success'     },
+    error:   { color: '#EF4444', bg: 'rgba(239,68,68,0.1)',   icon: 'fa-circle-exclamation',     title: 'Error'       },
+    warning: { color: '#F59E0B', bg: 'rgba(245,158,11,0.1)',  icon: 'fa-triangle-exclamation',   title: 'Warning'     },
+    info:    { color: '#3B82F6', bg: 'rgba(59,130,246,0.1)',  icon: 'fa-circle-info',            title: 'Info'        },
+  };
+
+  let _toastStack = [];
+
+  function _injectToastStyles() {
+    if (document.getElementById('ntm-toast-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'ntm-toast-styles';
+    s.textContent = `
+      .ntm-toast-wrap {
+        position: fixed;
+        top: calc(72px + env(safe-area-inset-top, 0px));
+        left: 50%;
+        transform: translateX(-50%);
+        width: calc(100% - 32px);
+        max-width: 400px;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        pointer-events: none;
+      }
+      /* In landscape on Face ID iPhones, inset-left/right can be 44px.
+         Clamp the wrap so toasts don't overlap the safe zone. */
+      @supports (padding: max(0px)) {
+        .ntm-toast-wrap {
+          width: min(calc(100% - max(32px, calc(env(safe-area-inset-left, 16px) + env(safe-area-inset-right, 16px)))), 400px);
+        }
+      }
+      .ntm-toast {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 16px 14px 14px;
+        background: rgba(17, 22, 34, 0.96);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px;
+        box-shadow:
+          0 2px 0 rgba(255,255,255,0.05) inset,
+          0 16px 48px rgba(0,0,0,0.65),
+          0 4px 16px rgba(0,0,0,0.4);
+        pointer-events: all;
+        cursor: pointer;
+        overflow: hidden;
+        opacity: 0;
+        transform: translateY(-12px) scale(0.97);
+        transition: opacity 0.28s cubic-bezier(0.34,1.2,0.64,1),
+                    transform 0.28s cubic-bezier(0.34,1.2,0.64,1);
+        -webkit-tap-highlight-color: transparent;
+      }
+      .ntm-toast.show {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+      .ntm-toast.hide {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.97);
+        transition: opacity 0.22s ease, transform 0.22s ease;
+      }
+      .ntm-toast-accent {
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 3px;
+        border-radius: 14px 0 0 14px;
+      }
+      .ntm-toast-icon {
+        width: 32px; height: 32px;
+        border-radius: 9px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 14px;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .ntm-toast-body {
+        flex: 1;
+        min-width: 0;
+        padding-right: 4px;
+      }
+      .ntm-toast-title {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: -0.1px;
+        color: #F1F5F9;
+        margin-bottom: 2px;
+        font-family: 'DM Sans', sans-serif;
+      }
+      .ntm-toast-msg {
+        font-size: 13px;
+        font-weight: 400;
+        color: #94A3B8;
+        line-height: 1.4;
+        font-family: 'DM Sans', sans-serif;
+        word-break: break-word;
+      }
+      .ntm-toast-close {
+        flex-shrink: 0;
+        width: 20px; height: 20px;
+        display: flex; align-items: center; justify-content: center;
+        color: rgba(148,163,184,0.5);
+        font-size: 11px;
+        margin-top: 2px;
+        transition: color 0.15s;
+      }
+      .ntm-toast:hover .ntm-toast-close { color: #94A3B8; }
+      .ntm-toast-progress {
+        position: absolute;
+        bottom: 0; left: 0;
+        height: 2px;
+        border-radius: 0 0 14px 14px;
+        transform-origin: left;
+      }
+      @keyframes ntm-progress {
+        from { transform: scaleX(1); }
+        to   { transform: scaleX(0); }
+      }
     `;
-    document.body.appendChild(el);
-    requestAnimationFrame(() => (el.style.opacity = '1'));
-    setTimeout(() => {
-      el.style.opacity = '0';
-      setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
-    }, CONSTANTS.TOAST_DURATION);
+    document.head.appendChild(s);
+  }
+
+  function _getOrCreateWrap() {
+    let wrap = document.getElementById('ntm-toast-wrap');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'ntm-toast-wrap';
+      wrap.className = 'ntm-toast-wrap';
+      document.body.appendChild(wrap);
+    }
+    return wrap;
+  }
+
+  function showToast(message, type) {
+    _injectToastStyles();
+    const cfg  = TOAST_CFG[type] || TOAST_CFG.info;
+    const dur  = type === 'error' ? 5000 : (CONSTANTS.TOAST_DURATION || 3500);
+    const wrap = _getOrCreateWrap();
+
+    const toast = document.createElement('div');
+    toast.className = 'ntm-toast';
+    toast.innerHTML = `
+      <div class="ntm-toast-accent" style="background:${cfg.color};"></div>
+      <div class="ntm-toast-icon" style="background:${cfg.bg};color:${cfg.color};">
+        <i class="fa-solid ${cfg.icon}"></i>
+      </div>
+      <div class="ntm-toast-body">
+        <div class="ntm-toast-title">${cfg.title}</div>
+        <div class="ntm-toast-msg">${message}</div>
+      </div>
+      <div class="ntm-toast-close"><i class="fa-solid fa-xmark"></i></div>
+      <div class="ntm-toast-progress" style="background:${cfg.color};opacity:0.35;animation:ntm-progress ${dur}ms linear forwards;"></div>
+    `;
+
+    wrap.appendChild(toast);
+    _toastStack.push(toast);
+
+    requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.add('show')));
+
+    const dismiss = () => {
+      toast.classList.remove('show');
+      toast.classList.add('hide');
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+        _toastStack = _toastStack.filter(t => t !== toast);
+      }, 260);
+    };
+
+    toast.addEventListener('click', dismiss);
+    setTimeout(dismiss, dur);
   }
 
   // ============================================
@@ -437,6 +601,8 @@
 
     showSuccess: (msg) => showToast(msg, 'success'),
     showError:   (msg) => showToast(msg, 'error'),
+    showWarning: (msg) => showToast(msg, 'warning'),
+    showInfo:    (msg) => showToast(msg, 'info'),
 
     // Getter wired to internal flag — not a permanently-false literal
     get initialized() { return state.initialized; }

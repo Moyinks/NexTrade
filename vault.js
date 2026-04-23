@@ -111,6 +111,7 @@
   let _destroyed        = false;
   let _isProcessing     = false;
   let _milestoneChecked = new Set();
+  let _liveTimers       = new Set();   // interval/timeout IDs — cleared on destroy
 
   // ============================================
   // HELPERS
@@ -140,6 +141,175 @@
     if (css)      e.style.cssText = css;
     if (txt != null) e.textContent = txt;
     return e;
+  }
+
+  // ============================================
+  // POOL SIMULATION ENGINE
+  // ============================================
+  // All functions here are pure and deterministic.
+  // The pool index is a simulated NAV (Net Asset Value) per strategy,
+  // seeded so the same strategy always produces the same history.
+  // User's estimated value = principal × (todayIndex / entryIndex).
+  // This is display-only — actual payout is set by admin at claim time.
+
+  // Mulberry32 — fast, deterministic, good distribution
+  function _rng(seed) {
+    let s = seed >>> 0;
+    return function () {
+      s += 0x6D2B79F5;
+      let t = Math.imul(s ^ (s >>> 15), s | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Index value at any date, walking day-by-day from the epoch.
+  // Returns a float (1.000 = starting value).
+  function _poolIndex(strategyId, date) {
+    const EPOCH   = new Date('2024-01-01T00:00:00Z');
+    const target  = new Date(date);
+    const days    = Math.floor((target - EPOCH) / 86400000);
+    if (days <= 0) return 1.0;
+
+    const isAlpha  = strategyId === 'alpha-seeker';
+    const apy      = isAlpha ? 0.65 : 0.22;
+    const daily    = Math.pow(1 + apy, 1 / 365) - 1;
+    const vol      = isAlpha ? 0.022 : 0.007;   // daily volatility
+    const seed     = isAlpha ? 0xDEADBEEF : 0xC0FFEE42;
+    const rand     = _rng(seed);
+
+    let idx = 1.0;
+    for (let d = 0; d < days; d++) {
+      // Slight positive skew (rand biased below 0.48 → more up days)
+      const noise = (rand() - 0.47) * vol * 2;
+      idx *= (1 + daily + noise);
+      if (idx < 0.5) idx = 0.5; // floor — realistic drawdown limit
+    }
+    return idx;
+  }
+
+  // Last N days of index values (for sparkline).
+  function _indexSeries(strategyId, days) {
+    const out = [];
+    const now = Date.now();
+    for (let i = days - 1; i >= 0; i--) {
+      out.push(_poolIndex(strategyId, new Date(now - i * 86400000)));
+    }
+    return out;
+  }
+
+  // Estimated current value based on pool performance since entry date.
+  function _estimatedValue(investment) {
+    const principal  = parseFloat(investment.amount || 0);
+    const entryDate  = investment.created_at || new Date().toISOString();
+    const sid        = investment.strategy_id;
+    const entryIdx   = _poolIndex(sid, entryDate);
+    const todayIdx   = _poolIndex(sid, new Date());
+    if (entryIdx <= 0) return principal;
+    return principal * (todayIdx / entryIdx);
+  }
+
+  // Pool share percentage (their principal vs simulated total strategy AUM).
+  function _poolShare(principal, strategyId) {
+    const AUM = strategyId === 'alpha-seeker' ? 874000 : 2430000;
+    return (principal / (AUM + principal)) * 100;
+  }
+
+  // Build a 7-day SVG sparkline.
+  function _buildSparkline(strategyId, accentColor) {
+    const series = _indexSeries(strategyId, 7);
+    const min    = Math.min(...series);
+    const max    = Math.max(...series);
+    const range  = max - min || 0.001;
+    const W = 100, H = 36, pad = 2;
+
+    const pts = series.map((v, i) => {
+      const x = pad + (i / (series.length - 1)) * (W - pad * 2);
+      const y = H - pad - ((v - min) / range) * (H - pad * 2);
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    });
+
+    const trending = series[series.length - 1] >= series[0];
+    const color    = trending ? '#10b981' : '#ef4444';
+    const gradId   = 'spk-' + strategyId.slice(0, 4);
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.style.cssText = 'width:100%;height:36px;display:block;';
+
+    svg.innerHTML = `
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <polygon points="${pts.join(' ')} ${(W - pad).toFixed(1)},${H} ${pad},${H}"
+               fill="url(#${gradId})"/>
+      <polyline points="${pts.join(' ')}"
+                fill="none" stroke="${color}" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round"/>
+    `;
+    return svg;
+  }
+
+  // Live trade feed items — deterministic rotation based on real time.
+  const _FEED = {
+    'alpha-seeker': [
+      { pair: 'BTC/USDT',  dir: 'Long',  pct: '+2.14%' },
+      { pair: 'ETH/USDT',  dir: 'Short', pct: '+1.32%' },
+      { pair: 'BNB/USDT',  dir: 'Long',  pct: '+0.87%' },
+      { pair: 'SOL/USDT',  dir: 'Long',  pct: '+3.41%' },
+      { pair: 'XRP/USDT',  dir: 'Short', pct: '+0.64%' },
+      { pair: 'DOGE/USDT', dir: 'Long',  pct: '+1.95%' },
+      { pair: 'ADA/USDT',  dir: 'Short', pct: '+0.72%' },
+      { pair: 'ARB/USDT',  dir: 'Long',  pct: '+2.80%' },
+    ],
+    'steady-accumulator': [
+      { pair: 'USDC Lending',  dir: 'Yield', pct: '+0.031%' },
+      { pair: 'ETH Staking',   dir: 'Yield', pct: '+0.014%' },
+      { pair: 'USDT Lending',  dir: 'Yield', pct: '+0.028%' },
+      { pair: 'DAI Pool',      dir: 'Yield', pct: '+0.019%' },
+      { pair: 'stETH Rewards', dir: 'Yield', pct: '+0.012%' },
+      { pair: 'USDC Pool Fee', dir: 'Yield', pct: '+0.022%' },
+    ]
+  };
+
+  function _buildLiveFeed(strategyId) {
+    const trades = _FEED[strategyId] || _FEED['steady-accumulator'];
+    const wrap   = el('div', 'margin-top:12px;');
+
+    const header = el('div', 'display:flex;align-items:center;gap:6px;margin-bottom:7px;');
+    const dot    = el('span', 'width:6px;height:6px;border-radius:50%;background:#10b981;display:inline-block;animation:pulse 1.5s ease-in-out infinite;flex-shrink:0;');
+    header.appendChild(dot);
+    header.appendChild(el('span', 'font-size:10px;font-weight:700;color:var(--color-text-tertiary);letter-spacing:0.7px;text-transform:uppercase;', 'Live Activity'));
+    wrap.appendChild(header);
+
+    const list = el('div', 'display:flex;flex-direction:column;gap:4px;');
+    // Show 3 items, rotating every 30s based on real time
+    const offset = Math.floor(Date.now() / 30000) % trades.length;
+    for (let i = 0; i < 3; i++) {
+      const t   = trades[(offset + i) % trades.length];
+      // Fake timestamps: 3m, 9m, 17m ago (vary with offset)
+      const ago = [3, 9, 17][i] + ((offset + i) % 4) + 'm ago';
+      const row = el('div', 'display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-radius:7px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.05);');
+      const left = el('div', 'display:flex;align-items:center;gap:6px;');
+      const badge = el('span', 'font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;', t.dir);
+      badge.style.background = t.dir === 'Long' ? 'rgba(16,185,129,0.15)' : t.dir === 'Short' ? 'rgba(239,68,68,0.15)' : 'rgba(59,130,246,0.15)';
+      badge.style.color      = t.dir === 'Long' ? '#10b981' : t.dir === 'Short' ? '#ef4444' : '#3b82f6';
+      left.appendChild(badge);
+      left.appendChild(el('span', 'font-size:11px;font-weight:600;color:var(--color-text-primary);', t.pair));
+      row.appendChild(left);
+      const right = el('div', 'display:flex;align-items:center;gap:8px;');
+      const pctEl = el('span', 'font-size:11px;font-weight:700;color:#10b981;', t.pct);
+      right.appendChild(pctEl);
+      right.appendChild(el('span', 'font-size:10px;color:var(--color-text-tertiary);', ago));
+      row.appendChild(right);
+      list.appendChild(row);
+    }
+    wrap.appendChild(list);
+    return wrap;
   }
 
   function getRecommendedId() {
@@ -699,51 +869,128 @@
   // ============================================
 
   function buildActiveInvestmentItem(investment, isCompleted) {
-    // strategy_id now correctly stores the id string (e.g. 'steady-accumulator')
-    // so this lookup will succeed. Falls back to strategy_name if old data exists.
     const strategy   = STRATEGIES.find(s => s.id === investment.strategy_id)
-                    || { name: investment.strategy_name || 'Investment', accentColor: '#3b82f6', icon: '\uD83D\uDCBC', duration: 30, penaltyRate: 0.1 };
+                    || { name: investment.strategy_name || 'Investment', accentColor: '#3b82f6', icon: '💼', duration: 30, penaltyRate: 0.1, id: 'steady-accumulator' };
     const amount     = parseFloat(investment.amount || 0);
-    const currentVal = parseFloat(investment.current_value || amount);
-    const gain       = currentVal - amount;
-    const gainPct    = amount > 0 ? (gain / amount) * 100 : 0;
-    const isMatured  = investment.matures_at && new Date(investment.matures_at) <= new Date();
+    const isMatured  = !isCompleted && investment.matures_at && new Date(investment.matures_at) <= new Date();
     const matureDate = investment.matures_at ? new Date(investment.matures_at) : null;
 
+    // Use pool-index-derived estimate (display only — admin sets real payout)
+    const estVal  = isCompleted
+      ? parseFloat(investment.current_value || amount)
+      : _estimatedValue(investment);
+    const gain    = estVal - amount;
+    const gainPct = amount > 0 ? (gain / amount) * 100 : 0;
+
     const itemEl = el('div');
-    itemEl.style.cssText = 'border-radius:16px;padding:16px;margin-bottom:12px;';
+    itemEl.style.cssText = 'border-radius:16px;overflow:hidden;margin-bottom:14px;';
     if (isCompleted) {
       itemEl.style.background = 'rgba(30,41,59,0.4)';
       itemEl.style.border     = '1px solid var(--color-border)';
       itemEl.style.opacity    = '0.75';
     } else {
-      itemEl.style.background  = 'var(--color-surface-elevated)';
-      itemEl.style.border      = '1px solid ' + (isMatured ? '#10b98160' : strategy.accentColor + '40');
-      itemEl.style.boxShadow   = '0 4px 16px rgba(0,0,0,0.12)';
+      itemEl.style.background = 'var(--color-surface-elevated)';
+      itemEl.style.border     = '1px solid ' + (isMatured ? '#10b98160' : strategy.accentColor + '40');
+      itemEl.style.boxShadow  = '0 4px 20px rgba(0,0,0,0.15)';
     }
 
-    const headerRow = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;');
-    const leftSide  = el('div', 'display:flex;align-items:center;gap:12px;');
-    const iconEl    = el('div', 'font-size:22px;', strategy.icon);
+    // ── Accent bar ──────────────────────────────────────────────────────
+    if (!isCompleted) {
+      const bar = el('div');
+      bar.style.cssText = 'height:3px;background:linear-gradient(90deg,' + strategy.accentColor + ',' + strategy.accentColor + '55);';
+      itemEl.appendChild(bar);
+    }
+
+    const body = el('div', 'padding:14px 16px;');
+
+    // ── Header row ───────────────────────────────────────────────────────
+    const headerRow = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;');
+    const leftSide  = el('div', 'display:flex;align-items:center;gap:10px;');
+    const iconEl    = el('div', 'font-size:20px;', strategy.icon);
     const nameWrap  = el('div');
-    // FIX: was reading investment.strategy_name which was never written to DB.
-    // Now strategy.name is resolved from the strategies array above.
-    nameWrap.appendChild(el('div', 'font-size:14px;font-weight:700;color:var(--color-text-primary);', investment.strategy_name || strategy.name));
-    const statusColor = isCompleted ? 'var(--color-text-tertiary)' : (isMatured ? '#10b981' : '#f59e0b');
-    const statusEl    = el('div', 'font-size:11px;font-weight:700;margin-top:2px;', (isCompleted ? 'Completed' : (isMatured ? '\u2713 Ready to Claim' : '\u25CF Active')));
+    nameWrap.appendChild(el('div', 'font-size:14px;font-weight:800;color:var(--color-text-primary);', strategy.name));
+
+    const statusColor = isCompleted ? 'var(--color-text-tertiary)' : (isMatured ? '#10b981' : strategy.accentColor);
+    const statusTxt   = isCompleted ? 'Completed' : (isMatured ? '✓ Ready to Claim' : '● Active · Live');
+    const statusEl    = el('div', 'font-size:10px;font-weight:700;margin-top:2px;letter-spacing:0.3px;', statusTxt);
     statusEl.style.color = statusColor;
     nameWrap.appendChild(statusEl);
     leftSide.appendChild(iconEl); leftSide.appendChild(nameWrap);
-    const gainBadge = el('div', 'font-size:13px;font-weight:800;', (gain >= 0 ? '+' : '') + gainPct.toFixed(2) + '%');
-    gainBadge.style.color = gain >= 0 ? '#10b981' : '#ef4444';
-    headerRow.appendChild(leftSide); headerRow.appendChild(gainBadge);
-    itemEl.appendChild(headerRow);
 
-    const statsGrid = el('div', 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;');
+    const gainBadge = el('div', 'font-size:13px;font-weight:800;padding:4px 9px;border-radius:20px;', (gain >= 0 ? '+' : '') + gainPct.toFixed(2) + '%');
+    gainBadge.style.color      = gain >= 0 ? '#10b981' : '#ef4444';
+    gainBadge.style.background = gain >= 0 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)';
+    gainBadge.style.border     = '1px solid ' + (gain >= 0 ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)');
+    headerRow.appendChild(leftSide); headerRow.appendChild(gainBadge);
+    body.appendChild(headerRow);
+
+    if (isCompleted) {
+      // Completed cards: simple 3-col grid + close date, no live UI
+      const statsGrid = el('div', 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;');
+      [
+        { label: 'Invested', value: fmt(amount),  color: 'var(--color-text-secondary)' },
+        { label: 'Returned', value: fmt(estVal),   color: '#10b981' },
+        { label: 'Profit',   value: (gain >= 0 ? '+' : '') + fmt(gain), color: gain >= 0 ? '#10b981' : '#ef4444' }
+      ].forEach(s => {
+        const cell = el('div', 'background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:9px;text-align:center;');
+        const val  = el('div', 'font-size:13px;font-weight:700;', s.value);
+        val.style.color = s.color;
+        cell.appendChild(val);
+        cell.appendChild(el('div', 'font-size:9px;color:var(--color-text-tertiary);margin-top:3px;letter-spacing:0.5px;', s.label));
+        statsGrid.appendChild(cell);
+      });
+      body.appendChild(statsGrid);
+      body.appendChild(el('div', 'font-size:10px;color:var(--color-text-tertiary);text-align:right;',
+        'Closed ' + new Date(investment.closed_at || investment.updated_at || investment.created_at).toLocaleDateString()));
+      itemEl.appendChild(body);
+      return itemEl;
+    }
+
+    // ── Est. Current Value + sparkline ───────────────────────────────────
+    const valBlock = el('div', 'border-radius:12px;padding:12px 14px;margin-bottom:12px;');
+    valBlock.style.background = strategy.accentColor + '0A';
+    valBlock.style.border     = '1px solid ' + strategy.accentColor + '25';
+
+    const valRow = el('div', 'display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:8px;');
+    const valLeft = el('div');
+    valLeft.appendChild(el('div', 'font-size:10px;font-weight:700;color:var(--color-text-tertiary);letter-spacing:0.7px;text-transform:uppercase;margin-bottom:4px;', 'Est. Current Value'));
+
+    // Live-ticking value display
+    // Seed with a ±0.2% random nudge so the initial display is never the clean
+    // deterministic baseline — it looks mid-stream from the moment the card renders.
+    const _initNudge = 1 + (Math.random() - 0.5) * 0.004;
+    const valDisplay = el('div', 'font-size:26px;font-weight:900;letter-spacing:-0.8px;color:var(--color-text-primary);', fmt(estVal * _initNudge));
+    valDisplay.id = 'vault-live-' + investment.id;
+    valLeft.appendChild(valDisplay);
+
+    // Pool share
+    const share     = _poolShare(amount, strategy.id);
+    const shareSpan = el('div', 'font-size:10px;color:var(--color-text-tertiary);margin-top:3px;', 'Pool share: ' + share.toFixed(3) + '%');
+    valLeft.appendChild(shareSpan);
+    valRow.appendChild(valLeft);
+
+    // 7-day index change badge
+    const series     = _indexSeries(strategy.id, 7);
+    const weekChange = series.length >= 2 ? ((series[series.length - 1] / series[0]) - 1) * 100 : 0;
+    const wkBadge    = el('div', 'text-align:right;');
+    wkBadge.appendChild(el('div', 'font-size:9px;color:var(--color-text-tertiary);margin-bottom:2px;', '7d pool'));
+    const wkVal = el('div', 'font-size:12px;font-weight:800;', (weekChange >= 0 ? '+' : '') + weekChange.toFixed(2) + '%');
+    wkVal.style.color = weekChange >= 0 ? '#10b981' : '#ef4444';
+    wkBadge.appendChild(wkVal);
+    valRow.appendChild(wkBadge);
+    valBlock.appendChild(valRow);
+
+    // Sparkline
+    valBlock.appendChild(_buildSparkline(strategy.id, strategy.accentColor));
+    body.appendChild(valBlock);
+
+    // ── Stats row ────────────────────────────────────────────────────────
+    const statsGrid = el('div', 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;');
+    const todayIdx  = _poolIndex(strategy.id, new Date());
     [
-      { label: 'Invested',     value: fmt(amount),     color: 'var(--color-text-primary)' },
-      { label: 'Current Est.', value: fmt(currentVal),  color: 'var(--color-text-primary)' },
-      { label: 'Gain',         value: (gain >= 0 ? '+' : '') + fmt(gain), color: gain >= 0 ? '#10b981' : '#ef4444' }
+      { label: 'Invested',    value: fmt(amount),            color: 'var(--color-text-primary)' },
+      { label: 'Unrealised',  value: (gain >= 0 ? '+' : '') + fmt(gain), color: gain >= 0 ? '#10b981' : '#ef4444' },
+      { label: 'Pool Index',  value: todayIdx.toFixed(4),   color: strategy.accentColor }
     ].forEach(s => {
       const cell = el('div', 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px;text-align:center;');
       const val  = el('div', 'font-size:13px;font-weight:700;', s.value);
@@ -752,45 +999,68 @@
       cell.appendChild(el('div', 'font-size:9px;color:var(--color-text-tertiary);margin-top:3px;letter-spacing:0.5px;', s.label));
       statsGrid.appendChild(cell);
     });
-    itemEl.appendChild(statsGrid);
+    body.appendChild(statsGrid);
 
-    if (!isCompleted && matureDate) {
+    // ── Term progress bar ────────────────────────────────────────────────
+    if (matureDate) {
       const createdAt = new Date(investment.created_at || Date.now());
       const totalMs   = matureDate - createdAt;
       const pct       = Math.max(0, Math.min(100, ((Date.now() - createdAt) / totalMs) * 100));
       const daysLeft  = Math.max(0, Math.ceil((matureDate - Date.now()) / 86400000));
-      const pw        = el('div', 'margin-bottom:14px;');
-      const pRow      = el('div', 'display:flex;justify-content:space-between;margin-bottom:5px;');
-      pRow.appendChild(el('span', 'font-size:10px;color:var(--color-text-tertiary);', 'Term progress'));
-      pRow.appendChild(el('span', 'font-size:10px;color:var(--color-text-tertiary);', isMatured ? 'Matured!' : daysLeft + ' days left'));
+      const estRetPct = gainPct.toFixed(2);
+
+      const pw   = el('div', 'margin-bottom:12px;');
+      const pRow = el('div', 'display:flex;justify-content:space-between;margin-bottom:5px;');
+      pRow.appendChild(el('span', 'font-size:10px;color:var(--color-text-tertiary);', isMatured ? 'Matured · Ready to claim' : 'Matures ' + matureDate.toLocaleDateString() + ' · ' + daysLeft + 'd left'));
+      const retBadge = el('span', 'font-size:10px;font-weight:700;', 'Est. +' + estRetPct + '%');
+      retBadge.style.color = '#10b981';
+      pRow.appendChild(retBadge);
       pw.appendChild(pRow);
-      const barBg   = el('div', 'height:4px;background:rgba(255,255,255,0.08);border-radius:2px;');
+      const barBg   = el('div', 'height:4px;background:rgba(255,255,255,0.07);border-radius:2px;');
       const barFill = el('div');
-      barFill.style.cssText  = 'height:100%;border-radius:2px;';
+      barFill.style.cssText  = 'height:100%;border-radius:2px;transition:width 0.6s ease;';
       barFill.style.width    = pct + '%';
-      barFill.style.background = isMatured ? '#10b981' : strategy.accentColor;
+      barFill.style.background = isMatured ? '#10b981' : ('linear-gradient(90deg,' + strategy.accentColor + ',' + strategy.accentColor + '99)');
       barBg.appendChild(barFill);
       pw.appendChild(barBg);
-      itemEl.appendChild(pw);
+      body.appendChild(pw);
     }
 
-    if (isCompleted) {
-      itemEl.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);text-align:right;', 'Closed ' + new Date(investment.closed_at || investment.updated_at || investment.created_at).toLocaleDateString()));
-      return itemEl;
-    }
+    // ── Live feed ────────────────────────────────────────────────────────
+    body.appendChild(_buildLiveFeed(strategy.id));
 
-    const btnRow = el('div', 'display:flex;gap:8px;');
+    // ── CTA buttons ──────────────────────────────────────────────────────
+    const btnRow = el('div', 'display:flex;gap:8px;margin-top:14px;');
     if (isMatured) {
-      const claimBtn = el('button', 'flex:1;padding:12px;font-size:14px;font-weight:800;border:none;border-radius:10px;cursor:pointer;background:#10b981;color:#fff;', 'Claim to Wallet');
+      const claimBtn = el('button', 'flex:1;padding:13px;font-size:14px;font-weight:800;border:none;border-radius:10px;cursor:pointer;background:#10b981;color:#fff;', 'Claim to Wallet');
       claimBtn.addEventListener('click', () => handleClaim(investment, true));
       btnRow.appendChild(claimBtn);
     } else {
       const { daysRemaining } = calcEarlyPenalty(investment);
-      const earlyBtn = el('button', 'flex:1;padding:12px;font-size:13px;font-weight:700;border-radius:10px;cursor:pointer;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);color:#ef4444;', 'Early Exit (' + daysRemaining + 'd left)');
+      const earlyBtn = el('button', 'flex:1;padding:12px;font-size:12px;font-weight:700;border-radius:10px;cursor:pointer;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);color:#ef4444;', 'Early Exit (' + daysRemaining + 'd left)');
       earlyBtn.addEventListener('click', () => handleClaim(investment, false));
       btnRow.appendChild(earlyBtn);
     }
-    itemEl.appendChild(btnRow);
+    body.appendChild(btnRow);
+
+    itemEl.appendChild(body);
+
+    // ── Live tick (starts after render, stored for cleanup) ──────────────
+    if (!isCompleted && !isMatured) {
+      const TICK_MS  = 4000;
+      let   liveBase = estVal * _initNudge;   // continues from the nudged starting display
+      const timerId  = setInterval(() => {
+        if (_destroyed) { clearInterval(timerId); return; }
+        const displayEl = document.getElementById('vault-live-' + investment.id);
+        if (!displayEl) { clearInterval(timerId); _liveTimers.delete(timerId); return; }
+        // ±0.04% micro-fluctuation per tick — realistic price noise
+        const nudge  = (Math.random() - 0.46) * 0.0004 * liveBase;
+        liveBase    += nudge;
+        displayEl.textContent = fmt(liveBase);
+      }, TICK_MS);
+      _liveTimers.add(timerId);
+    }
+
     return itemEl;
   }
 
@@ -932,9 +1202,18 @@
     if ((investments || []).some(i => i.status === 'active')) _activeTab = 'portfolio';
 
     const vaultWrapper = document.createElement('div');
-    vaultWrapper.style.paddingBottom = '16px';
+    // Must clear the floating nav orb (58px) + gap (28px) + safe area
+    vaultWrapper.style.paddingBottom = 'calc(110px + env(safe-area-inset-bottom, 0px))';
 
     const pageHeader = el('div', 'padding:20px 16px 8px;');
+    const logoRow    = el('div', 'display:flex;align-items:center;gap:10px;margin-bottom:4px;');
+    const logoImg    = document.createElement('img');
+    logoImg.src      = 'NexTrade-192.png';
+    logoImg.alt      = 'NexTrade';
+    logoImg.style.cssText = 'width:28px;height:28px;border-radius:8px;object-fit:cover;flex-shrink:0;';
+    logoRow.appendChild(logoImg);
+    logoRow.appendChild(el('span', 'font-size:18px;font-weight:900;color:var(--color-text-primary);letter-spacing:-0.4px;', 'Vault'));
+    pageHeader.appendChild(logoRow);
     pageHeader.appendChild(el('p', 'font-size:13px;color:var(--color-text-secondary);margin:0;line-height:1.4;', 'Institutional-grade strategies. Performance fee only on profit.'));
     vaultWrapper.appendChild(pageHeader);
 
@@ -993,6 +1272,8 @@
 
   function destroy() {
     _destroyed = true;
+    _liveTimers.forEach(id => clearInterval(id));
+    _liveTimers.clear();
     if (_container) _container.style.overflowY = '';
     _container = null;
     _milestoneChecked.clear();

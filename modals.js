@@ -130,8 +130,10 @@ const Modal = (() => {
       .ntm-btn-danger  { background: rgba(239,68,68,0.12); color: #EF4444; border: 1px solid rgba(239,68,68,0.2); }
       .ntm-btn-danger:hover { background: rgba(239,68,68,0.2); }
 
-      .ntm-content { font-family: 'DM Sans', sans-serif; color: #CBD5E1; font-size: 14px; line-height: 1.6; flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 28px; }
+      .ntm-content { font-family: 'DM Sans', sans-serif; color: #CBD5E1; font-size: 14px; line-height: 1.6; flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
       .ntm-content input, .ntm-content textarea, .ntm-content select, .ntm-content button { position: relative; z-index: 1; }
+      /* Confirm modal: action buttons must clear the iPhone home indicator */
+      .ntm-confirm .ntm-body { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
     `;
     document.head.appendChild(s);
   }

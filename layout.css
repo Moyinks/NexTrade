@@ -29,7 +29,8 @@ body {
   margin: 0;
   padding: 0;
   width: 100%;
-  height: 100dvh;
+  height: 100vh;    /* fallback: iOS < 15.4, older Android */
+  height: 100dvh;   /* preferred: shrinks with virtual keyboard */
   background-color: var(--color-background);
   color: var(--color-text-primary);
   font-family: var(--font-body, system-ui, -apple-system, sans-serif);
@@ -48,6 +49,7 @@ body {
 
 .app-wrapper {
   width: 100%;
+  height: 100vh;    /* fallback */
   height: 100dvh;
 
   display: flex;
@@ -174,7 +176,9 @@ body {
   width: calc(100% + (var(--space-4) * 2)) !important;
   border-radius: 0 0 24px 24px !important;
 
-  background: linear-gradient(135deg, var(--color-primary) 0%, #1e40af 100%);
+  /* Background intentionally omitted — components.css defines the premium
+     mesh gradient. layout.css loads after components.css, so any background
+     rule here would silently override it. */
   padding: var(--space-6);
   padding-top: calc(var(--space-6) + 10px);
   margin-bottom: var(--space-6);
@@ -186,7 +190,7 @@ body {
 }
 
 .hero-value {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 2.5rem;
   font-weight: 700;
   margin: var(--space-2) 0;

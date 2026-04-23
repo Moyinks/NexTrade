@@ -230,7 +230,20 @@
   input[type="number"],
   textarea,
   select {
-    font-size: 16px;
+    font-size: 16px; /* Prevents iOS auto-zoom on focus */
+  }
+
+  /* Remove native iOS/Android number spinners — they look out of place
+     in the app's design system and are not touch-friendly. */
+  input[type="number"] {
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
 }
 
@@ -287,9 +300,7 @@
    PULL-TO-REFRESH PREVENTION
    ============================================ */
 
-body {
-  overscroll-behavior-y: contain;
-}
+/* overscroll-behavior-y: contain is already declared on body in layout.css */
 
 /* ============================================
    LANDSCAPE MODE ADJUSTMENTS

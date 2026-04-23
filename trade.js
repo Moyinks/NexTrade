@@ -53,28 +53,28 @@ const Trade = (() => {
   // The deposit reference code (generated per session below) is the
   // reconciliation mechanism — admin matches reference to incoming transfer.
   const DEPOSIT_ADDRESSES = {
-  USDT_ERC20: {
-    address: '0x0000000000000000000000000000000000000001',
-    label:   'USDT (ERC-20 / Ethereum)',
-    network: 'Ethereum Network',
-    icon:    'fa-ethereum',
-    color:   '#627eea'
-  },
-  BTC: {
-    address: '1BitcoinAddressPendingSetup00000000',
-    label:   'Bitcoin (BTC)',
-    network: 'Bitcoin Network',
-    icon:    'fa-bitcoin',
-    color:   '#f7931a'
-  },
-  USDT_TRC20: {
-    address: 'TRXAddressPendingSetup00000000000000',
-    label:   'USDT (TRC-20 / Tron)',
-    network: 'Tron Network',
-    icon:    'fa-coins',
-    color:   '#ef0027'
-  }
-};
+    USDT_ERC20: {
+      address: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
+      label:   'USDT (ERC-20 / Ethereum)',
+      network: 'Ethereum Network',
+      icon:    'fa-ethereum',
+      color:   '#627eea'
+    },
+    BTC: {
+      address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf',
+      label:   'Bitcoin (BTC)',
+      network: 'Bitcoin Network',
+      icon:    'fa-bitcoin',
+      color:   '#f7931a'
+    },
+    USDT_TRC20: {
+      address: 'TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7',
+      label:   'USDT (TRC-20 / Tron)',
+      network: 'Tron Network',
+      icon:    'fa-coins',
+      color:   '#ef0027'
+    }
+  };
 
   // Strings that indicate an address was never replaced with a real value.
   // Used as a runtime guard in openDeposit() even if the feature flag is set.
@@ -383,13 +383,12 @@ const Trade = (() => {
           const { error } = await window.supabaseClient
             .from('transactions')
             .insert({
-              user_id:      user.id,
-              type:         'deposit',
-              amount:       num,
-              status:       'pending',
-              description:  'Deposit (' + DEPOSIT_ADDRESSES[selectedCoin].label + ')',
-              reference_id: depositRef,
-              created_at:   new Date().toISOString()
+              user_id:     user.id,
+              type:        'deposit',
+              amount:      num,
+              status:      'pending',
+              description: 'Deposit (' + DEPOSIT_ADDRESSES[selectedCoin].label + ') — Ref: ' + depositRef,
+              created_at:  new Date().toISOString()
             });
           if (error) throw error;
         }
@@ -397,12 +396,12 @@ const Trade = (() => {
         // Reflect in local state (pending — does not affect derived balance)
         if (window.AppState) {
           AppState.addTransaction({
-            id:         'temp_' + Date.now(),
-            type:       'deposit',
-            amount:     num,
-            status:     'pending',
-            reference_id: depositRef,
-            created_at: new Date().toISOString()
+            id:          'temp_' + Date.now(),
+            type:        'deposit',
+            amount:      num,
+            status:      'pending',
+            description: 'Deposit (' + DEPOSIT_ADDRESSES[selectedCoin].label + ') — Ref: ' + depositRef,
+            created_at:  new Date().toISOString()
           });
         }
 

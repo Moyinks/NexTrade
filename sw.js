@@ -11,7 +11,7 @@
  * Bump CACHE_VERSION whenever you deploy changes so users get fresh files.
  */
 
-const CACHE_VERSION  = 'nextrade-v37.5';
+const CACHE_VERSION  = 'nextrade-v37.5.5';
 const OFFLINE_URL    = '/login.html';
 
 // ── FILES TO PRECACHE ON INSTALL ──────────────────────────────────────────────
