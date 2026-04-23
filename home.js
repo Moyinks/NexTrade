@@ -763,6 +763,37 @@
     startTicker();
     if (window.Navbar) Navbar.setActive('home');
     if (isFirstLogin()) setTimeout(showWelcome, 700);
+
+    // ── BALANCE READY GUARD ───────────────────────────────────────────────────
+    // syncProfile is async and may resolve slightly after the router calls
+    // render(). Subscribe to 'balances' so the hero repaints as soon as the
+    // ledger-derived values land in AppState — even if render() was called
+    // a few ms too early.
+    // The unsubscribe function is kept so the listener is torn down after the
+    // first meaningful update, preventing stale callbacks across re-renders.
+    if (window.AppState && typeof AppState.subscribe === 'function') {
+      let _unsubBalances = null;
+      const _onBalancesReady = (bals) => {
+        if (_destroyed) {
+          // Page was destroyed — clean up immediately and do nothing
+          if (_unsubBalances) { _unsubBalances(); _unsubBalances = null; }
+          return;
+        }
+        // Only repaint when a non-zero balance just arrived and the hero still
+        // shows $0.00 (i.e. it rendered before balances were available).
+        if (bals && (bals.spot > 0 || bals.vault > 0)) {
+          const numEl = document.getElementById('home-total-value');
+          if (numEl && (numEl.textContent === '$0.00' || numEl.textContent === '')) {
+            // Unsubscribe before refreshing so the re-render doesn't loop
+            if (_unsubBalances) { _unsubBalances(); _unsubBalances = null; }
+            refresh();
+          }
+        }
+      };
+      try {
+        _unsubBalances = AppState.subscribe('balances', _onBalancesReady);
+      } catch (_) { /* subscribe not available — non-fatal */ }
+    }
   }
 
   // ─── LIFECYCLE ────────────────────────────────────────────────────────────────

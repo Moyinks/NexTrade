@@ -451,12 +451,14 @@ const Navbar = (() => {
     const initials    = buildInitials(displayName);
 
     const titleHTML = pageId === 'home'
-      ? `<span style="font-size:18px;font-weight:800;letter-spacing:-0.3px;">Nex<span style="color:#3B82F6;">Trade</span></span>`
-      : `<span style="font-size:18px;font-weight:700;letter-spacing:-0.3px;">${cfg.label}</span>`;
+      ? `<span style="font-size:17px;font-weight:800;letter-spacing:-0.3px;">Nex<span style="color:#3B82F6;">Trade</span></span>`
+      : `<span style="font-size:17px;font-weight:700;letter-spacing:-0.3px;">${cfg.label}</span>`;
 
     headerEl.innerHTML = `
       <div style="display:flex;align-items:center;gap:9px;font-family:'DM Sans',sans-serif;">
-        <img src="pwa1.png" alt="NexTrade" style="width:30px;height:30px;border-radius:8px;object-fit:contain;display:block;flex-shrink:0;">
+        <img src="NexTrade-192.png" alt="NexTrade"
+             style="width:28px;height:28px;border-radius:8px;object-fit:cover;flex-shrink:0;display:block;"
+             onerror="this.style.display='none'">
         ${titleHTML}
       </div>
       <div style="position:relative;">
@@ -514,16 +516,6 @@ const Navbar = (() => {
     if (document.getElementById('navbar-premium-styles')) return;
     const s = document.createElement('style'); s.id = 'navbar-premium-styles';
     s.textContent = `
-      .app-header {
-        background: linear-gradient(135deg, #0a1628 0%, #0f1c2e 35%, #111827 65%, #0c1520 100%) !important;
-        border-bottom: 1px solid rgba(59,130,246,0.13) !important;
-        box-shadow:
-          inset 0 1px 0 rgba(255,255,255,0.06),
-          0 1px 0 rgba(59,130,246,0.08),
-          0 6px 32px rgba(0,0,0,0.55) !important;
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-      }
       .profile-dropdown{position:absolute;top:calc(100% + 12px);right:0;width:260px;background:rgba(21,25,33,0.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,0.09);border-radius:20px;box-shadow:0 12px 40px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.08);opacity:0;transform:translateY(-10px);pointer-events:none;transition:all 0.3s cubic-bezier(0.34,1.2,0.64,1);z-index:9999;overflow:hidden;font-family:'DM Sans',sans-serif;}
       .profile-dropdown.open{opacity:1;transform:translateY(0);pointer-events:all;}
       .profile-header{display:flex;align-items:center;gap:12px;padding:18px;border-bottom:1px solid rgba(255,255,255,0.06);}

@@ -47,8 +47,8 @@
     {
       id:          'steady-accumulator',
       name:        'Steady Accumulator',
-      tagline:     'Earn reliably. Sleep soundly.',
-      category:    'Conservative Growth',
+      tagline:     'Low volatility. Consistent pool growth.',
+      category:    'Conservative · Pool A',
       icon:        '\u{1F6E1}\uFE0F',
       apy:         22,
       apyRange:    '18\u201326%',
@@ -61,22 +61,22 @@
       perfFee:     15,
       accentColor: '#10b981',
       mechanics: [
-        { icon: '\u{1F3E6}', title: 'Stablecoin Lending',  pct: 55, desc: 'USDC/USDT loaned to institutional borrowers via audited DeFi protocols. Base rate 8\u201314% APY from real borrower demand \u2014 no speculation.' },
-        { icon: '\u27A0',    title: 'ETH Staking',          pct: 30, desc: 'Native Ethereum staking through validator nodes we operate. Protocol rewards 3\u20135% APY, fully on-chain and verifiable.' },
-        { icon: '\u{1F4A7}', title: 'Liquidity Provision',  pct: 15, desc: 'Capital deployed as liquidity in the highest-fee stable trading pairs. Every swap generates a real-time fee \u2014 paid to us continuously.' }
+        { icon: '\u{1F3E6}', title: 'Stablecoin Lending',  pct: 55, desc: 'USDC/USDT loaned to institutional borrowers via audited protocols. Pool earns a continuous yield from real borrower demand \u2014 no speculation.' },
+        { icon: '\u27A0',    title: 'ETH Staking',          pct: 30, desc: 'Native ETH staking through validator nodes we operate. Protocol rewards are deposited into the pool every epoch.' },
+        { icon: '\u{1F4A7}', title: 'Liquidity Provision',  pct: 15, desc: 'Pool capital deployed into the highest-fee stable pairs. Every swap generates a fee credited to the pool continuously.' }
       ],
       highlights: [
-        'Capital deployed only in audited protocols',
-        'No leverage \u2014 ever',
-        '15% performance fee on profit only',
+        'Your return = your pool share \u00D7 pool performance',
+        'We earn 15% only on the profit the pool generates',
+        'No leverage. Capital only in audited protocols',
         'Early exit: up to 8% fee on claimed value'
       ]
     },
     {
       id:          'alpha-seeker',
       name:        'Alpha Seeker',
-      tagline:     'Outperform the market. Own the risk.',
-      category:    'Quantitative Momentum',
+      tagline:     'Aggressive execution. Real market edge.',
+      category:    'Quant Momentum · Pool B',
       icon:        '\u26A1',
       apy:         65,
       apyRange:    '45\u201390%',
@@ -89,14 +89,15 @@
       perfFee:     20,
       accentColor: '#f59e0b',
       mechanics: [
-        { icon: '\u{1F4CA}', title: 'Quant Momentum Signals',    pct: 50, desc: 'RSI-divergence and volume-anomaly signals across the top 20 high-volume pairs. We enter and exit within hours \u2014 not days.' },
-        { icon: '\u2696\uFE0F', title: 'Funding Rate Arbitrage', pct: 30, desc: 'When perpetual futures markets are heavily long, shorts collect a payment every 8 hours. We sit on the profitable side and collect \u2014 market-neutral.' },
-        { icon: '\u{1F525}', title: 'Volatile-Pair Liquidity',   pct: 20, desc: 'Providing liquidity on high-volatility pairs earns 10\u00D7 the fees of stable pairs. Managed with dynamic rebalancing.' }
+        { icon: '\u{1F4CA}', title: 'Quant Momentum Signals',    pct: 50, desc: 'RSI-divergence and volume-anomaly signals across the top 20 pairs. Positions open and close within hours. Pool captures the spread.' },
+        { icon: '\u2696\uFE0F', title: 'Funding Rate Arbitrage', pct: 30, desc: 'When perp futures lean heavily long, shorts collect a payment every 8 hours. We sit on the right side and collect \u2014 market-neutral income.' },
+        { icon: '\u{1F525}', title: 'Volatile-Pair Liquidity',   pct: 20, desc: 'Providing liquidity on high-volatility pairs earns 10\u00D7 the fees of stable pairs. Rebalanced dynamically to capture fee income.' }
       ],
       highlights: [
-        'Algo-driven \u2014 no emotional decisions',
-        'Funding rate arbitrage runs 24/7',
-        '20% performance fee on profit only',
+        'Your return = your pool share \u00D7 pool performance',
+        'Algo-driven entries \u2014 no emotional decisions',
+        'Funding rate arbitrage runs continuously, 24/7',
+        'We earn 20% only on the profit the pool generates',
         'Early exit: up to 15% fee on claimed value'
       ]
     }
@@ -239,14 +240,6 @@
     svg.style.cssText = 'width:100%;height:36px;display:block;';
 
     svg.innerHTML = `
-      <defs>
-        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${color}" stop-opacity="0.25"/>
-          <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      <polygon points="${pts.join(' ')} ${(W - pad).toFixed(1)},${H} ${pad},${H}"
-               fill="url(#${gradId})"/>
       <polyline points="${pts.join(' ')}"
                 fill="none" stroke="${color}" stroke-width="1.5"
                 stroke-linecap="round" stroke-linejoin="round"/>
@@ -381,27 +374,24 @@
     const content = document.createElement('div');
 
     const chip = el('div', 'display:inline-flex;align-items:center;gap:8px;border-radius:20px;padding:6px 14px;margin-bottom:16px;');
-    chip.style.background = strategy.accentColor + '15';
-    chip.style.border = '1px solid ' + strategy.accentColor + '35';
-    chip.innerHTML = '<span style="font-size:15px;">' + strategy.icon + '</span><span style="font-size:12px;font-weight:700;color:' + strategy.accentColor + ';">' + strategy.riskLabel + ' Risk \u00B7 ' + strategy.apy + '% projected APY \u00B7 ' + strategy.duration + ' days</span>';
+    chip.style.background = 'rgba(255,255,255,0.04)';
+    chip.style.border = '1px solid rgba(255,255,255,0.09)';
+    chip.innerHTML = '<span style="font-size:15px;">' + strategy.icon + '</span><span style="font-size:12px;font-weight:700;color:var(--color-text-primary);">' + strategy.riskLabel + ' Risk \u00B7 ' + strategy.duration + ' days \u00B7 ' + strategy.perfFee + '% perf. fee</span>';
     content.appendChild(chip);
 
     const disclosures = [
-      'This is a ' + strategy.riskLabel.toLowerCase() + ' risk strategy. Capital is deployed in financial products that can lose value.',
-      'The ' + strategy.apyRange + ' APY figure is a projection based on current market conditions. Past performance does not guarantee future results.',
-      'Your principal is locked for ' + strategy.duration + ' days. Early exit incurs a fee of up to ' + Math.round(strategy.penaltyRate * 100) + '% of the claimed amount.',
-      'NexTrade earns a ' + strategy.perfFee + '% performance fee only on the profit we generate. No fees are ever deducted from your principal.',
-      'Only invest money you are comfortable not accessing for the full term duration.'
+      'You are joining a shared trading pool. Your return depends on how the pool performs \u2014 not a fixed rate.',
+      'We trade on your behalf using the strategy above. Actual returns vary with market conditions and are set by admin at claim time.',
+      'The pool index shown in your portfolio is a real-time performance tracker. It is the basis for your estimated value, not a binding payout.',
+      'Your principal is locked for ' + strategy.duration + ' days. Early exit incurs a fee of up to ' + Math.round(strategy.penaltyRate * 100) + '% of your claimed value.',
+      'NexTrade earns ' + strategy.perfFee + '% only on profit the pool generates. Zero fees are ever taken from your principal.'
     ];
 
-    const box = el('div', 'border-radius:12px;padding:14px 16px;margin-bottom:16px;');
-    box.style.background = strategy.accentColor + '08';
-    box.style.border = '1px solid ' + strategy.accentColor + '30';
+    const box = el('div', 'border-radius:12px;padding:14px 16px;margin-bottom:16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);');
     disclosures.forEach((d, i) => {
       const row = el('div', 'display:flex;align-items:flex-start;gap:8px;');
       row.style.marginBottom = i < disclosures.length - 1 ? '8px' : '0';
-      row.appendChild(el('span', 'font-weight:700;font-size:14px;flex-shrink:0;line-height:1.6;', '\u00B7'));
-      row.style.color = strategy.accentColor;
+      row.appendChild(el('span', 'font-weight:700;font-size:14px;flex-shrink:0;line-height:1.6;color:var(--color-text-tertiary);', '\u00B7'));
       const txt = el('span', 'font-size:12px;line-height:1.6;', d);
       txt.style.color = 'var(--color-text-secondary)';
       row.appendChild(txt);
@@ -429,9 +419,9 @@
     const content      = document.createElement('div');
 
     const chip = el('div', 'display:inline-flex;align-items:center;gap:8px;border-radius:20px;padding:6px 14px;margin-bottom:16px;');
-    chip.style.background = strategy.accentColor + '15';
-    chip.style.border = '1px solid ' + strategy.accentColor + '35';
-    chip.innerHTML = '<span>' + strategy.icon + '</span><span style="font-size:12px;font-weight:700;color:' + strategy.accentColor + ';">' + strategy.riskLabel + ' Risk \u00B7 ' + strategy.apy + '% projected APY \u00B7 ' + strategy.duration + ' days</span>';
+    chip.style.background = 'rgba(255,255,255,0.04)';
+    chip.style.border = '1px solid rgba(255,255,255,0.09)';
+    chip.innerHTML = '<span>' + strategy.icon + '</span><span style="font-size:12px;font-weight:700;color:var(--color-text-primary);">' + strategy.riskLabel + ' Risk \u00B7 ' + strategy.duration + 'd lock \u00B7 ' + strategy.perfFee + '% perf. fee</span>';
     content.appendChild(chip);
 
     if (spotBalance < strategy.minAmount) {
@@ -440,14 +430,19 @@
       content.appendChild(warn);
     }
 
+    const idx30ago  = _poolIndex(strategy.id, new Date(Date.now() - 30 * 86400000));
+    const idxToday  = _poolIndex(strategy.id, new Date());
+    const pool30d   = ((idxToday / idx30ago) - 1) * 100;
+    const pool30str = (pool30d >= 0 ? '+' : '') + pool30d.toFixed(2) + '%';
+
     const grid = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;');
     [
-      { label: 'Min. Investment', value: fmt(strategy.minAmount), color: 'var(--color-primary)' },
-      { label: 'Your Balance',    value: fmt(spotBalance),        color: spotBalance >= strategy.minAmount ? '#10b981' : '#ef4444' },
-      { label: 'Projected APY',   value: strategy.apyRange,       color: strategy.accentColor },
-      { label: 'Term',            value: strategy.duration + ' days', color: 'var(--color-text-primary)' }
+      { label: 'Min. Investment', value: fmt(strategy.minAmount),    color: 'var(--color-text-primary)' },
+      { label: 'Your Balance',    value: fmt(spotBalance),           color: spotBalance >= strategy.minAmount ? '#10b981' : '#ef4444' },
+      { label: 'Pool 30d Return', value: pool30str,                  color: pool30d >= 0 ? '#10b981' : '#ef4444' },
+      { label: 'Lock Period',     value: strategy.duration + ' days', color: 'var(--color-text-primary)' }
     ].forEach(item => {
-      const cell = el('div', 'background:var(--color-surface-elevated);border-radius:10px;padding:12px;border:1px solid var(--color-border);');
+      const cell = el('div', 'background:rgba(255,255,255,0.03);border-radius:10px;padding:12px;border:1px solid rgba(255,255,255,0.07);');
       cell.appendChild(el('div', 'font-size:10px;color:var(--color-text-tertiary);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.4px;', item.label));
       const val = el('div', 'font-size:15px;font-weight:700;', item.value);
       val.style.color = item.color;
@@ -467,18 +462,22 @@
     inputWrap.appendChild(inputLbl); inputWrap.appendChild(amountInput); inputWrap.appendChild(hint);
     content.appendChild(inputWrap);
 
-    const preview = el('div', 'border-radius:14px;padding:14px 16px;margin-bottom:16px;display:none;background:linear-gradient(135deg,#10b98112,#10b98106);border:1px solid #10b98130;');
-    const prevLbl  = el('div', 'font-size:11px;color:var(--color-text-tertiary);margin-bottom:6px;', 'Projected after ' + strategy.duration + ' days');
-    const prevAmt  = el('div', 'font-size:22px;font-weight:800;color:#10b981;', '');
-    const prevNote = el('div', 'font-size:10px;color:var(--color-text-tertiary);margin-top:4px;', strategy.apyRange + ' projected APY \u00B7 not guaranteed');
+    const preview = el('div', 'border-radius:12px;padding:14px 16px;margin-bottom:16px;display:none;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);');
+    const prevLbl  = el('div', 'font-size:11px;color:var(--color-text-tertiary);margin-bottom:6px;', 'Est. value after ' + strategy.duration + ' days at current pool rate');
+    const prevAmt  = el('div', 'font-size:22px;font-weight:800;color:var(--color-text-primary);', '');
+    const prevNote = el('div', 'font-size:10px;color:var(--color-text-tertiary);margin-top:4px;', 'Based on pool performance over the last 30 days. Actual payout set at claim time.');
     preview.appendChild(prevLbl); preview.appendChild(prevAmt); preview.appendChild(prevNote);
     content.appendChild(preview);
 
     amountInput.addEventListener('input', () => {
       const v = parseFloat(amountInput.value);
       if (!isNaN(v) && v >= strategy.minAmount) {
-        const projected = v * (1 + (strategy.apy / 100) * (strategy.duration / 365));
-        prevAmt.textContent = fmt(projected) + ' (est. +' + fmt(projected - v) + ')';
+        const share      = _poolShare(v, strategy.id);
+        const idx30ago   = _poolIndex(strategy.id, new Date(Date.now() - 30 * 86400000));
+        const idxToday   = _poolIndex(strategy.id, new Date());
+        const pool30d    = ((idxToday / idx30ago) - 1);
+        const projected  = v * (1 + pool30d * (strategy.duration / 30));
+        prevAmt.textContent = fmt(projected) + ' (pool-tracked est.)';
         preview.style.display = 'block';
       } else { preview.style.display = 'none'; }
     });
@@ -766,21 +765,17 @@
   function buildPlanCard(strategy, recommended) {
     const card = el('div');
     card.style.cssText = 'position:relative;background:var(--color-surface-elevated);border-radius:20px;overflow:hidden;margin-bottom:95px;transition:transform 0.2s ease,border-color 0.2s;cursor:pointer;';
-    card.style.border = '1px solid ' + (recommended ? strategy.accentColor + '50' : 'var(--color-border)');
-    card.addEventListener('mouseenter', () => { card.style.transform = 'translateY(-2px)'; card.style.borderColor = strategy.accentColor + '80'; });
-    card.addEventListener('mouseleave', () => { card.style.transform = ''; card.style.borderColor = recommended ? strategy.accentColor + '50' : 'var(--color-border)'; });
-
-    const accentBar = el('div');
-    accentBar.style.cssText = 'height:4px;background:linear-gradient(90deg,' + strategy.accentColor + ',' + strategy.accentColor + '80);';
-    card.appendChild(accentBar);
+    card.style.border = '1px solid ' + (recommended ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)');
+    card.addEventListener('mouseenter', () => { card.style.borderColor = 'rgba(255,255,255,0.18)'; });
+    card.addEventListener('mouseleave', () => { card.style.borderColor = recommended ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)'; });
 
     const body = el('div', 'padding:20px;');
 
     const headerRow = el('div', 'display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;');
     const left = el('div', 'display:flex;align-items:center;gap:12px;');
     const iconBox = el('div', 'width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;');
-    iconBox.style.background = strategy.accentColor + '18';
-    iconBox.style.border = '1px solid ' + strategy.accentColor + '30';
+    iconBox.style.background = 'rgba(255,255,255,0.05)';
+    iconBox.style.border = '1px solid rgba(255,255,255,0.09)';
     iconBox.textContent = strategy.icon;
     const titleWrap = el('div');
     titleWrap.appendChild(el('div', 'font-size:17px;font-weight:800;color:var(--color-text-primary);margin-bottom:2px;', strategy.name));
@@ -793,9 +788,14 @@
       badge.style.background = strategy.accentColor;
       rightCol.appendChild(badge);
     }
-    rightCol.appendChild(el('div', 'font-size:10px;color:var(--color-text-tertiary);', 'PROJ. APY'));
-    const apyVal = el('div', 'font-size:22px;font-weight:900;letter-spacing:-0.5px;', strategy.apyRange);
-    apyVal.style.color = strategy.accentColor;
+    // Show real simulated 30-day pool return instead of a promised APY range
+    const idx30ago   = _poolIndex(strategy.id, new Date(Date.now() - 30 * 86400000));
+    const idxToday   = _poolIndex(strategy.id, new Date());
+    const pool30d    = ((idxToday / idx30ago) - 1) * 100;
+    const pool30dStr = (pool30d >= 0 ? '+' : '') + pool30d.toFixed(2) + '%';
+    rightCol.appendChild(el('div', 'font-size:10px;color:var(--color-text-tertiary);', '30D POOL RETURN'));
+    const apyVal = el('div', 'font-size:22px;font-weight:900;letter-spacing:-0.5px;', pool30dStr);
+    apyVal.style.color = pool30d >= 0 ? strategy.accentColor : '#ef4444';
     rightCol.appendChild(apyVal);
     headerRow.appendChild(left); headerRow.appendChild(rightCol);
     body.appendChild(headerRow);
@@ -803,10 +803,11 @@
     body.appendChild(el('div', 'font-size:13px;font-style:italic;color:var(--color-text-secondary);margin-bottom:16px;line-height:1.5;', strategy.tagline));
 
     const statsRow = el('div', 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px;');
+    const exampleShare = _poolShare(strategy.minAmount, strategy.id);
     [
       { label: 'MIN. INVEST', value: fmt(strategy.minAmount) },
       { label: 'TERM',        value: strategy.duration + 'd' },
-      { label: 'PERF. FEE',   value: strategy.perfFee + '%' }
+      { label: 'YOUR SHARE',  value: '~' + exampleShare.toFixed(3) + '%' }
     ].forEach(s => {
       const cell = el('div', 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;text-align:center;');
       cell.appendChild(el('div', 'font-size:17px;font-weight:800;color:var(--color-text-primary);', s.value));
@@ -816,11 +817,11 @@
     body.appendChild(statsRow);
 
     const mechSection = el('div', 'margin-bottom:20px;');
-    mechSection.appendChild(el('div', 'font-size:11px;font-weight:700;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;', 'How We Generate Your Return'));
+    mechSection.appendChild(el('div', 'font-size:11px;font-weight:700;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;', 'How We Grow The Pool'));
     strategy.mechanics.forEach(m => {
       const mechRow = el('div', 'display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;');
       const iconWrap = el('div', 'width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:2px;');
-      iconWrap.style.background = strategy.accentColor + '15';
+      iconWrap.style.background = 'rgba(255,255,255,0.05)';
       iconWrap.textContent = m.icon;
       const textWrap = el('div', 'flex:1;min-width:0;');
       const mTitle = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;');
@@ -855,9 +856,9 @@
     body.appendChild(hlWrap);
 
     const cta = el('button', 'width:100%;padding:15px;font-size:15px;font-weight:800;border:none;border-radius:13px;cursor:pointer;transition:all 0.2s;letter-spacing:-0.2px;');
-    cta.style.background = recommended ? strategy.accentColor : 'rgba(255,255,255,0.07)';
-    cta.style.color      = recommended ? '#fff' : 'var(--color-text-primary)';
-    cta.textContent      = recommended ? 'Invest in ' + strategy.name + ' \u2192' : 'View ' + strategy.name + ' \u2192';
+    cta.style.background = recommended ? 'var(--color-primary)' : 'rgba(255,255,255,0.05)';
+    cta.style.color      = '#fff';
+    cta.textContent = recommended ? 'Join Pool \u2014 ' + strategy.name + ' \u2192' : 'View ' + strategy.name + ' \u2192';
     cta.addEventListener('click', e => { e.stopPropagation(); openRiskDisclosure(strategy); });
     body.appendChild(cta);
     card.appendChild(body);
@@ -890,15 +891,15 @@
       itemEl.style.opacity    = '0.75';
     } else {
       itemEl.style.background = 'var(--color-surface-elevated)';
-      itemEl.style.border     = '1px solid ' + (isMatured ? '#10b98160' : strategy.accentColor + '40');
+      itemEl.style.border     = '1px solid rgba(255,255,255,0.09)';
       itemEl.style.boxShadow  = '0 4px 20px rgba(0,0,0,0.15)';
     }
 
-    // ── Accent bar ──────────────────────────────────────────────────────
+    // ── Accent dot (left border strip — flat, not gradient) ──────────────
     if (!isCompleted) {
-      const bar = el('div');
-      bar.style.cssText = 'height:3px;background:linear-gradient(90deg,' + strategy.accentColor + ',' + strategy.accentColor + '55);';
-      itemEl.appendChild(bar);
+      const strip = el('div');
+      strip.style.cssText = 'height:2px;background:' + strategy.accentColor + ';opacity:0.5;';
+      itemEl.appendChild(strip);
     }
 
     const body = el('div', 'padding:14px 16px;');
@@ -917,10 +918,8 @@
     nameWrap.appendChild(statusEl);
     leftSide.appendChild(iconEl); leftSide.appendChild(nameWrap);
 
-    const gainBadge = el('div', 'font-size:13px;font-weight:800;padding:4px 9px;border-radius:20px;', (gain >= 0 ? '+' : '') + gainPct.toFixed(2) + '%');
-    gainBadge.style.color      = gain >= 0 ? '#10b981' : '#ef4444';
-    gainBadge.style.background = gain >= 0 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)';
-    gainBadge.style.border     = '1px solid ' + (gain >= 0 ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)');
+    const gainBadge = el('div', 'font-size:13px;font-weight:800;', (gain >= 0 ? '+' : '') + gainPct.toFixed(2) + '%');
+    gainBadge.style.color = gain >= 0 ? '#10b981' : '#ef4444';
     headerRow.appendChild(leftSide); headerRow.appendChild(gainBadge);
     body.appendChild(headerRow);
 
@@ -947,9 +946,7 @@
     }
 
     // ── Est. Current Value + sparkline ───────────────────────────────────
-    const valBlock = el('div', 'border-radius:12px;padding:12px 14px;margin-bottom:12px;');
-    valBlock.style.background = strategy.accentColor + '0A';
-    valBlock.style.border     = '1px solid ' + strategy.accentColor + '25';
+    const valBlock = el('div', 'border-radius:10px;padding:12px 14px;margin-bottom:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);');
 
     const valRow = el('div', 'display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:8px;');
     const valLeft = el('div');
@@ -1020,7 +1017,7 @@
       const barFill = el('div');
       barFill.style.cssText  = 'height:100%;border-radius:2px;transition:width 0.6s ease;';
       barFill.style.width    = pct + '%';
-      barFill.style.background = isMatured ? '#10b981' : ('linear-gradient(90deg,' + strategy.accentColor + ',' + strategy.accentColor + '99)');
+      barFill.style.background = isMatured ? '#10b981' : strategy.accentColor;
       barBg.appendChild(barFill);
       pw.appendChild(barBg);
       body.appendChild(pw);
@@ -1123,7 +1120,7 @@
       const totalGainPct  = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
       const matured       = active.filter(i => i.matures_at && new Date(i.matures_at) <= new Date());
 
-      const summaryCard = el('div', 'border-radius:16px;padding:16px;margin-bottom:20px;background:linear-gradient(135deg,rgba(16,185,129,0.1),rgba(16,185,129,0.04));border:1px solid rgba(16,185,129,0.2);');
+      const summaryCard = el('div', 'border-radius:14px;padding:16px;margin-bottom:16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);');
       const sumRow  = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:' + (matured.length > 0 ? '12px' : '0') + ';');
       const sumLeft = el('div');
       sumLeft.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;', 'Portfolio Value'));
@@ -1205,7 +1202,9 @@
     // Must clear the floating nav orb (58px) + gap (28px) + safe area
     vaultWrapper.style.paddingBottom = 'calc(110px + env(safe-area-inset-bottom, 0px))';
 
-    
+    const pageHeader = el('div', 'padding:16px 16px 4px;');
+    pageHeader.appendChild(el('p', 'font-size:13px;color:var(--color-text-tertiary);margin:0;line-height:1.4;', 'We trade 24/7. You own a share of the pool. Returns are real, not projected.'));
+    vaultWrapper.appendChild(pageHeader);
 
     const tabBarContainer = el('div');
     tabBarContainer.style.cssText = [

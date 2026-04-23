@@ -51,19 +51,22 @@
    * The reconciliation test query will reveal any delta between stored and derived.
    */
   async function deriveSpotBalance(userId, storedBalance) {
+    // 'approved' is the terminal status the admin portal writes when it
+    // confirms a deposit — it carries the same financial weight as 'completed'.
+    // Querying only 'completed' caused approved deposits to be invisible to
+    // derivation, so spot balance never updated after admin approval.
     const { data: txs, error } = await window.supabaseClient
       .from('transactions')
       .select('type, amount')
       .eq('user_id', userId)
-      .eq('status', 'completed');
+      .in('status', ['completed', 'approved']);
 
     if (error) throw error;
 
     const rows = txs || [];
-    // Only treat the ledger as authoritative when there are completed deposit or
-    // claim entries. Sell credits are internal — they presuppose a deposit that
-    // funded the original buy. Without a completed deposit/claim, the stored DB
-    // value is the source of truth (covers existing accounts seeded manually).
+    // Only treat the ledger as authoritative when there are settled deposit or
+    // claim entries. Without any, fall back to the stored DB value (covers
+    // accounts seeded manually before the ledger-first architecture).
     const hasBaseCredits = rows.some(tx => tx.type === 'deposit' || tx.type === 'claim');
     if (!hasBaseCredits) return Math.max(0, parseFloat(storedBalance) || 0);
 
@@ -297,17 +300,18 @@
       window.history.pushState({ ntx: 1 }, '');
 
       function handleBack() {
-        // Re-push immediately so the next back press also fires popstate
-        window.history.pushState({ ntx: 1 }, '');
-
-        // If a modal is open, close it and do nothing else
+        // If a modal is open, close it — re-push so next back still fires popstate
         const openOverlay = document.querySelector('.ntm-overlay.ntm-open');
         if (openOverlay && window.Modal) {
+          window.history.pushState({ ntx: 1 }, '');
           Modal.close();
           return;
         }
 
-        // No modal open — ask if the user wants to exit
+        // No modal open — ask if the user wants to exit.
+        // Do NOT re-push here yet: if user confirms exit we must NOT have an
+        // extra history entry queued, otherwise the browser navigates back into
+        // the app immediately after location.href = LOGIN_PAGE fires.
         if (window.Modal) {
           Modal.confirm({
             title: 'Exit NexTrade?',
@@ -316,19 +320,80 @@
             cancelText: 'Stay'
           }).then(confirmed => {
             if (confirmed) {
+              // Exiting — remove the listener so it doesn't re-fire during unload
               window.removeEventListener('popstate', handleBack);
               window.location.href = CONSTANTS.LOGIN_PAGE;
+            } else {
+              // Staying — re-push so the next back press fires popstate again
+              window.history.pushState({ ntx: 1 }, '');
             }
           });
+        } else {
+          // Modal unavailable — re-push defensively so back doesn't leave the app
+          window.history.pushState({ ntx: 1 }, '');
         }
       }
 
       window.addEventListener('popstate', handleBack);
 
+      // ── BACKGROUND POLL — keeps balances current after admin approvals ─────
+      // pollTimer was declared in state but never started. Wire it up here.
+      // Every POLL_INTERVAL ms: re-derive spot balance from the ledger and
+      // push fresh balances into AppState so Wallet/Home reflect approvals
+      // without requiring a full reload.
+      async function backgroundPoll() {
+        if (!state.initialized) return;
+        try {
+          const currentUser = window.AppState ? AppState.get('user') : null;
+          if (!currentUser) return;
+          await syncHistory(currentUser);
+          await syncProfile(currentUser);
+          const currentPage = window.Router ? Router.getCurrentPage() : null;
+          if (currentPage === 'wallet' && window.Wallet && typeof Wallet.render === 'function') {
+            const walletContainer = document.querySelector('.wallet-page');
+            if (walletContainer) Wallet.render(walletContainer);
+          }
+          if (currentPage === 'home' && window.Home && typeof Home.refresh === 'function') {
+            Home.refresh();
+          }
+          console.log('[APP] \u{1F504} Background poll complete');
+        } catch (err) {
+          console.warn('[APP] \u26a0\ufe0f Background poll error (non-fatal):', err);
+        }
+      }
+
+      state.pollTimer = setInterval(backgroundPoll, CONSTANTS.POLL_INTERVAL);
+
+      // ── REALTIME LISTENER — instant balance update on transaction approval ─
+      try {
+        window.supabaseClient
+          .channel('tx-approvals-' + session.user.id)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'transactions',
+              filter: 'user_id=eq.' + session.user.id
+            },
+            async (payload) => {
+              console.log('[APP] \u{1F514} Transaction change detected:', payload.eventType, payload.new?.status);
+              const relevant = payload.eventType === 'INSERT' ||
+                (payload.new && (payload.new.status === 'completed' || payload.new.status === 'approved'));
+              if (relevant) await backgroundPoll();
+            }
+          )
+          .subscribe();
+        console.log('[APP] \u2705 Realtime transaction listener active');
+      } catch (rtErr) {
+        console.warn('[APP] \u26a0\ufe0f Realtime subscription failed (will rely on poll):', rtErr);
+      }
+
       // Session expiry watcher
       window.supabaseClient.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT' || (!session && state.initialized)) {
           console.warn('[APP] Session expired — redirecting');
+          if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
           if (window.AppState) AppState.clear();
           window.location.href = CONSTANTS.LOGIN_PAGE;
         }

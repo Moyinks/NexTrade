@@ -112,11 +112,15 @@ const Trade = (() => {
     // require admin confirmation before crediting. Counting them before
     // confirmation would allow balance inflation by submitting fake deposits.
 
+    // 'approved' is the terminal status the admin portal writes when confirming
+    // a deposit. It carries identical financial weight to 'completed'.
+    // The original filter (.eq('status','completed')) caused approved deposits
+    // to be invisible, so spot balance never reflected admin approval.
     const { data: completedTxs, error: err1 } = await window.supabaseClient
       .from('transactions')
       .select('type, amount')
       .eq('user_id', userId)
-      .eq('status', 'completed');
+      .in('status', ['completed', 'approved']);
 
     if (err1) throw err1;
 
@@ -131,10 +135,9 @@ const Trade = (() => {
 
     const rows = [...(completedTxs || []), ...(pendingWithdrawals || [])];
 
-    // Guard: if there are no base credits (deposits or claims) in completed
-    // transactions, fall back to the stored balance. This covers new accounts
-    // that have never had a completed deposit, and accounts where all history
-    // was created before the ledger-first migration.
+    // Guard: if there are no base credits (deposits or claims) in completed/approved
+    // transactions, fall back to the stored balance. Covers new accounts that have
+    // never had a confirmed deposit, and accounts seeded before the ledger migration.
     const hasBaseCredits = (completedTxs || []).some(
       tx => tx.type === 'deposit' || tx.type === 'claim'
     );
