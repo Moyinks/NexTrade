@@ -1,7 +1,17 @@
 /**
- * NexTrade — Vault Module v6.2
+ * NexTrade — Vault Module v6.3
  * ══════════════════════════════════════════════════════════════════════════════
- * FIXES (v6.1 → v6.2):
+ * FIXES (v6.2 → v6.3):
+ * 1. deriveSpotBalanceFromLedger — completed transactions query now uses
+ *    .in('status', ['completed', 'approved']) instead of .eq('status', 'completed').
+ *    'approved' is the terminal status the admin portal writes when confirming a
+ *    deposit. Without it, admin-approved deposits were invisible to the vault's
+ *    derivation function. Any invest or claim operation that calls
+ *    deriveSpotBalanceFromLedger would re-derive spot without counting the
+ *    approved deposit, writing a lower (or zero) spot balance back to profiles
+ *    and AppState. Matches the identical fix already present in trade.js v2.1.
+ *
+ * FIXES (v6.1 → v6.2, carried forward):
  * 1. Transfer types registered in CREDIT_TYPES / DEBIT_TYPES — 'transfer_in'
  *    and 'transfer_out' are now recognised by deriveSpotBalanceFromLedger().
  *    wallets.js (v5.1) writes these types when recording internal spot↔vault
@@ -728,7 +738,6 @@
           );
           AppState.set('investments', updated);
         }
-        await syncInvestmentsFromDB();
       }
 
       showSuccess(fmt(receive) + ' added to your Spot Wallet.');
@@ -754,15 +763,18 @@
   const DEBIT_TYPES  = new Set(['withdraw', 'buy', 'investment', 'transfer_out']);
 
   async function deriveSpotBalanceFromLedger(userId, storedBalance) {
-    // FIX (v6.2 — D2): Two queries instead of one.
+    // FIX (v6.3 — D1): Query 1 now uses .in('status', ['completed', 'approved']).
+    // Previously .eq('status', 'completed') caused admin-approved deposits to be
+    // invisible to vault's derivation. Any invest or claim operation would
+    // re-derive spot without counting the approved deposit, writing a lower
+    // spot balance back to profiles and AppState. Matches the identical fix
+    // already present in trade.js v2.1.
     //
-    // Query 1: All COMPLETED transactions — canonical settled ledger.
-    //
-    // Query 2: PENDING withdrawals only. A pending withdrawal means "the user
-    // requested a payout that admin has not yet processed, but the funds are
-    // locked." Counting them as debits here prevents the re-login / re-derive
-    // balance restoration bug where deriveSpotBalanceFromLedger ignores the
-    // pending withdrawal (status != completed), then overwrites spot_balance
+    // FIX (v6.2 — D2): Query 2 — pending withdrawals only. A pending withdrawal
+    // means the user requested a payout that admin has not yet processed, but
+    // the funds are locked. Counting them as debits here prevents the re-login /
+    // re-derive balance restoration bug where deriveSpotBalanceFromLedger ignores
+    // the pending withdrawal (status != completed), then overwrites spot_balance
     // with the pre-withdrawal amount on the next invest or claim.
     //
     // Pending deposits deliberately excluded — external transfers require
@@ -772,7 +784,7 @@
       .from('transactions')
       .select('type, amount')
       .eq('user_id', userId)
-      .eq('status', 'completed');
+      .in('status', ['completed', 'approved']);
 
     if (err1) throw err1;
 
@@ -787,12 +799,36 @@
 
     const rows = [...(completedTxs || []), ...(pendingWithdrawals || [])];
 
-    // Guard: if no base credits exist in completed transactions, fall back to
-    // the stored balance. Covers new accounts and pre-ledger-migration accounts.
-    const hasBaseCredits = (completedTxs || []).some(
-      tx => tx.type === 'deposit' || tx.type === 'claim'
-    );
-    if (!hasBaseCredits) return Math.max(0, parseFloat(storedBalance) || 0);
+    // Guard: only a 'deposit' transaction proves the account is fully ledger-tracked
+    // from inception. 'claim' is intentionally excluded — including it caused the
+    // guard to flip from false→true on the user's first claim, switching from the
+    // "use stored balance" path to "full replay from 0", silently destroying any
+    // admin-seeded balance that was never recorded as a deposit transaction.
+    //
+    // No-deposit path: apply all ledger movements to storedBalance as the seed.
+    // This is correct on first derivation (storedBalance = raw admin seed).
+    // Permanent fix: run the migration below so this path becomes unreachable.
+    //
+    // Migration (run once in Supabase):
+    //   INSERT INTO transactions (user_id, type, amount, status, description, created_at)
+    //   SELECT p.id, 'deposit', p.spot_balance, 'completed',
+    //          'Account funding (migration)', NOW() - interval '1 year'
+    //   FROM profiles p
+    //   WHERE NOT EXISTS (
+    //     SELECT 1 FROM transactions t WHERE t.user_id = p.id AND t.type = 'deposit'
+    //   ) AND p.spot_balance > 0;
+    const hasDepositTx = (completedTxs || []).some(tx => tx.type === 'deposit');
+
+    if (!hasDepositTx) {
+      // Apply all ledger movements against the stored seed so invest/claim/transfer
+      // deltas are reflected even without a canonical deposit record.
+      return Math.max(0, rows.reduce((bal, tx) => {
+        const amt = parseFloat(tx.amount) || 0;
+        if (CREDIT_TYPES.has(tx.type)) return bal + amt;
+        if (DEBIT_TYPES.has(tx.type))  return bal - amt;
+        return bal;
+      }, Math.max(0, parseFloat(storedBalance) || 0)));
+    }
 
     return Math.max(0, rows.reduce((bal, tx) => {
       const amt = parseFloat(tx.amount) || 0;

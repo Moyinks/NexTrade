@@ -64,6 +64,7 @@ const API = (() => {
       params,
       status: 'pending'
     };
+    if (requestLog.length >= 200) requestLog.splice(0, 100); // keep last 100 on overflow
     requestLog.push(entry);
     console.log(`[API] 📡 Requesting: ${endpoint}`, params);
     return entry;
@@ -388,6 +389,16 @@ const API = (() => {
       }));
 
       cache.searchResults[cacheKey] = { data: results, timestamp: Date.now() };
+
+      // Evict oldest entries when cache exceeds 50 keys to prevent unbounded growth
+      const srKeys = Object.keys(cache.searchResults);
+      if (srKeys.length > 50) {
+        srKeys
+          .sort((a, b) => cache.searchResults[a].timestamp - cache.searchResults[b].timestamp)
+          .slice(0, 25)
+          .forEach(k => delete cache.searchResults[k]);
+      }
+
       return { success: true, data: results };
       
     } catch (error) {
@@ -430,6 +441,16 @@ const API = (() => {
       };
 
       cache.coinDetails[coinId] = { data: details, timestamp: Date.now() };
+
+      // Evict oldest entries when cache exceeds 100 keys
+      const cdKeys = Object.keys(cache.coinDetails);
+      if (cdKeys.length > 100) {
+        cdKeys
+          .sort((a, b) => cache.coinDetails[a].timestamp - cache.coinDetails[b].timestamp)
+          .slice(0, 50)
+          .forEach(k => delete cache.coinDetails[k]);
+      }
+
       return { success: true, data: details };
       
     } catch (error) {

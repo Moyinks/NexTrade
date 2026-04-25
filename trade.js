@@ -135,13 +135,21 @@ const Trade = (() => {
 
     const rows = [...(completedTxs || []), ...(pendingWithdrawals || [])];
 
-    // Guard: if there are no base credits (deposits or claims) in completed/approved
-    // transactions, fall back to the stored balance. Covers new accounts that have
-    // never had a confirmed deposit, and accounts seeded before the ledger migration.
-    const hasBaseCredits = (completedTxs || []).some(
-      tx => tx.type === 'deposit' || tx.type === 'claim'
-    );
-    if (!hasBaseCredits) return Math.max(0, parseFloat(storedBalance) || 0);
+    // Guard: only a 'deposit' tx proves the account is fully ledger-tracked.
+    // 'claim' excluded — see vaults.js deriveSpotBalanceFromLedger for full rationale.
+    // No-deposit path: apply ledger deltas against storedBalance as seed.
+    // Permanent fix: run the migration in vaults.js to insert deposit records for
+    // all admin-seeded accounts, making this path unreachable going forward.
+    const hasDepositTx = (completedTxs || []).some(tx => tx.type === 'deposit');
+
+    if (!hasDepositTx) {
+      return Math.max(0, rows.reduce((bal, tx) => {
+        const amt = parseFloat(tx.amount) || 0;
+        if (CREDIT_TYPES.has(tx.type)) return bal + amt;
+        if (DEBIT_TYPES.has(tx.type))  return bal - amt;
+        return bal;
+      }, Math.max(0, parseFloat(storedBalance) || 0)));
+    }
 
     return Math.max(0, rows.reduce((bal, tx) => {
       const amt = parseFloat(tx.amount) || 0;
