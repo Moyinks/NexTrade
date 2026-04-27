@@ -546,14 +546,24 @@
     content.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);text-align:center;margin-bottom:16px;line-height:1.6;', 'We earn a ' + strategy.perfFee + '% performance fee only on the profit we generate. Zero fees on your principal.'));
 
     const confirmBtn = el('button', 'font-size:16px;padding:18px;border-radius:14px;font-weight:800;width:100%;border:none;color:#fff;cursor:pointer;background:var(--color-primary);', 'Invest Now');
-    confirmBtn.addEventListener('click', () => {
+    confirmBtn.addEventListener('click', async () => {
+      if (confirmBtn.disabled) return;
       const raw = amountInput.value.trim();
       const num = parseFloat(raw);
       if (!raw || isNaN(num))       return showError('Please enter an amount.');
       if (num < strategy.minAmount) return showError('Minimum is ' + fmt(strategy.minAmount) + '.');
       if (num > spotBalance)        return showError('Insufficient balance. Available: ' + fmt(spotBalance) + '.');
-      if (window.Modal) Modal.close();
-      setTimeout(() => handleInvestment(strategy, num), 350);
+      // Keep modal open with loading state so user knows processing is in flight
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;font-size:14px;"></i>Investing...';
+      try {
+        await handleInvestment(strategy, num);
+        if (window.Modal) Modal.close();
+      } catch (_) {
+        // handleInvestment already called showError internally
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Invest Now';
+      }
     });
     content.appendChild(confirmBtn);
     setTimeout(() => { try { amountInput.focus(); } catch (_) {} }, 400);
@@ -638,6 +648,7 @@
     } catch (err) {
       console.error('[VAULT] handleInvestment:', err.message);
       showError(err.message || 'Investment failed. Please try again.');
+      throw err; // propagate so openInvestModal confirmBtn can re-enable
     } finally { _isProcessing = false; }
   }
 
@@ -746,6 +757,7 @@
     } catch (err) {
       console.error('[VAULT] handleClaim error:', err);
       showError(err.message || 'Claim failed. Please try again.');
+      throw err; // propagate so claim button callers can restore their state
     } finally { _isProcessing = false; }
   }
 
@@ -980,7 +992,7 @@
     const gainPct = amount > 0 ? (gain / amount) * 100 : 0;
 
     const itemEl = el('div');
-    itemEl.style.cssText = 'border-radius:16px;overflow:hidden;margin-bottom:14px;';
+    itemEl.style.cssText = 'border-radius:16px;overflow:hidden;margin-bottom:14px;animation:ntm-item-in 0.22s ease both;';
     if (isCompleted) {
       itemEl.style.background = 'rgba(30,41,59,0.4)';
       itemEl.style.border     = '1px solid var(--color-border)';
@@ -1125,13 +1137,33 @@
     // ── CTA buttons ──────────────────────────────────────────────────────
     const btnRow = el('div', 'display:flex;gap:8px;margin-top:14px;');
     if (isMatured) {
-      const claimBtn = el('button', 'flex:1;padding:13px;font-size:14px;font-weight:800;border:none;border-radius:10px;cursor:pointer;background:#10b981;color:#fff;', 'Claim to Wallet');
-      claimBtn.addEventListener('click', () => handleClaim(investment, true));
+      const claimBtn = el('button', 'flex:1;padding:13px;font-size:14px;font-weight:800;border:none;border-radius:10px;cursor:pointer;background:#10b981;color:#fff;transition:opacity 0.15s;', 'Claim to Wallet');
+      claimBtn.addEventListener('click', async () => {
+        if (claimBtn.disabled) return;
+        claimBtn.disabled = true;
+        claimBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;font-size:12px;"></i>Processing...';
+        try {
+          await handleClaim(investment, true);
+        } catch (_) {
+          claimBtn.disabled = false;
+          claimBtn.textContent = 'Claim to Wallet';
+        }
+      });
       btnRow.appendChild(claimBtn);
     } else {
       const { daysRemaining } = calcEarlyPenalty(investment);
-      const earlyBtn = el('button', 'flex:1;padding:12px;font-size:12px;font-weight:700;border-radius:10px;cursor:pointer;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);color:#ef4444;', 'Early Exit (' + daysRemaining + 'd left)');
-      earlyBtn.addEventListener('click', () => handleClaim(investment, false));
+      const earlyBtn = el('button', 'flex:1;padding:12px;font-size:12px;font-weight:700;border-radius:10px;cursor:pointer;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);color:#ef4444;transition:opacity 0.15s;', 'Early Exit (' + daysRemaining + 'd left)');
+      earlyBtn.addEventListener('click', async () => {
+        if (earlyBtn.disabled) return;
+        earlyBtn.disabled = true;
+        earlyBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:6px;font-size:11px;"></i>Processing...';
+        try {
+          await handleClaim(investment, false);
+        } catch (_) {
+          earlyBtn.disabled = false;
+          earlyBtn.textContent = 'Early Exit (' + daysRemaining + 'd left)';
+        }
+      });
       btnRow.appendChild(earlyBtn);
     }
     body.appendChild(btnRow);
@@ -1234,8 +1266,18 @@
         const maturedVal = matured.reduce((s, i) => s + parseFloat(i.current_value || i.amount || 0), 0);
         const claimBar   = el('div', 'display:flex;align-items:center;justify-content:space-between;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.25);border-radius:10px;padding:10px 12px;');
         claimBar.appendChild(el('span', 'font-size:13px;font-weight:700;color:#10b981;', '\u2713 ' + matured.length + ' ready to claim \u2014 ' + fmt(maturedVal)));
-        const claimAllBtn = el('button', 'font-size:12px;font-weight:700;color:#10b981;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:7px;padding:6px 12px;cursor:pointer;', 'Claim All');
-        claimAllBtn.addEventListener('click', handleClaimAll);
+        const claimAllBtn = el('button', 'font-size:12px;font-weight:700;color:#10b981;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:7px;padding:6px 12px;cursor:pointer;transition:opacity 0.15s;', 'Claim All');
+        claimAllBtn.addEventListener('click', async () => {
+          if (claimAllBtn.disabled) return;
+          claimAllBtn.disabled = true;
+          claimAllBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:6px;font-size:11px;"></i>Claiming...';
+          try {
+            await handleClaimAll();
+          } catch (_) {
+            claimAllBtn.disabled = false;
+            claimAllBtn.textContent = 'Claim All';
+          }
+        });
         claimBar.appendChild(claimAllBtn);
         summaryCard.appendChild(claimBar);
       }
@@ -1277,6 +1319,14 @@
     if (!element) return;
     _container = element;
     _destroyed = false;
+
+    // Inject item fade-in animation keyframes (idempotent)
+    if (!document.getElementById('ntm-vault-anim')) {
+      const _vanim = document.createElement('style');
+      _vanim.id = 'ntm-vault-anim';
+      _vanim.textContent = '@keyframes ntm-item-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}';
+      document.head.appendChild(_vanim);
+    }
 
     element.style.cssText = [
       'overflow-y: auto',
@@ -1380,6 +1430,125 @@
     syncInvestmentsFromDB().then(() => { if (_activeTab === 'portfolio') renderPortfolioTab(); });
   }
 
-  window.Vault = { render, refresh, destroy, cleanup, openInvestModal, handleClaimAll, syncInvestmentsFromDB };
+  // ============================================
+  // INVESTOR PROFILE QUIZ
+  // ============================================
+
+  function openQuiz() {
+    if (!window.Modal) return;
+
+    const QUESTIONS = [
+      {
+        q: 'How long are you comfortable locking your funds?',
+        opts: [
+          { text: '30 days or less',    vote: 'alpha'  },
+          { text: '60\u201390 days',   vote: 'steady' },
+          { text: 'As long as needed',  vote: 'steady' }
+        ]
+      },
+      {
+        q: 'If your investment drops 15% temporarily, you would:',
+        opts: [
+          { text: 'Exit immediately',               vote: 'steady' },
+          { text: 'Hold and wait it out',           vote: 'steady' },
+          { text: 'See it as a buying opportunity', vote: 'alpha'  }
+        ]
+      },
+      {
+        q: 'Which return profile fits you?',
+        opts: [
+          { text: 'Steady 18\u201326% APY \u2014 lower volatility',  vote: 'steady' },
+          { text: 'Potentially 45\u201390% APY \u2014 higher risk',  vote: 'alpha'  }
+        ]
+      }
+    ];
+
+    let step = 0;
+    const votes = [];
+    const content = document.createElement('div');
+    content.style.cssText = 'display:flex;flex-direction:column;gap:0;';
+
+    function renderStep() {
+      content.innerHTML = '';
+
+      // Progress bar
+      const dots = el('div', 'display:flex;gap:6px;justify-content:center;margin-bottom:20px;');
+      QUESTIONS.forEach((_, i) => {
+        const dot = el('div');
+        dot.style.cssText = 'height:4px;border-radius:2px;transition:all 0.3s;' +
+          'background:' + (i < step ? '#3b82f6' : i === step ? 'rgba(59,130,246,0.5)' : 'rgba(255,255,255,0.1)') + ';' +
+          'width:' + (i === step ? '28px' : '10px') + ';';
+        dots.appendChild(dot);
+      });
+      content.appendChild(dots);
+
+      const q = QUESTIONS[step];
+      content.appendChild(el('div', 'font-size:10px;font-weight:700;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;', 'Question ' + (step + 1) + ' of ' + QUESTIONS.length));
+      content.appendChild(el('div', 'font-size:16px;font-weight:700;color:var(--color-text-primary);line-height:1.4;margin-bottom:20px;', q.q));
+
+      q.opts.forEach((opt, oi) => {
+        const btn = el('button');
+        btn.style.cssText = 'width:100%;text-align:left;padding:14px 16px;border-radius:12px;' +
+          'border:1.5px solid rgba(255,255,255,0.09);background:rgba(255,255,255,0.03);' +
+          'color:var(--color-text-primary);font-size:14px;font-weight:600;margin-bottom:10px;' +
+          'cursor:pointer;transition:all 0.15s ease;display:block;' +
+          'animation:ntm-item-in 0.18s ' + (oi * 60) + 'ms ease both;';
+        btn.textContent = opt.text;
+        btn.addEventListener('mouseenter', () => {
+          btn.style.borderColor = 'rgba(59,130,246,0.4)';
+          btn.style.background  = 'rgba(59,130,246,0.08)';
+        });
+        btn.addEventListener('mouseleave', () => {
+          btn.style.borderColor = 'rgba(255,255,255,0.09)';
+          btn.style.background  = 'rgba(255,255,255,0.03)';
+        });
+        btn.addEventListener('click', () => {
+          votes.push(opt.vote);
+          step++;
+          if (step < QUESTIONS.length) renderStep();
+          else showResult();
+        });
+        content.appendChild(btn);
+      });
+    }
+
+    function showResult() {
+      const alphaVotes = votes.filter(v => v === 'alpha').length;
+      const result     = alphaVotes > votes.length / 2 ? 'alpha-seeker' : 'steady-accumulator';
+      const strategy   = STRATEGIES.find(s => s.id === result);
+      try { localStorage.setItem('nex_investor_profile', result); } catch (_) {}
+
+      content.innerHTML = '';
+      content.appendChild(el('div', 'text-align:center;font-size:48px;margin-bottom:16px;', strategy.icon));
+      content.appendChild(el('div', 'font-size:19px;font-weight:800;color:var(--color-text-primary);text-align:center;margin-bottom:8px;letter-spacing:-0.3px;', 'You are a ' + strategy.name));
+      content.appendChild(el('div', 'font-size:13px;color:var(--color-text-secondary);text-align:center;line-height:1.6;margin-bottom:20px;', strategy.tagline));
+
+      const badge = el('div', 'display:flex;align-items:center;gap:12px;border-radius:12px;padding:12px 14px;margin-bottom:24px;');
+      badge.style.background = strategy.accentColor + '12';
+      badge.style.border = '1px solid ' + strategy.accentColor + '28';
+      badge.appendChild(el('div', 'font-size:22px;', strategy.icon));
+      const badgeTxt = el('div', 'flex:1;min-width:0;');
+      badgeTxt.appendChild(el('div', 'font-size:12px;font-weight:700;color:var(--color-text-primary);margin-bottom:2px;', strategy.name + ' \u2014 ' + strategy.category));
+      badgeTxt.appendChild(el('div', 'font-size:11px;color:var(--color-text-secondary);', 'APY range: ' + strategy.apyRange + ' \u00b7 Min: $' + strategy.minAmount.toLocaleString()));
+      badge.appendChild(badgeTxt);
+      content.appendChild(badge);
+
+      const viewBtn = el('button', 'width:100%;padding:15px;border-radius:12px;font-size:15px;font-weight:800;border:none;color:#fff;cursor:pointer;background:var(--color-primary);margin-bottom:10px;', 'View My Plan \u2192');
+      viewBtn.addEventListener('click', () => {
+        if (window.Modal) Modal.close();
+        setTimeout(() => { if (window.App) App.navigate('vault'); }, 200);
+      });
+      content.appendChild(viewBtn);
+
+      const skipBtn = el('button', 'width:100%;padding:13px;border-radius:12px;font-size:14px;font-weight:600;border:1px solid var(--color-border);background:rgba(255,255,255,0.04);color:var(--color-text-secondary);cursor:pointer;', 'Maybe Later');
+      skipBtn.addEventListener('click', () => { if (window.Modal) Modal.close(); });
+      content.appendChild(skipBtn);
+    }
+
+    renderStep();
+    Modal.open({ title: 'Find Your Investor Type', content, maxWidth: '440px' });
+  }
+
+  window.Vault = { render, refresh, destroy, cleanup, openInvestModal, openQuiz, handleClaimAll, syncInvestmentsFromDB };
 
 })();

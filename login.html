@@ -1,1296 +1,1638 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <!--
-  ════════════════════════════════════════════════════════════════
-  NEXTRADE PWA SNIPPET  — paste into BOTH login.html and index.html
-  ════════════════════════════════════════════════════════════════
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#F0EDE4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="NexTrade">
+<link rel="apple-touch-icon" href="/pwa1.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="NexTrade">
+<meta name="msapplication-TileColor" content="#F0EDE4">
+<meta name="msapplication-TileImage" content="/pwa2.png">
+<meta name="description" content="A managed trading pool. You put money in, the algorithm trades, the pool grows, you collect your share. We only earn on profit.">
+<link rel="icon" type="image/png" sizes="192x192" href="/pwa1.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/pwa2.png">
+<link rel="shortcut icon" href="/pwa1.png">
+<title>NexTrade — Your money, working.</title>
 
-  WHERE TO PUT THE <meta> AND <link> TAGS:
-    Inside <head>, right after your existing <meta viewport> tag.
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Barlow:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-  WHERE TO PUT THE <style> BLOCK:
-    Inside <head>, anywhere after the tags above.
-
-  WHERE TO PUT THE <script> BLOCK:
-    At the very bottom of <body>, LAST script tag on the page.
-    (after config.js and your other scripts)
-
-  ════════════════════════════════════════════════════════════════
--->
-
-
-<!-- ── STEP 1: PASTE THESE INTO <head> ──────────────────────────────────── -->
-
-  <!-- Manifest -->
-  <link rel="manifest" href="/manifest.json">
-
-  <!-- Theme color (browser chrome on Android) -->
-  <meta name="theme-color" content="#0B0E11">
-
-  <!-- ─── iOS / Safari ──────────────────────────────────────────────────── -->
-  <!-- Makes Safari treat it as a full-screen app (no browser chrome) -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <!-- Status bar style: default | black | black-translucent -->
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <!-- App name on the home screen -->
-  <meta name="apple-mobile-web-app-title" content="NexTrade">
-
-  <!-- iOS home screen icon (pwa1.png = 192x192, iOS scales it down to 180x180) -->
-  <link rel="apple-touch-icon" href="/pwa1.png">
-
-  <!-- ─── General / Android fallback ───────────────────────────────────── -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="application-name" content="NexTrade">
-  <meta name="msapplication-TileColor" content="#0B0E11">
-  <meta name="msapplication-TileImage" content="/pwa2.png">
-  <meta name="description" content="Institutional-grade yield strategies. Performance fee only on profit.">
-
-  <!-- Favicon fallback -->
-  <link rel="icon" type="image/png" sizes="192x192" href="/pwa1.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="/pwa2.png">
-  <link rel="shortcut icon" href="/pwa1.png">
-
-
-<!-- ── STEP 2: PASTE THIS <style> INTO <head> ───────────────────────────── -->
 <style>
-  /* ── iOS Install Banner ───────────────────────────────────────────────── */
-  #pwa-ios-banner {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    z-index: 99999;
-    background: #151921;
-    border-top: 1px solid rgba(255,255,255,0.12);
-    padding: 16px 20px 24px;
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
-    transform: translateY(100%);
-    transition: transform 0.4s cubic-bezier(0.34,1.2,0.64,1);
-    font-family: -apple-system, 'DM Sans', sans-serif;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* Paper palette */
+  --paper:        #F0EDE4;
+  --paper-warm:   #E8E4D9;
+  --paper-dark:   #DDD8CC;
+  --paper-inset:  #E2DED4;
+
+  /* Ink palette */
+  --ink:          #0F0E0B;
+  --ink-2:        #2B2926;
+  --ink-3:        #5C5850;
+  --ink-4:        #8A857C;
+  --ink-5:        #B5B0A6;
+
+  /* Rules / borders */
+  --rule:         #C4BFB4;
+  --rule-mid:     #8A857C;
+  --rule-dark:    #0F0E0B;
+
+  /* Accent — used sparingly */
+  --live:         #007A4C;
+  --live-bg:      rgba(0,122,76,0.08);
+  --live-border:  rgba(0,122,76,0.25);
+  --warn:         #8B5200;
+  --warn-bg:      rgba(139,82,0,0.08);
+  --warn-border:  rgba(139,82,0,0.25);
+  --danger:       #9B1C1C;
+  --danger-bg:    rgba(155,28,28,0.08);
+
+  /* Type */
+  --display:      'Bebas Neue', Impact, sans-serif;
+  --mono:         'IBM Plex Mono', 'Courier New', monospace;
+  --serif:        'Libre Baskerville', Georgia, 'Times New Roman', serif;
+  --sans:         'Barlow', system-ui, sans-serif;
+
+  /* Spacing scale */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESET
+═══════════════════════════════════════════════════════════════════════════ */
+*, *::before, *::after {
+  margin: 0; padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  height: 100%;
+  font-size: 16px;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  height: 100%;
+  width: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  line-height: 1.5;
+}
+
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; }
+input, textarea { font-family: inherit; }
+img { display: block; max-width: 100%; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   APP SHELL
+═══════════════════════════════════════════════════════════════════════════ */
+#app {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  background: var(--paper);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PWA BANNERS
+═══════════════════════════════════════════════════════════════════════════ */
+#pwa-ios-banner {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 99999;
+  background: var(--ink);
+  border-top: 2px solid var(--ink);
+  padding: 14px 18px calc(14px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  transform: translateY(100%);
+  transition: transform 0.4s cubic-bezier(0.34, 1.2, 0.64, 1);
+  font-family: var(--sans);
+}
+#pwa-ios-banner.show { transform: translateY(0); }
+
+.pwa-ios-icon {
+  width: 40px; height: 40px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--paper);
+  display: flex; align-items: center; justify-content: center;
+}
+.pwa-ios-icon img { width: 100%; height: 100%; object-fit: cover; }
+.pwa-ios-icon i { font-size: 18px; color: var(--ink); }
+
+.pwa-ios-body { flex: 1; }
+.pwa-ios-title {
+  font-size: 13px; font-weight: 700;
+  color: var(--paper); margin-bottom: 3px;
+  letter-spacing: 0.2px;
+}
+.pwa-ios-msg {
+  font-size: 11px; color: var(--ink-4); line-height: 1.5;
+}
+.pwa-ios-msg strong { color: var(--ink-5); }
+.pwa-ios-share {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  width: 15px; height: 15px;
+  background: var(--ink-3);
+  font-size: 9px; color: var(--paper);
+  vertical-align: middle;
+}
+
+.pwa-ios-close {
+  background: none; border: none;
+  color: var(--ink-3); font-size: 16px;
+  cursor: pointer; padding: 0;
+  line-height: 1; flex-shrink: 0;
+  margin-top: -1px;
+  transition: color 0.15s;
+}
+.pwa-ios-close:hover { color: var(--paper); }
+
+#pwa-android-banner {
+  position: fixed;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  left: 16px; right: 16px;
+  z-index: 99999;
+  background: var(--ink);
+  border: 2px solid var(--ink);
+  padding: 14px 16px;
+  display: none;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--sans);
+  animation: bannerSlideUp 0.4s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+}
+@keyframes bannerSlideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.pwa-android-icon {
+  width: 38px; height: 38px;
+  flex-shrink: 0; overflow: hidden;
+  background: var(--paper);
+}
+.pwa-android-icon img { width: 100%; height: 100%; object-fit: cover; }
+
+.pwa-android-body { flex: 1; }
+.pwa-android-title { font-size: 13px; font-weight: 700; color: var(--paper); margin-bottom: 1px; }
+.pwa-android-sub { font-size: 10px; color: var(--ink-4); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.5px; }
+
+.pwa-android-btn {
+  background: var(--paper); color: var(--ink);
+  border: none; padding: 8px 14px;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase;
+  white-space: nowrap; flex-shrink: 0;
+  font-family: var(--sans);
+  transition: opacity 0.15s;
+}
+.pwa-android-btn:active { opacity: 0.8; }
+
+.pwa-android-close {
+  background: none; border: none;
+  color: var(--ink-3); font-size: 16px;
+  cursor: pointer; padding: 0 0 0 4px;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+.pwa-android-close:hover { color: var(--paper); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════════════════════════════════════ */
+#toast {
+  position: fixed;
+  top: 20px; left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 40px); max-width: 400px;
+  padding: 13px 18px;
+  font-size: 13px; font-weight: 600;
+  font-family: var(--mono);
+  z-index: 9999;
+  display: none;
+  text-align: center;
+  border: 2px solid;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LANDING
+═══════════════════════════════════════════════════════════════════════════ */
+#landing {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: none;
+  scrollbar-width: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+#landing::-webkit-scrollbar { display: none; }
+#landing.exit {
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MASTHEAD
+═══════════════════════════════════════════════════════════════════════════ */
+.masthead {
+  position: sticky; top: 0; z-index: 50;
+  border-bottom: 2px solid var(--rule-dark);
+  background: var(--paper);
+  display: flex;
+  align-items: stretch;
+  height: 50px;
+  opacity: 0;
+  animation: riseIn 0.35s ease 0.05s both;
+}
+
+.masthead-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-right: 1px solid var(--rule-dark);
+  flex-shrink: 0;
+}
+.masthead-brand-box {
+  width: 36px; height: 36px;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  border: 1.5px solid var(--ink);
+}
+.brand-logo-img {
+  width: 44px; height: 44px;
+  object-fit: cover;
+  object-position: 50% 22%;
+  display: block;
+  flex-shrink: 0;
+}
+.masthead-brand-name {
+  font-family: var(--display);
+  font-size: 20px; letter-spacing: 1.5px;
+  color: var(--ink); line-height: 1;
+}
+
+.masthead-ticker-track {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid var(--rule-dark);
+  min-width: 0;
+}
+.masthead-ticker-inner {
+  display: flex;
+  white-space: nowrap;
+  animation: tickerScroll 30s linear infinite;
+  width: max-content;
+  align-items: center;
+}
+.masthead-ticker-inner:hover { animation-play-state: paused; }
+@keyframes tickerScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.t-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border-right: 1px solid var(--rule);
+  height: 50px;
+}
+.t-sym  { font-family: var(--mono); font-size: 9px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.5px; }
+.t-price { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--ink); }
+.t-up   { font-family: var(--mono); font-size: 9px; color: var(--live); }
+.t-dn   { font-family: var(--mono); font-size: 9px; color: var(--danger); }
+
+.masthead-date {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-family: var(--mono);
+  font-size: 9px; color: var(--ink-4);
+  letter-spacing: 0.5px; text-transform: uppercase;
+  flex-shrink: 0; white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HERO
+═══════════════════════════════════════════════════════════════════════════ */
+.hero {
+  border-bottom: 2px solid var(--rule-dark);
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 50px);
+}
+
+/* Issue strip */
+.hero-strip {
+  border-bottom: 1px solid var(--rule);
+  padding: 6px var(--space-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--paper-warm);
+  opacity: 0;
+  animation: riseIn 0.4s ease 0.12s both;
+}
+.hero-strip-left {
+  font-family: var(--mono);
+  font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--ink-3);
+}
+.hero-strip-right {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--mono);
+  font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  color: var(--live);
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--live);
+  animation: blink 1.6s ease-in-out infinite;
+}
+@keyframes blink { 0%, 100% { opacity: 1; } 55% { opacity: 0.2; } }
+
+/* Headline block */
+.hero-head {
+  padding: var(--space-8) var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--rule);
+  opacity: 0;
+  animation: riseIn 0.5s ease 0.2s both;
+}
+
+.hero-kicker {
+  display: block;
+  font-family: var(--mono);
+  font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 2.5px;
+  color: var(--ink-4);
+  margin-bottom: 14px;
+}
+
+.hero-h1 {
+  font-family: var(--display);
+  font-size: clamp(54px, 15vw, 82px);
+  letter-spacing: 1px;
+  line-height: 0.92;
+  color: var(--ink);
+}
+.hero-h1 .h1-line-2 {
+  display: block;
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 3px solid var(--ink);
+}
+
+/* Deck copy — below headline */
+.hero-deck {
+  padding: var(--space-5) var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--rule);
+  opacity: 0;
+  animation: riseIn 0.5s ease 0.28s both;
+}
+.hero-deck-p {
+  font-family: var(--serif);
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--ink-2);
+  font-style: italic;
+}
+.hero-deck-p strong {
+  font-style: normal;
+  color: var(--ink);
+}
+.hero-deck-p .fact {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 1px 6px;
+  display: inline-block;
+  vertical-align: middle;
+  letter-spacing: 0.3px;
+}
+
+/* Stats row */
+.hero-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border-bottom: 1px solid var(--rule);
+  opacity: 0;
+  animation: riseIn 0.5s ease 0.35s both;
+}
+.hero-stat {
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.hero-stat:last-child { border-right: none; }
+.hs-label {
+  font-family: var(--mono);
+  font-size: 8px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1px;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+.hs-val {
+  font-family: var(--display);
+  font-size: 30px;
+  letter-spacing: 0.5px; line-height: 1;
+  color: var(--ink);
+}
+.hs-val.green { color: var(--live); }
+.hs-sub {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--ink-5);
+  letter-spacing: 0.3px;
+}
+
+/* CTA block */
+.hero-cta-block {
+  padding: var(--space-6) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex: 1;
+  justify-content: flex-start;
+  opacity: 0;
+  animation: riseIn 0.5s ease 0.42s both;
+}
+
+/* Scroll hint */
+.scroll-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  opacity: 0;
+  animation: fadeIn 1s ease 1.2s both;
+}
+.scroll-pill {
+  width: 20px; height: 32px;
+  border: 1.5px solid var(--rule-mid);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 4px;
+  flex-shrink: 0;
+}
+.scroll-pill-inner {
+  width: 3px; height: 6px;
+  background: var(--ink-4);
+  animation: scrollDrop 2.4s ease-in-out infinite;
+}
+@keyframes scrollDrop {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  70%       { transform: translateY(12px); opacity: 0.1; }
+}
+.scroll-hint-text {
+  font-family: var(--mono);
+  font-size: 8px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 2px;
+  color: var(--ink-5);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════════════════════════════════════════ */
+.btn-primary {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%;
+  background: var(--ink); color: var(--paper);
+  border: 2px solid var(--ink);
+  padding: 17px var(--space-6);
+  font-family: var(--display);
+  font-size: 20px; letter-spacing: 2px;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+  position: relative; overflow: hidden;
+  user-select: none;
+}
+.btn-primary:active {
+  background: var(--ink-2);
+  transform: scale(0.99);
+}
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+/* Loading shimmer */
+.btn-primary.loading::after {
+  content: '';
+  position: absolute; top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  animation: shimmer 1.5s ease infinite;
+}
+@keyframes shimmer {
+  0%   { left: -100%; }
+  100% { left: 100%; }
+}
+
+.btn-ghost {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%;
+  background: transparent; color: var(--ink-2);
+  border: 1.5px solid var(--rule-dark);
+  padding: 15px var(--space-6);
+  font-family: var(--mono);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.8px;
+  text-transform: uppercase;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.btn-ghost:active {
+  background: var(--paper-warm);
+  color: var(--ink);
+}
+.btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION BASE
+═══════════════════════════════════════════════════════════════════════════ */
+.section {
+  border-bottom: 2px solid var(--rule-dark);
+}
+
+.section-masthead {
+  border-bottom: 1px solid var(--rule);
+  padding: 11px var(--space-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--paper-warm);
+}
+.section-num {
+  font-family: var(--mono);
+  font-size: 9px; font-weight: 600;
+  color: var(--ink-4); text-transform: uppercase; letter-spacing: 1.5px;
+}
+.section-flag {
+  font-family: var(--display);
+  font-size: 12px; letter-spacing: 3px;
+  color: var(--ink); text-transform: uppercase;
+}
+
+.section-body { padding: var(--space-6) var(--space-5); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION: HOW THE POOL ACTUALLY WORKS
+═══════════════════════════════════════════════════════════════════════════ */
+.pool-explainer {
+  border-bottom: 2px solid var(--rule-dark);
+}
+
+.pool-headline {
+  padding: var(--space-8) var(--space-5) var(--space-5);
+  border-bottom: 1px solid var(--rule);
+}
+.pool-headline-label {
+  font-family: var(--mono);
+  font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 2px;
+  color: var(--ink-4); margin-bottom: var(--space-3);
+  display: block;
+}
+.pool-headline-h2 {
+  font-family: var(--display);
+  font-size: clamp(36px, 10vw, 52px);
+  letter-spacing: 1px; line-height: 0.95;
+  color: var(--ink);
+}
+.pool-headline-sub {
+  margin-top: var(--space-4);
+  font-family: var(--serif);
+  font-size: 15px; font-style: italic;
+  color: var(--ink-3); line-height: 1.7;
+}
+
+/* Pull quote — for emphasis */
+.pull-quote {
+  border-top: 3px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+  padding: var(--space-5) var(--space-5);
+  background: var(--paper-warm);
+}
+.pull-quote-text {
+  font-family: var(--display);
+  font-size: clamp(22px, 6vw, 32px);
+  letter-spacing: 0.5px; line-height: 1.1;
+  color: var(--ink);
+}
+.pull-quote-text .pq-accent { color: var(--live); }
+
+/* Pool flow diagram — text-based */
+.pool-flow {
+  padding: var(--space-6) var(--space-5);
+  border-bottom: 1px solid var(--rule);
+}
+.pool-flow-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.pool-flow-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+.pf-arrow {
+  font-family: var(--display);
+  font-size: 28px; color: var(--ink-5);
+  line-height: 1; flex-shrink: 0;
+  width: 28px; text-align: center;
+  margin-top: 2px;
+}
+.pf-arrow.live { color: var(--live); }
+
+.pf-content {}
+.pf-title {
+  font-family: var(--sans);
+  font-size: 14px; font-weight: 700;
+  color: var(--ink); margin-bottom: 3px;
+}
+.pf-desc {
+  font-size: 13px; color: var(--ink-3); line-height: 1.6;
+}
+.pf-pill {
+  display: inline-block;
+  margin-top: 6px;
+  border: 1px solid var(--rule-dark);
+  padding: 2px 7px;
+  font-family: var(--mono);
+  font-size: 9px; font-weight: 600;
+  letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--ink-2);
+}
+.pf-pill.green { border-color: var(--live); color: var(--live); background: var(--live-bg); }
+.pf-pill.warn  { border-color: var(--warn); color: var(--warn);  background: var(--warn-bg); }
+
+/* Fee split visualization */
+.fee-split {
+  padding: var(--space-5) var(--space-5);
+  border-bottom: 1px solid var(--rule);
+}
+.fee-split-label {
+  font-family: var(--mono);
+  font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--ink-4); margin-bottom: var(--space-4); display: block;
+}
+.fee-split-eg {
+  font-family: var(--serif); font-style: italic;
+  font-size: 13px; color: var(--ink-3);
+  margin-bottom: var(--space-4); line-height: 1.65;
+}
+.fee-bar-wrap { margin-bottom: var(--space-3); }
+.fee-bar-track {
+  height: 28px;
+  background: var(--paper-dark);
+  border: 1px solid var(--rule);
+  display: flex;
+  overflow: hidden;
+}
+.fee-bar-you {
+  background: var(--ink);
+  height: 100%;
+  display: flex; align-items: center;
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-size: 10px; font-weight: 600;
+  color: var(--paper);
+  white-space: nowrap;
+  transition: width 1.2s ease;
+}
+.fee-bar-us {
+  background: var(--ink-4);
+  height: 100%;
+  display: flex; align-items: center;
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-size: 10px; font-weight: 600;
+  color: var(--paper);
+  white-space: nowrap;
+  flex: 1;
+}
+.fee-bar-note {
+  font-family: var(--mono);
+  font-size: 9px; color: var(--ink-4);
+  letter-spacing: 0.3px;
+}
+.fee-rows {
+  display: flex; flex-direction: column;
+  gap: 0; margin-top: var(--space-4);
+  border: 1px solid var(--rule);
+}
+.fee-row {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper);
+}
+.fee-row:last-child { border-bottom: none; }
+.fee-row:nth-child(even) { background: var(--paper-inset); }
+.fee-row-key {
+  font-size: 12px; color: var(--ink-3);
+  display: flex; align-items: center; gap: 6px;
+}
+.fee-row-dot {
+  width: 6px; height: 6px;
+  flex-shrink: 0;
+  border-radius: 0;
+}
+.fee-row-dot.black { background: var(--ink); }
+.fee-row-dot.green { background: var(--live); }
+.fee-row-dot.warn  { background: var(--warn); }
+.fee-row-dot.red   { background: var(--danger); }
+.fee-row-val {
+  font-family: var(--mono);
+  font-size: 11px; font-weight: 600;
+  color: var(--ink);
+}
+.fee-row-val.zero  { color: var(--live); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION: HOW TO GET STARTED (LEDGER)
+═══════════════════════════════════════════════════════════════════════════ */
+.ledger { display: flex; flex-direction: column; }
+
+.ledger-row {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: var(--space-3);
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.ledger-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+.ledger-n {
+  font-family: var(--display);
+  font-size: 40px; line-height: 1; letter-spacing: 0;
+  color: var(--rule);
+  padding-top: 2px;
+  user-select: none;
+}
+.ledger-n.done {
+  font-family: var(--mono);
+  font-size: 18px; color: var(--live);
+}
+
+.ledger-body {}
+.ledger-title {
+  font-size: 15px; font-weight: 700;
+  color: var(--ink); margin-bottom: 4px;
+  letter-spacing: -0.1px;
+}
+.ledger-desc {
+  font-size: 13px; color: var(--ink-3); line-height: 1.6;
+}
+.ledger-tag {
+  display: inline-block;
+  margin-top: 8px;
+  border: 1px solid var(--rule-dark);
+  padding: 3px 8px;
+  font-family: var(--mono);
+  font-size: 9px; font-weight: 600;
+  letter-spacing: 0.3px; text-transform: uppercase;
+  color: var(--ink-3);
+}
+.ledger-tag.green { border-color: var(--live); color: var(--live); background: var(--live-bg); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION: STRATEGIES
+═══════════════════════════════════════════════════════════════════════════ */
+.strategies-section { border-bottom: 2px solid var(--rule-dark); }
+
+.plan-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.plan-col {
+  padding: var(--space-5) var(--space-5) var(--space-6);
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  position: relative;
+}
+.plan-col:last-child { border-right: none; }
+
+/* accent top rule */
+.plan-col::before {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+}
+.plan-col.green::before { background: var(--live); }
+.plan-col.amber::before { background: var(--warn); }
+
+.plan-apy-num {
+  font-family: var(--display);
+  font-size: 60px;
+  letter-spacing: -1px; line-height: 1;
+  margin-top: var(--space-2);
+}
+.plan-apy-num.green { color: var(--live); }
+.plan-apy-num.amber { color: var(--warn); }
+.plan-apy-label {
+  font-family: var(--mono);
+  font-size: 8px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1px;
+  color: var(--ink-4); margin-top: 2px;
+}
+.plan-range {
+  font-family: var(--mono);
+  font-size: 9px; color: var(--ink-5);
+  margin-top: -2px;
+}
+
+.plan-name {
+  font-family: var(--display);
+  font-size: 18px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--ink);
+  line-height: 1.1; margin-top: var(--space-2);
+  border-top: 1px solid var(--rule);
+  padding-top: var(--space-3);
+}
+.plan-desc {
+  font-size: 12px; color: var(--ink-3);
+  line-height: 1.65;
+}
+
+.plan-meta {
+  margin-top: auto;
+  border-top: 1px solid var(--rule);
+  padding-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.plan-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.pm-k { font-family: var(--mono); font-size: 8px; color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.5px; }
+.pm-v { font-family: var(--mono); font-size: 9px; font-weight: 600; color: var(--ink); }
+
+.plan-risk {
+  display: inline-block;
+  margin-top: var(--space-3);
+  border: 1px solid;
+  padding: 3px 8px;
+  font-family: var(--mono);
+  font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  width: fit-content;
+}
+.plan-risk.green { color: var(--live); border-color: var(--live); background: var(--live-bg); }
+.plan-risk.amber { color: var(--warn); border-color: var(--warn); background: var(--warn-bg); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION: WHY TRUST US
+═══════════════════════════════════════════════════════════════════════════ */
+.trust-section { border-bottom: 2px solid var(--rule-dark); }
+
+.trust-table { display: flex; flex-direction: column; }
+
+.trust-row {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: var(--space-4);
+  align-items: start;
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.trust-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+.trust-idx {
+  font-family: var(--mono);
+  font-size: 9px; color: var(--ink-5);
+  text-align: right; padding-top: 2px;
+  letter-spacing: 0.3px;
+}
+.trust-body {}
+.trust-title { font-weight: 700; font-size: 14px; color: var(--ink); margin-bottom: 3px; }
+.trust-desc { font-size: 12.5px; color: var(--ink-3); line-height: 1.65; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION: BOTTOM CTA
+═══════════════════════════════════════════════════════════════════════════ */
+.bottom-cta {
+  border-bottom: 2px solid var(--rule-dark);
+}
+
+.cta-flag-row {
+  border-bottom: 1px solid var(--rule);
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--paper-warm);
+}
+.cta-flag-left {
+  font-family: var(--mono);
+  font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1.5px; color: var(--ink-4);
+}
+.cta-flag-right {
+  display: flex; align-items: center; gap: 5px;
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.8px; color: var(--live);
+}
+
+.cta-inner {
+  padding: var(--space-10) var(--space-5) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+
+.cta-rule { width: 100%; height: 3px; background: var(--ink); margin-bottom: var(--space-2); }
+
+.cta-headline {
+  font-family: var(--display);
+  font-size: clamp(48px, 13vw, 72px);
+  letter-spacing: 1px; line-height: 0.95;
+  color: var(--ink);
+}
+
+.cta-sub {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 15px; color: var(--ink-3); line-height: 1.75;
+  max-width: 320px;
+}
+
+.cta-buttons { width: 100%; display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FOOTER
+═══════════════════════════════════════════════════════════════════════════ */
+.site-footer {
+  padding: var(--space-8) var(--space-5) calc(var(--space-10) + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: center;
+  background: var(--paper-warm);
+  border-top: 2px solid var(--rule-dark);
+}
+
+.footer-seal { display: flex; justify-content: center; }
+.footer-seal-box {
+  width: 88px; height: 88px;
+  background: var(--ink);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--ink);
+}
+.footer-seal-img {
+  width: 88px; height: 88px;
+  object-fit: contain;
+  display: block;
+}
+
+/* Hero nameplate */
+.hero-nameplate {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--rule);
+}
+.hero-nameplate-logo {
+  width: 56px; height: 56px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 2px solid var(--ink);
+}
+.nameplate-img {
+  width: 68px; height: 68px;
+  object-fit: cover;
+  object-position: 50% 22%;
+  display: block;
+  margin: -6px 0 0 -6px;
+}
+.hero-nameplate-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.nameplate-wordmark {
+  font-family: var(--display);
+  font-size: 28px; letter-spacing: 3px;
+  color: var(--ink); line-height: 1;
+}
+.nameplate-est {
+  font-family: var(--mono);
+  font-size: 8px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--ink-4);
+}
+
+.footer-tagline {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 12px; color: var(--ink-4);
+}
+
+.footer-divider { width: 40px; height: 1px; background: var(--rule); }
+
+.footer-legal {
+  font-family: var(--mono);
+  font-size: 9px; color: var(--ink-5);
+  letter-spacing: 0.2px; line-height: 1.7;
+  max-width: 320px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AUTH PANEL
+═══════════════════════════════════════════════════════════════════════════ */
+#auth {
+  position: absolute; inset: 0;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transform: translateY(28px);
+  pointer-events: none;
+  transition: opacity 0.38s cubic-bezier(0.4, 0, 0.2, 1), transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 20;
+  overflow: hidden;
+}
+#auth.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: all;
+}
+
+/* Auth header bar */
+.auth-bar {
+  border-bottom: 2px solid var(--rule-dark);
+  display: flex; align-items: stretch;
+  height: 50px; flex-shrink: 0;
+  background: var(--paper);
+}
+
+.auth-back {
+  width: 50px; height: 50px;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--rule-dark);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: var(--ink);
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.auth-back:active { background: var(--paper-warm); }
+
+.auth-bar-name {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--display);
+  font-size: 20px; letter-spacing: 2px;
+  color: var(--ink);
+}
+
+.auth-bar-spacer {
+  width: 50px; height: 50px;
+  border-left: 1px solid var(--rule-dark);
+  flex-shrink: 0;
+}
+
+/* Auth scrollable body */
+.auth-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: none;
+  scrollbar-width: none;
+}
+.auth-scroll::-webkit-scrollbar { display: none; }
+
+.auth-head {
+  padding: var(--space-8) var(--space-5) var(--space-5);
+  border-bottom: 1px solid var(--rule);
+}
+.auth-title {
+  font-family: var(--display);
+  font-size: 46px; letter-spacing: 1px; line-height: 0.95;
+  color: var(--ink); margin-bottom: 6px;
+}
+.auth-subtitle {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 14px; color: var(--ink-3);
+}
+
+.auth-form-body { padding: var(--space-6) var(--space-5) var(--space-10); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FORM COMPONENTS
+═══════════════════════════════════════════════════════════════════════════ */
+.field { margin-bottom: var(--space-5); }
+
+.field label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--ink-4);
+  margin-bottom: var(--space-2);
+}
+.field-hint {
+  font-size: 9px; color: var(--ink-5);
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 400;
+}
+
+.input-field {
+  width: 100%;
+  background: var(--paper);
+  border: 1.5px solid var(--rule);
+  padding: 16px 14px;
+  font-size: 16px;
+  font-family: var(--sans);
+  color: var(--ink);
+  transition: border-color 0.15s, background 0.15s;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.input-field::placeholder { color: var(--ink-5); }
+.input-field:focus {
+  border-color: var(--ink);
+  background: var(--paper);
+}
+.input-field:focus::placeholder { color: var(--ink-4); }
+.input-field.error { border-color: var(--danger); background: var(--danger-bg); }
+.input-field:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Password input wrapper */
+.input-wrap { position: relative; }
+.input-wrap .input-field { padding-right: 48px; }
+.input-toggle-pw {
+  position: absolute; right: 0; top: 0; bottom: 0;
+  width: 46px;
+  background: none; border: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: var(--ink-4);
+  cursor: pointer; transition: color 0.15s;
+}
+.input-toggle-pw:active { color: var(--ink); }
+
+/* Checkbox */
+.checkbox-row {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  margin-bottom: var(--space-8);
+  cursor: pointer;
+  user-select: none;
+}
+.check-box {
+  width: 22px; height: 22px;
+  border: 2px solid var(--rule);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 1px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.check-box i { font-size: 10px; display: none; color: var(--paper); }
+.check-box.checked {
+  border-color: var(--live);
+  background: var(--live);
+}
+.check-box.checked i { display: block; }
+
+.check-label {
+  font-size: 13px; color: var(--ink-3);
+  line-height: 1.6;
+}
+.check-label a, .check-label span {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Forgot link */
+.forgot-link {
+  display: block; text-align: right;
+  font-family: var(--mono);
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  margin-top: -10px; margin-bottom: var(--space-6);
+  transition: text-decoration-color 0.15s;
+}
+.forgot-link:active { text-decoration-color: var(--ink); }
+
+/* Submit button — auth context */
+.btn-submit {
+  width: 100%;
+  background: var(--ink); color: var(--paper);
+  border: 2px solid var(--ink);
+  padding: 19px var(--space-6);
+  font-family: var(--display);
+  font-size: 22px; letter-spacing: 2px;
+  transition: background 0.15s, transform 0.1s;
+  position: relative; overflow: hidden;
+  user-select: none;
+  margin-top: var(--space-2);
+}
+.btn-submit:active { background: var(--ink-2); transform: scale(0.99); }
+.btn-submit:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.btn-submit.loading::after {
+  content: '';
+  position: absolute; top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  animation: shimmer 1.5s ease infinite;
+}
+
+/* OTP inputs */
+.otp-wrapper {
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-8) 0 var(--space-4);
+}
+.otp-label {
+  text-align: center;
+  font-family: var(--serif); font-style: italic;
+  font-size: 14px; color: var(--ink-3); line-height: 1.65;
+}
+.otp-label strong { font-style: normal; color: var(--ink); }
+
+.otp-group {
+  display: flex; gap: var(--space-2); justify-content: center;
+}
+.otp-group input {
+  width: 44px; height: 54px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 22px; font-weight: 600;
+  background: var(--paper);
+  border: 1.5px solid var(--rule);
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+  caret-color: transparent;
+}
+.otp-group input:focus { border-color: var(--ink); background: var(--paper-warm); }
+.otp-group input.filled { border-color: var(--ink-3); }
+
+.btn-resend {
+  width: 100%; background: none; border: none;
+  font-family: var(--mono);
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  color: var(--ink-4);
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+  cursor: pointer; padding: var(--space-2);
+  transition: color 0.15s;
+}
+.btn-resend:active { color: var(--ink); }
+
+/* Auth divider */
+.auth-rule {
+  width: 100%; height: 1px;
+  background: var(--rule); margin: var(--space-6) 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LEGAL MODAL
+═══════════════════════════════════════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(15, 14, 11, 0.82);
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 8000;
+  padding: 0;
+}
+.modal-overlay.open { display: flex; }
+
+.modal-card {
+  background: var(--paper);
+  border-top: 3px solid var(--ink);
+  border-left: 2px solid var(--ink);
+  border-right: 2px solid var(--ink);
+  width: 100%; max-width: 500px;
+  max-height: 88dvh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: modalUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes modalUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.modal-head {
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border-bottom: 1px solid var(--rule);
+  flex-shrink: 0;
+  background: var(--paper-warm);
+}
+.modal-title {
+  font-family: var(--display);
+  font-size: 28px; letter-spacing: 1px; color: var(--ink);
+  margin-bottom: 3px;
+}
+.modal-date {
+  font-family: var(--mono);
+  font-size: 9px; color: var(--ink-4);
+  text-transform: uppercase; letter-spacing: 0.8px;
+}
+
+.modal-body {
+  flex: 1; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: var(--space-4) var(--space-5);
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+.modal-body::-webkit-scrollbar { width: 4px; }
+.modal-body::-webkit-scrollbar-track { background: transparent; }
+.modal-body::-webkit-scrollbar-thumb { background: var(--rule); }
+
+.modal-body h4 {
+  font-family: var(--mono);
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1px;
+  color: var(--ink); margin: var(--space-5) 0 var(--space-2);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: var(--space-2);
+}
+.modal-body h4:first-child { margin-top: var(--space-4); }
+.modal-body p {
+  font-size: 13px; color: var(--ink-3); line-height: 1.7;
+}
+.modal-body p + p { margin-top: var(--space-3); }
+
+.modal-foot {
+  padding: var(--space-4) var(--space-5) calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--rule);
+  flex-shrink: 0;
+  background: var(--paper);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REVEAL ANIMATIONS
+═══════════════════════════════════════════════════════════════════════════ */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.reveal.in { opacity: 1; transform: none; }
+.reveal-d1 { transition-delay: 0.08s; }
+.reveal-d2 { transition-delay: 0.16s; }
+.reveal-d3 { transition-delay: 0.24s; }
+
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; } to { opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UTILITIES
+═══════════════════════════════════════════════════════════════════════════ */
+.hidden { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SAFE AREA — PWA MODES
+═══════════════════════════════════════════════════════════════════════════ */
+@media (display-mode: standalone) {
+  .masthead { padding-top: env(safe-area-inset-top, 0); height: calc(50px + env(safe-area-inset-top, 0)); }
+  .hero-strip { padding-top: 6px; }
+  #auth { padding-top: env(safe-area-inset-top, 0); }
+  .auth-bar { margin-top: env(safe-area-inset-top, 0); }
+}
+@supports (-webkit-touch-callout: none) {
+  @media (display-mode: standalone) {
+    .masthead { padding-top: max(env(safe-area-inset-top, 20px), 20px); height: calc(50px + max(env(safe-area-inset-top, 20px), 20px)); }
   }
+}
 
-  #pwa-ios-banner.show { transform: translateY(0); }
 
-  .pwa-ios-icon {
-    width: 48px; height: 48px;
-    border-radius: 12px;
-    flex-shrink: 0;
-    background: #3B82F6;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px;
-    color: white;
-    overflow: hidden;
-  }
+/* ═══════════════════════════════════════════════════════════════════════════
+   TYPOGRAPHY DEPTH — LETTERPRESS SYSTEM
+   Ink pressed into paper. White highlight on raised top edge.
+   Shadow below. Values calibrated to read on a phone screen.
+═══════════════════════════════════════════════════════════════════════════ */
 
-  .pwa-ios-icon img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+html { text-rendering: optimizeLegibility; }
 
-  .pwa-ios-body { flex: 1; }
+/* ── Hero + CTA + pool headlines ───────────────────────────────────────── */
+.hero-h1,
+.cta-headline,
+.pool-headline-h2 {
+  text-shadow:
+    0 1px 0 rgba(255,255,255,0.55),
+    0 2px 0 rgba(0,0,0,0.12),
+    0 5px 12px rgba(0,0,0,0.08);
+}
 
-  .pwa-ios-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: #F8FAFC;
-    margin-bottom: 4px;
-  }
+/* ── Pull quote ─────────────────────────────────────────────────────────── */
+.pull-quote-text {
+  text-shadow:
+    0 1px 0 rgba(255,255,255,0.5),
+    0 2px 0 rgba(0,0,0,0.14),
+    0 6px 14px rgba(0,0,0,0.07);
+}
+.pull-quote-text .pq-accent {
+  text-shadow:
+    0 1px 0 rgba(180,255,220,0.5),
+    0 2px 0 rgba(0,55,28,0.2),
+    0 5px 14px rgba(0,122,76,0.13);
+}
 
-  .pwa-ios-msg {
-    font-size: 12px;
-    color: #94A3B8;
-    line-height: 1.5;
-  }
+/* ── Strategy APY numbers ───────────────────────────────────────────────── */
+.plan-apy-num {
+  text-shadow:
+    0 2px 0 rgba(255,255,255,0.5),
+    0 3px 0 rgba(0,0,0,0.14),
+    0 7px 16px rgba(0,0,0,0.08);
+}
+.plan-apy-num.green {
+  text-shadow:
+    0 2px 0 rgba(180,255,220,0.5),
+    0 3px 0 rgba(0,55,28,0.2),
+    0 7px 16px rgba(0,100,55,0.1);
+}
+.plan-apy-num.amber {
+  text-shadow:
+    0 2px 0 rgba(255,240,180,0.5),
+    0 3px 0 rgba(80,38,0,0.2),
+    0 7px 16px rgba(110,55,0,0.1);
+}
 
-  .pwa-ios-msg strong { color: #F8FAFC; }
+/* ── Hero stat numbers ──────────────────────────────────────────────────── */
+.hs-val {
+  text-shadow:
+    0 1px 0 rgba(255,255,255,0.55),
+    0 2px 0 rgba(0,0,0,0.12),
+    0 5px 10px rgba(0,0,0,0.07);
+}
+.hs-val.green {
+  text-shadow:
+    0 1px 0 rgba(180,255,220,0.5),
+    0 2px 0 rgba(0,55,28,0.18),
+    0 5px 10px rgba(0,100,55,0.09);
+}
 
-  /* The little share icon indicator */
-  .pwa-ios-share {
-    display: inline-block;
-    width: 18px; height: 18px;
-    background: #3B82F6;
-    border-radius: 4px;
-    text-align: center;
-    line-height: 18px;
-    font-size: 10px;
-    color: white;
-    vertical-align: middle;
-  }
+/* ── Mono section flags — etched into the page ──────────────────────────── */
+.section-flag,
+.masthead-brand-name {
+  text-shadow:
+    0 1px 0 rgba(255,255,255,0.7),
+    0 -1px 0 rgba(0,0,0,0.08);
+}
 
-  .pwa-ios-close {
-    background: none;
-    border: none;
-    color: #64748B;
-    font-size: 20px;
-    cursor: pointer;
-    padding: 0;
-    line-height: 1;
-    flex-shrink: 0;
-    margin-top: -2px;
-  }
+/* ── Auth form title ────────────────────────────────────────────────────── */
+.auth-title {
+  text-shadow:
+    0 1px 0 rgba(255,255,255,0.5),
+    0 2px 0 rgba(0,0,0,0.11),
+    0 5px 12px rgba(0,0,0,0.06);
+}
 
-  /* Arrow pointing at Safari share button */
-  #pwa-ios-banner::after {
-    content: '';
-    position: absolute;
-    bottom: -8px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0; height: 0;
-    border-left: 8px solid transparent;
-    border-right: 8px solid transparent;
-    border-top: 8px solid #151921;
-  }
+/* ── Ledger step numbers ────────────────────────────────────────────────── */
+.ledger-n {
+  text-shadow:
+    0 1px 0 rgba(255,255,255,0.65),
+    0 2px 4px rgba(0,0,0,0.06);
+}
 
-  /* ── Android Install Banner ───────────────────────────────────────────── */
-  #pwa-android-banner {
-    position: fixed;
-    bottom: 24px; left: 16px; right: 16px;
-    z-index: 99999;
-    background: #1E232F;
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 20px;
-    padding: 16px 18px;
-    display: none;
-    align-items: center;
-    gap: 14px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
-    font-family: -apple-system, 'DM Sans', sans-serif;
-    animation: slideUpBanner 0.45s cubic-bezier(0.34,1.2,0.64,1) forwards;
-  }
+/* ── Body serif — gentle surface separation from paper ─────────────────── */
+.hero-deck-p,
+.pool-headline-sub,
+.cta-sub,
+.footer-tagline,
+.trust-desc,
+.plan-desc,
+.pf-desc,
+.ledger-desc {
+  text-shadow: 0 0.75px 0 rgba(255,255,255,0.5);
+}
 
-  @keyframes slideUpBanner {
-    from { opacity: 0; transform: translateY(20px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
+/* ── Live green labels — depth without washing the colour ───────────────── */
+.hero-strip-right,
+.cta-flag-right,
+.pf-arrow.live {
+  text-shadow:
+    0 1px 0 rgba(0,45,22,0.25),
+    0 0 10px rgba(0,122,76,0.15);
+}
 
-  .pwa-android-icon {
-    width: 44px; height: 44px;
-    border-radius: 10px;
-    flex-shrink: 0;
-    overflow: hidden;
-  }
+/* ── Masthead brand name ────────────────────────────────────────────────── */
+.masthead-brand-name {
+  font-size: 21px;
+  letter-spacing: 2px;
+}
 
-  .pwa-android-icon img { width: 100%; height: 100%; object-fit: cover; }
 
-  .pwa-android-body { flex: 1; }
+/* ═══════════════════════════════════════════════════════════════════════════
+   REDUCED MOTION
+═══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
 
-  .pwa-android-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: #F8FAFC;
-    margin-bottom: 2px;
-  }
-
-  .pwa-android-sub {
-    font-size: 11px;
-    color: #64748B;
-  }
-
-  .pwa-android-btn {
-    background: #3B82F6;
-    color: white;
-    border: none;
-    border-radius: 10px;
-    padding: 9px 16px;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition: transform 0.15s ease;
-  }
-
-  .pwa-android-btn:active { transform: scale(0.95); }
-
-  .pwa-android-close {
-    background: none;
-    border: none;
-    color: #64748B;
-    font-size: 18px;
-    cursor: pointer;
-    padding: 0 0 0 4px;
-    flex-shrink: 0;
-  }
 </style>
-
-
-  <title>NexTrade — Institutional Wealth, Simplified</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-  <style>
-    :root {
-      --bg:       #0B0E11;
-      --surface:  #151921;
-      --elevated: #1E232F;
-      --primary:  #3B82F6;
-      --primary-glow: rgba(59,130,246,0.18);
-      --success:  #10B981;
-      --danger:   #EF4444;
-      --text:     #F8FAFC;
-      --muted:    #64748B;
-      --sub:      #94A3B8;
-      --border:   rgba(255,255,255,0.08);
-      --border-hi: rgba(255,255,255,0.14);
-    }
-
-    *, *::before, *::after {
-      margin: 0; padding: 0;
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    html, body {
-      height: 100%; width: 100%;
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'DM Sans', sans-serif;
-    }
-
-    /* overflow:hidden on body only — NOT html.
-       When BOTH html AND body carry overflow:hidden, Mobile Safari clips
-       position:fixed children (iOS install banner becomes invisible).
-       Keeping it only on body preserves scroll-lock without the Safari bug. */
-    body { overflow: hidden; }
-
-    /* ── ROOT SHELL ─────────────────────────────────────────────── */
-
-    #app {
-      height: 100dvh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      position: relative;
-    }
-
-    /* ── LANDING STAGE ──────────────────────────────────────────── */
-
-    #landing {
-      flex: 1;
-      overflow-y: auto;
-      overflow-x: hidden;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-      transition: opacity 0.4s ease, transform 0.4s ease;
-    }
-    #landing::-webkit-scrollbar { display: none; }
-
-    #landing.exit {
-      opacity: 0;
-      transform: scale(0.97);
-      pointer-events: none;
-    }
-
-    /* GRADIENT MESH BACKGROUND — visible behind all sections */
-    .mesh {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 0;
-      background:
-        radial-gradient(ellipse 70% 45% at 15% 20%,  rgba(37,99,235,0.22) 0%, transparent 65%),
-        radial-gradient(ellipse 55% 35% at 85% 80%,  rgba(16,185,129,0.10) 0%, transparent 60%),
-        radial-gradient(ellipse 50% 30% at 90% 10%,  rgba(139,92,246,0.10) 0%, transparent 55%),
-        var(--bg);
-      animation: meshDrift 18s ease-in-out infinite alternate;
-    }
-
-    @keyframes meshDrift {
-      0%   { background-position: 0% 0%; }
-      100% { background-position: 3% 4%; }
-    }
-
-    /* ── HERO ───────────────────────────────────────────────────── */
-
-    .hero {
-      position: relative;
-      z-index: 1;
-      padding: 52px 24px 40px;
-      display: flex;
-      flex-direction: column;
-      min-height: 80dvh;
-    }
-
-    .logo-mark {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 48px;
-      opacity: 0;
-      animation: fadeUp 0.6s ease 0.1s forwards;
-    }
-
-    .logo-icon {
-      width: 38px; height: 38px;
-      background: var(--primary);
-      border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px; color: white;
-      box-shadow: 0 0 20px rgba(59,130,246,0.35);
-    }
-
-    .logo-text {
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: -0.3px;
-    }
-
-    .logo-text span { color: var(--primary); }
-
-    .hero-eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(16,185,129,0.12);
-      border: 1px solid rgba(16,185,129,0.25);
-      border-radius: 100px;
-      padding: 5px 12px;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--success);
-      letter-spacing: 0.3px;
-      margin-bottom: 20px;
-      width: fit-content;
-      opacity: 0;
-      animation: fadeUp 0.6s ease 0.2s forwards;
-    }
-
-    .hero-h1 {
-      font-family: 'Instrument Serif', Georgia, serif;
-      font-size: clamp(36px, 9vw, 48px);
-      line-height: 1.12;
-      letter-spacing: -0.5px;
-      margin-bottom: 18px;
-      opacity: 0;
-      animation: fadeUp 0.7s ease 0.3s forwards;
-    }
-
-    .hero-h1 em {
-      font-style: italic;
-      background: linear-gradient(110deg, #60a5fa, #a78bfa 50%, #34d399);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .hero-sub {
-      font-size: 15px;
-      color: var(--sub);
-      line-height: 1.65;
-      margin-bottom: 36px;
-      max-width: 340px;
-      opacity: 0;
-      animation: fadeUp 0.7s ease 0.4s forwards;
-    }
-
-    .hero-ctas {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-bottom: 48px;
-      opacity: 0;
-      animation: fadeUp 0.7s ease 0.5s forwards;
-    }
-
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-      border: none;
-      border-radius: 16px;
-      padding: 17px 24px;
-      font-size: 16px;
-      font-weight: 700;
-      font-family: 'DM Sans', sans-serif;
-      cursor: pointer;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-      box-shadow: 0 4px 20px rgba(59,130,246,0.30);
-      letter-spacing: -0.2px;
-    }
-
-    .btn-primary:active { transform: scale(0.97); box-shadow: 0 2px 8px rgba(59,130,246,0.2); }
-
-    .btn-ghost {
-      background: transparent;
-      color: var(--sub);
-      border: 1px solid var(--border-hi);
-      border-radius: 16px;
-      padding: 16px 24px;
-      font-size: 15px;
-      font-weight: 600;
-      font-family: 'DM Sans', sans-serif;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-
-    .btn-ghost:active {
-      background: var(--surface);
-      color: var(--text);
-    }
-
-    /* Floating stats bar */
-    .stats-bar {
-      display: flex;
-      gap: 0;
-      border: 1px solid var(--border-hi);
-      border-radius: 16px;
-      overflow: hidden;
-      background: rgba(21,25,33,0.7);
-      backdrop-filter: blur(20px);
-      opacity: 0;
-      animation: fadeUp 0.7s ease 0.65s forwards;
-    }
-
-    .stat-item {
-      flex: 1;
-      padding: 14px 12px;
-      text-align: center;
-      position: relative;
-    }
-
-    .stat-item + .stat-item::before {
-      content: '';
-      position: absolute;
-      left: 0; top: 20%; bottom: 20%;
-      width: 1px;
-      background: var(--border);
-    }
-
-    .stat-val {
-      font-family: 'DM Mono', monospace;
-      font-size: 18px;
-      font-weight: 500;
-      color: var(--text);
-      letter-spacing: -0.5px;
-      line-height: 1;
-      margin-bottom: 4px;
-    }
-
-    .stat-label {
-      font-size: 10px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    /* ── SCROLL INDICATOR ───────────────────────────────────────── */
-
-    .scroll-hint {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      margin-top: auto;
-      padding-top: 24px;
-      color: var(--muted);
-      font-size: 11px;
-      letter-spacing: 0.5px;
-      opacity: 0;
-      animation: fadeIn 1s ease 1.2s forwards;
-    }
-
-    .scroll-dot {
-      width: 20px; height: 30px;
-      border: 1.5px solid var(--muted);
-      border-radius: 10px;
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-      padding-top: 5px;
-    }
-
-    .scroll-dot::after {
-      content: '';
-      width: 4px; height: 6px;
-      background: var(--sub);
-      border-radius: 2px;
-      animation: scrollBounce 2s ease-in-out infinite;
-    }
-
-    @keyframes scrollBounce {
-      0%, 100% { transform: translateY(0); opacity: 1; }
-      60%       { transform: translateY(8px); opacity: 0.3; }
-    }
-
-    /* ── HOW IT WORKS ───────────────────────────────────────────── */
-
-    .section {
-      position: relative;
-      z-index: 1;
-      padding: 56px 24px;
-    }
-
-    .section-label {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: var(--primary);
-      margin-bottom: 14px;
-    }
-
-    .section-h2 {
-      font-family: 'Instrument Serif', Georgia, serif;
-      font-size: 28px;
-      line-height: 1.2;
-      letter-spacing: -0.3px;
-      margin-bottom: 8px;
-    }
-
-    .section-sub {
-      font-size: 14px;
-      color: var(--sub);
-      line-height: 1.6;
-      margin-bottom: 32px;
-    }
-
-    /* Steps */
-    .steps { display: flex; flex-direction: column; gap: 0; }
-
-    .step {
-      display: flex;
-      gap: 16px;
-      position: relative;
-    }
-
-    .step-left {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .step-num {
-      width: 38px; height: 38px;
-      border-radius: 50%;
-      background: var(--surface);
-      border: 1.5px solid var(--border-hi);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: 'DM Mono', monospace;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--primary);
-      flex-shrink: 0;
-      position: relative;
-      z-index: 1;
-    }
-
-    .step-num.done {
-      background: rgba(16,185,129,0.12);
-      border-color: rgba(16,185,129,0.4);
-      color: var(--success);
-    }
-
-    .step-line {
-      width: 1.5px;
-      flex: 1;
-      background: linear-gradient(to bottom, var(--border-hi), transparent);
-      margin: 6px 0;
-    }
-
-    .step-right {
-      padding-bottom: 32px;
-      padding-top: 6px;
-    }
-
-    .step-title {
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 5px;
-      letter-spacing: -0.2px;
-    }
-
-    .step-desc {
-      font-size: 13.5px;
-      color: var(--sub);
-      line-height: 1.6;
-    }
-
-    .step-tag {
-      display: inline-block;
-      background: rgba(59,130,246,0.10);
-      border: 1px solid rgba(59,130,246,0.2);
-      color: #93c5fd;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 3px 9px;
-      border-radius: 100px;
-      margin-top: 8px;
-    }
-
-    /* ── STRATEGIES PREVIEW ─────────────────────────────────────── */
-
-    .strategies-section {
-      position: relative;
-      z-index: 1;
-      padding: 0 24px 56px;
-    }
-
-    .plan-cards { display: flex; flex-direction: column; gap: 14px; }
-
-    .plan-card {
-      background: var(--surface);
-      border: 1px solid var(--border-hi);
-      border-radius: 18px;
-      padding: 20px;
-      position: relative;
-      overflow: hidden;
-      transition: transform 0.15s ease;
-    }
-
-    .plan-card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 2px;
-    }
-
-    .plan-card.green::before  { background: linear-gradient(90deg, #10b981, #34d399); }
-    .plan-card.amber::before  { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
-
-    .plan-card-top {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      margin-bottom: 14px;
-    }
-
-    .plan-icon {
-      width: 42px; height: 42px;
-      border-radius: 12px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 20px;
-    }
-
-    .plan-icon.green { background: rgba(16,185,129,0.12); }
-    .plan-icon.amber { background: rgba(245,158,11,0.12); }
-
-    .plan-apy {
-      text-align: right;
-    }
-
-    .plan-apy-val {
-      font-family: 'DM Mono', monospace;
-      font-size: 26px;
-      font-weight: 500;
-      letter-spacing: -1px;
-      line-height: 1;
-    }
-
-    .plan-apy-val.green { color: var(--success); }
-    .plan-apy-val.amber { color: #f59e0b; }
-
-    .plan-apy-label {
-      font-size: 10px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .plan-name {
-      font-size: 17px;
-      font-weight: 700;
-      letter-spacing: -0.3px;
-      margin-bottom: 4px;
-    }
-
-    .plan-desc {
-      font-size: 13px;
-      color: var(--sub);
-      line-height: 1.55;
-    }
-
-    .plan-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 16px;
-      padding-top: 14px;
-      border-top: 1px solid var(--border);
-    }
-
-    .plan-meta {
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    .plan-meta strong {
-      color: var(--sub);
-      font-weight: 600;
-    }
-
-    .plan-badge {
-      font-size: 11px;
-      font-weight: 700;
-      padding: 4px 10px;
-      border-radius: 100px;
-      letter-spacing: 0.3px;
-    }
-
-    .plan-badge.green {
-      background: rgba(16,185,129,0.12);
-      color: var(--success);
-      border: 1px solid rgba(16,185,129,0.25);
-    }
-
-    .plan-badge.amber {
-      background: rgba(245,158,11,0.12);
-      color: #f59e0b;
-      border: 1px solid rgba(245,158,11,0.25);
-    }
-
-    /* ── TRUST STRIP ────────────────────────────────────────────── */
-
-    .trust-strip {
-      position: relative;
-      z-index: 1;
-      padding: 0 24px 80px;
-    }
-
-    .trust-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-
-    .trust-item {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 18px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .trust-icon {
-      width: 32px; height: 32px;
-      border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 14px;
-    }
-
-    .trust-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--text);
-      letter-spacing: -0.1px;
-    }
-
-    .trust-desc {
-      font-size: 11px;
-      color: var(--muted);
-      line-height: 1.5;
-    }
-
-    /* ── AUTH STAGE ─────────────────────────────────────────────── */
-
-    #auth {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      padding: 24px;
-      padding-top: max(24px, env(safe-area-inset-top));
-      background: var(--bg);
-      opacity: 0;
-      transform: translateY(40px);
-      pointer-events: none;
-      transition: opacity 0.45s cubic-bezier(0.4,0,0.2,1),
-                  transform 0.45s cubic-bezier(0.4,0,0.2,1);
-      z-index: 10;
-      max-width: 440px;
-      margin: 0 auto;
-    }
-
-    #auth.visible {
-      opacity: 1;
-      transform: translateY(0);
-      pointer-events: all;
-    }
-
-    .auth-nav {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 28px;
-    }
-
-    .btn-back {
-      width: 40px; height: 40px;
-      background: var(--surface);
-      border: 1px solid var(--border-hi);
-      border-radius: 12px;
-      color: var(--text);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      font-size: 14px;
-      transition: background 0.15s;
-    }
-
-    .btn-back:active { background: var(--elevated); }
-
-    .auth-logo {
-      font-size: 17px;
-      font-weight: 800;
-      letter-spacing: -0.3px;
-    }
-
-    .auth-logo span { color: var(--primary); }
-
-    .auth-body { flex: 1; overflow-y: auto; scrollbar-width: none; }
-    .auth-body::-webkit-scrollbar { display: none; }
-
-    .auth-title {
-      font-family: 'Instrument Serif', serif;
-      font-size: 28px;
-      letter-spacing: -0.3px;
-      margin-bottom: 6px;
-    }
-
-    .auth-subtitle {
-      font-size: 14px;
-      color: var(--sub);
-      margin-bottom: 28px;
-    }
-
-    .field { margin-bottom: 18px; }
-
-    .field label {
-      display: block;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--sub);
-      text-transform: uppercase;
-      letter-spacing: 0.7px;
-      margin-bottom: 8px;
-    }
-
-    .input-field {
-      width: 100%;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 16px;
-      font-size: 16px;
-      font-family: 'DM Sans', sans-serif;
-      color: var(--text);
-      transition: border-color 0.2s, background 0.2s;
-      outline: none;
-    }
-
-    .input-field:focus {
-      border-color: var(--primary);
-      background: var(--elevated);
-    }
-
-    .checkbox-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 24px;
-      cursor: pointer;
-    }
-
-    .check-box {
-      width: 20px; height: 20px;
-      border-radius: 6px;
-      border: 2px solid var(--border-hi);
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-      transition: all 0.2s;
-    }
-
-    .check-box i { font-size: 10px; display: none; }
-
-    .check-label {
-      font-size: 13px;
-      color: var(--sub);
-    }
-
-    .check-label span {
-      color: var(--primary);
-      font-weight: 600;
-    }
-
-    .forgot-link {
-      display: block;
-      text-align: right;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--primary);
-      cursor: pointer;
-      margin-top: -10px;
-      margin-bottom: 20px;
-    }
-
-    .btn-submit {
-      width: 100%;
-      background: var(--primary);
-      color: white;
-      border: none;
-      border-radius: 16px;
-      padding: 18px;
-      font-size: 16px;
-      font-weight: 700;
-      font-family: 'DM Sans', sans-serif;
-      cursor: pointer;
-      transition: transform 0.15s, opacity 0.2s;
-      margin-top: 8px;
-      letter-spacing: -0.2px;
-      box-shadow: 0 4px 20px rgba(59,130,246,0.28);
-    }
-
-    .btn-submit:active { transform: scale(0.97); }
-    .btn-submit:disabled { opacity: 0.4; filter: grayscale(0.5); cursor: not-allowed; }
-
-    /* OTP */
-    .otp-group {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-      margin: 28px 0 16px;
-    }
-
-    .otp-group input {
-      width: 46px; height: 54px;
-      text-align: center;
-      font-size: 22px;
-      font-weight: 700;
-      font-family: 'DM Mono', monospace;
-      background: var(--surface);
-      border: 1.5px solid var(--border);
-      border-radius: 12px;
-      color: var(--text);
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .otp-group input:focus { border-color: var(--primary); }
-
-    .btn-text {
-      width: 100%;
-      background: none;
-      border: none;
-      color: var(--primary);
-      font-size: 14px;
-      font-weight: 600;
-      font-family: 'DM Sans', sans-serif;
-      cursor: pointer;
-      padding: 8px;
-    }
-
-    /* Toast */
-    #toast {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: calc(100% - 48px);
-      max-width: 400px;
-      padding: 16px 20px;
-      border-radius: 14px;
-      font-size: 14px;
-      font-weight: 600;
-      font-family: 'DM Sans', sans-serif;
-      z-index: 9999;
-      display: none;
-      text-align: center;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
-    }
-
-    /* Legal Modal */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.8);
-      backdrop-filter: blur(8px);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 8000;
-      padding: 24px;
-    }
-
-    .modal-card {
-      background: var(--elevated);
-      border-radius: 24px;
-      border: 1px solid var(--border-hi);
-      width: 100%;
-      max-width: 400px;
-      max-height: 86dvh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    .modal-card-header {
-      padding: 24px 24px 0;
-      flex-shrink: 0;
-    }
-
-    .modal-card-header h3 {
-      font-family: 'Instrument Serif', serif;
-      font-size: 22px;
-      margin-bottom: 4px;
-    }
-
-    .modal-date {
-      font-size: 11px;
-      color: var(--muted);
-      margin-bottom: 16px;
-    }
-
-    .modal-card-body {
-      flex: 1;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      overscroll-behavior: contain;
-      padding: 0 24px 8px;
-    }
-
-    .modal-card-body h4 {
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--text);
-      margin: 20px 0 6px;
-    }
-
-    .modal-card-body h4:first-child { margin-top: 8px; }
-
-    .modal-card-body p {
-      font-size: 13px;
-      color: var(--sub);
-      line-height: 1.65;
-      margin: 0;
-    }
-
-    .modal-card-footer {
-      padding: 16px 24px 24px;
-      flex-shrink: 0;
-      border-top: 1px solid var(--border);
-    }
-
-    .hidden { display: none !important; }
-
-    /* ── ANIMATIONS ─────────────────────────────────────────────── */
-
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to   { opacity: 1; }
-    }
-
-    /* Staggered scroll-section reveals */
-    .reveal {
-      opacity: 0;
-      transform: translateY(28px);
-      transition: opacity 0.6s ease, transform 0.6s ease;
-    }
-
-    .reveal.in {
-      opacity: 1;
-      transform: none;
-    }
-
-    /* ── BOTTOM CTA ─────────────────────────────────────────────── */
-
-    .bottom-cta {
-      position: relative;
-      z-index: 1;
-      padding: 0 24px 0;
-    }
-
-    .bottom-cta-inner {
-      background: linear-gradient(145deg, #0d2050 0%, #08173c 60%, #040d24 100%);
-      border: 1px solid rgba(59,130,246,0.22);
-      border-radius: 28px;
-      padding: 40px 28px 36px;
-      text-align: center;
-      position: relative;
-      overflow: hidden;
-      margin-bottom: 40px;
-    }
-
-    /* glow behind the CTA card */
-    .bottom-cta-inner::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(ellipse 80% 60% at 50% 110%, rgba(59,130,246,0.22) 0%, transparent 65%);
-      pointer-events: none;
-    }
-
-    .bottom-cta-eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--success);
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      margin-bottom: 18px;
-    }
-
-    .pulse-dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: var(--success);
-      box-shadow: 0 0 0 0 rgba(16,185,129,0.5);
-      animation: pulse 2s ease-in-out infinite;
-      flex-shrink: 0;
-    }
-
-    @keyframes pulse {
-      0%  { box-shadow: 0 0 0 0 rgba(16,185,129,0.55); }
-      60% { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
-      100%{ box-shadow: 0 0 0 0 rgba(16,185,129,0); }
-    }
-
-    .bottom-cta-h2 {
-      font-family: 'Instrument Serif', Georgia, serif;
-      font-size: 34px;
-      line-height: 1.12;
-      letter-spacing: -0.4px;
-      margin-bottom: 14px;
-      position: relative;
-    }
-
-    .bottom-cta-h2 em {
-      font-style: italic;
-      background: linear-gradient(110deg, #60a5fa, #a78bfa 50%, #34d399);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .bottom-cta-sub {
-      font-size: 14px;
-      color: var(--sub);
-      line-height: 1.6;
-      margin-bottom: 28px;
-      position: relative;
-    }
-
-    .bottom-cta-btns {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      position: relative;
-    }
-
-    /* ── SITE FOOTER ─────────────────────────────────────────────── */
-
-    .site-footer {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      padding: 0 0 40px;
-      text-align: center;
-    }
-
-    .footer-wordmark {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .footer-icon {
-      width: 28px; height: 28px;
-      background: var(--primary);
-      border-radius: 7px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 12px;
-      color: white;
-      box-shadow: 0 0 12px rgba(59,130,246,0.3);
-    }
-
-    .footer-name {
-      font-size: 16px;
-      font-weight: 800;
-      letter-spacing: -0.3px;
-    }
-
-    .footer-name span { color: var(--primary); }
-
-    .footer-tagline {
-      font-family: 'Instrument Serif', Georgia, serif;
-      font-style: italic;
-      font-size: 13px;
-      color: var(--muted);
-      letter-spacing: 0.2px;
-    }
-
-    .footer-legal {
-      font-size: 10px;
-      color: var(--muted);
-      opacity: 0.6;
-      line-height: 1.6;
-      max-width: 280px;
-    }
-
-
-    /* ── STANDALONE PWA: status bar safe-area fix ───────────────────────────
-       viewport-fit:cover removes browser chrome but the status bar still sits
-       on top. Android env(safe-area-inset-top) returns 0 on non-notch devices
-       even though ~24-32px of status bar is covering the content. Force a
-       guaranteed minimum that clears the bar on every phone. */
-
-    @media (display-mode: standalone) {
-      #auth {
-        /* 56px = 32px status bar + 24px breathing room */
-        padding-top: max(56px, calc(env(safe-area-inset-top) + 24px)) !important;
-      }
-      .hero {
-        padding-top: max(64px, calc(env(safe-area-inset-top) + 16px));
-      }
-    }
-
-    /* iOS notch / Dynamic Island — env() IS reliable on iOS so we push higher */
-    @supports (-webkit-touch-callout: none) {
-      @media (display-mode: standalone) {
-        #auth {
-          padding-top: max(64px, calc(env(safe-area-inset-top) + 24px)) !important;
-        }
-        .hero {
-          padding-top: max(72px, calc(env(safe-area-inset-top) + 20px));
-        }
-      }
-    }
-
-  </style>
 </head>
 <body>
 
-<!-- PWA Install Banners — must be FIRST in body so they exist in DOM
-     before any script timeout fires. Fixed-position so layout unaffected. -->
-
-<!-- iOS Install Banner (Safari / iPhone / iPad) -->
+<!-- ══════════════════════════════════════════════════════════════════════
+     PWA BANNERS (DOM first — must exist before scripts run)
+══════════════════════════════════════════════════════════════════════════ -->
 <div id="pwa-ios-banner" role="dialog" aria-label="Install NexTrade">
   <div class="pwa-ios-icon">
-    <img src="/pwa1.png" alt="NexTrade" onerror="this.style.display='none'">
+    <img src="/pwa1.png" alt="NexTrade" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <i class="fa-solid fa-bolt" style="display:none;"></i>
   </div>
   <div class="pwa-ios-body">
     <div class="pwa-ios-title">Add NexTrade to Home Screen</div>
     <div class="pwa-ios-msg">
-      Tap <span class="pwa-ios-share">&#x2191;</span> <strong>Share</strong>,
+      Tap <span class="pwa-ios-share">↑</span> <strong>Share</strong>,
       then <strong>"Add to Home Screen"</strong> for the full app experience.
     </div>
   </div>
-  <button class="pwa-ios-close" onclick="dismissPWABanner()" aria-label="Dismiss">&#x2715;</button>
+  <button class="pwa-ios-close" onclick="dismissPWABanner()" aria-label="Dismiss">✕</button>
 </div>
 
-<!-- Android / Chrome Install Banner -->
 <div id="pwa-android-banner" role="dialog" aria-label="Install NexTrade">
   <div class="pwa-android-icon">
     <img src="/pwa1.png" alt="NexTrade">
@@ -1300,788 +1642,1136 @@
     <div class="pwa-android-sub">Add to home screen</div>
   </div>
   <button class="pwa-android-btn" onclick="triggerAndroidInstall()">Install</button>
-  <button class="pwa-android-close" onclick="dismissPWABanner()" aria-label="Dismiss">&#x2715;</button>
+  <button class="pwa-android-close" onclick="dismissPWABanner()" aria-label="Dismiss">✕</button>
+</div>
+
+<div id="toast" role="alert" aria-live="assertive"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     APP SHELL
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="app">
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     LANDING
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="landing">
+
+  <!-- MASTHEAD -->
+  <header class="masthead" role="banner">
+    <div class="masthead-brand">
+      <div class="masthead-brand-box">
+        <img src="/pwa1.png" alt="NexTrade" class="brand-logo-img">
+      </div>
+      <div class="masthead-brand-name">NEXTRADE</div>
+    </div>
+    <div class="masthead-ticker-track" aria-hidden="true">
+      <div class="masthead-ticker-inner" id="tickerEl"></div>
+    </div>
+    <div class="masthead-date" id="dateEl" aria-hidden="true"></div>
+  </header>
+
+  <!-- ─── HERO ─────────────────────────────────────────────────────────── -->
+  <section class="hero">
+
+    <div class="hero-strip">
+      <span class="hero-strip-left">Managed Trading Pool · Since 2024</span>
+      <div class="hero-strip-right">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span id="live-count">2,341 earning now</span>
+      </div>
+    </div>
+
+    <div class="hero-head">
+      <span class="hero-kicker">Your money is working against you. Here's how to fix that.</span>
+      <h1 class="hero-h1">
+        YOUR MONEY,
+        <span class="h1-line-2">WORKING.</span>
+      </h1>
+    </div>
+
+    <div class="hero-deck">
+      <p class="hero-deck-p">
+        Your savings account pays <span class="fact">~4% APY</span>.
+        Inflation runs at <span class="fact">~3.5%</span>.
+        The math is brutal — you're not saving, you're <strong>losing ground slowly.</strong>
+        NexTrade pools your money with other investors, trades it algorithmically,
+        and pays you your share of whatever the pool earns.
+        We take a cut only when we actually make you money.
+      </p>
+    </div>
+
+    <div class="hero-stats" role="list">
+      <div class="hero-stat" role="listitem">
+        <span class="hs-label">Base Pool APY</span>
+        <div class="hs-val green" id="stat-apy">22%</div>
+        <span class="hs-sub">Steady strategy</span>
+      </div>
+      <div class="hero-stat" role="listitem">
+        <span class="hs-label">Fee on Principal</span>
+        <div class="hs-val">$0.00</div>
+        <span class="hs-sub">Zero. Always.</span>
+      </div>
+      <div class="hero-stat" role="listitem">
+        <span class="hs-label">Shortest Term</span>
+        <div class="hs-val">30D</div>
+        <span class="hs-sub">Alpha strategy</span>
+      </div>
+    </div>
+
+    <div class="hero-cta-block">
+      <button class="btn-primary" onclick="enterAuth('signup')">
+        OPEN AN ACCOUNT — FREE
+      </button>
+      <button class="btn-ghost" onclick="enterAuth('login')">
+        Sign in to existing account
+      </button>
+    </div>
+
+    <div class="scroll-hint" aria-hidden="true">
+      <div class="scroll-pill"><div class="scroll-pill-inner"></div></div>
+      <span class="scroll-hint-text">How it actually works</span>
+    </div>
+
+  </section>
+
+  <!-- ─── HOW THE POOL WORKS ────────────────────────────────────────────── -->
+  <section class="pool-explainer reveal" id="section-pool">
+
+    <div class="section-masthead">
+      <span class="section-num">§ 01 — The Mechanics</span>
+      <span class="section-flag">How We Make Money</span>
+    </div>
+
+    <div class="pool-headline">
+      <span class="pool-headline-label">No jargon. Just how it works.</span>
+      <h2 class="pool-headline-h2">
+        POOL IN.<br>GROW TOGETHER.<br>CLAIM YOUR SHARE.
+      </h2>
+      <p class="pool-headline-sub">
+        Most fintech platforms are vague about where returns come from.
+        We're not. Here's the exact mechanism — step by step.
+      </p>
+    </div>
+
+    <div class="pull-quote">
+      <div class="pull-quote-text">
+        WE EARN NOTHING<br>UNTIL <span class="pq-accent">YOU PROFIT.</span>
+      </div>
+    </div>
+
+    <div class="pool-flow">
+
+      <div class="pool-flow-row">
+        <div class="pf-arrow">1</div>
+        <div class="pf-content">
+          <div class="pf-title">Deposit into your Spot Wallet</div>
+          <div class="pf-desc">
+            Your money sits in your personal wallet first — separate from any pool.
+            Nothing is invested until you say so. You control the timing.
+          </div>
+          <span class="pf-pill">Your balance. Your call.</span>
+        </div>
+      </div>
+
+      <div class="pool-flow-row">
+        <div class="pf-arrow">2</div>
+        <div class="pf-content">
+          <div class="pf-title">Choose a strategy and commit</div>
+          <div class="pf-desc">
+            Your deposit buys a proportional share of a trading pool.
+            Think of it like owning a slice of a fund —
+            the more you put in, the bigger your slice of whatever the pool earns.
+          </div>
+          <span class="pf-pill">Min. $1,500 · locked 30 or 90 days</span>
+        </div>
+      </div>
+
+      <div class="pool-flow-row">
+        <div class="pf-arrow live">3</div>
+        <div class="pf-content">
+          <div class="pf-title">The algorithm runs the pool, 24/7</div>
+          <div class="pf-desc">
+            Stablecoin lending, ETH staking, momentum signals, funding rate arbitrage.
+            No humans second-guessing it at 2am.
+            The system executes and rebalances continuously while your capital is locked.
+          </div>
+          <span class="pf-pill green">Always on · Never sleeps</span>
+        </div>
+      </div>
+
+      <div class="pool-flow-row">
+        <div class="pf-arrow">4</div>
+        <div class="pf-content">
+          <div class="pf-title">The pool grows — your share grows with it</div>
+          <div class="pf-desc">
+            Returns are proportional to your position size and how the pool performs.
+            We project 22–65% annually depending on the strategy.
+            These are projections, not promises. Markets move both ways.
+          </div>
+          <span class="pf-pill warn">Returns are projections. Capital at risk.</span>
+        </div>
+      </div>
+
+      <div class="pool-flow-row">
+        <div class="pf-arrow live">5</div>
+        <div class="pf-content">
+          <div class="pf-title">Claim your principal + profit share</div>
+          <div class="pf-desc">
+            After the lock period, you claim everything back to your Spot Wallet —
+            original deposit plus your cut of the pool's gains.
+            From there: withdraw, reinvest, or sit on it. Your call.
+          </div>
+          <span class="pf-pill green">Ledger-verified · Claimable at maturity</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Fee split -->
+    <div class="fee-split">
+      <span class="fee-split-label">How we get paid</span>
+      <p class="fee-split-eg">
+        Say you invest $5,000. The pool returns 22%. You're owed $6,100 at maturity.
+        We take 15% of the <em>profit only</em> — that's $165 on $1,100 of growth.
+        You receive $5,935. Your original $5,000 is never touched.
+      </p>
+
+      <div class="fee-bar-wrap">
+        <div class="fee-bar-track">
+          <div class="fee-bar-you" style="width:0%" data-width="85%">You — $5,935</div>
+          <div class="fee-bar-us">Us — $165</div>
+        </div>
+        <div class="fee-bar-note" style="margin-top:5px;">Based on: $5,000 invested · 22% return · 15% performance fee</div>
+      </div>
+
+      <div class="fee-rows">
+        <div class="fee-row">
+          <span class="fee-row-key"><span class="fee-row-dot green"></span>Deposit fee</span>
+          <span class="fee-row-val zero">$0 — None</span>
+        </div>
+        <div class="fee-row">
+          <span class="fee-row-key"><span class="fee-row-dot green"></span>Withdrawal fee</span>
+          <span class="fee-row-val zero">$0 — None</span>
+        </div>
+        <div class="fee-row">
+          <span class="fee-row-key"><span class="fee-row-dot green"></span>Monthly management fee</span>
+          <span class="fee-row-val zero">$0 — None</span>
+        </div>
+        <div class="fee-row">
+          <span class="fee-row-key"><span class="fee-row-dot green"></span>Fee on your principal</span>
+          <span class="fee-row-val zero">$0 — Never</span>
+        </div>
+        <div class="fee-row">
+          <span class="fee-row-key"><span class="fee-row-dot black"></span>Performance fee (Steady)</span>
+          <span class="fee-row-val">15% of profit only</span>
+        </div>
+        <div class="fee-row">
+          <span class="fee-row-key"><span class="fee-row-dot warn"></span>Performance fee (Alpha)</span>
+          <span class="fee-row-val">20% of profit only</span>
+        </div>
+        <div class="fee-row">
+          <span class="fee-row-key"><span class="fee-row-dot red"></span>Early exit penalty</span>
+          <span class="fee-row-val">8–15% of claimed value</span>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ─── GET STARTED ───────────────────────────────────────────────────── -->
+  <section class="section reveal reveal-d1" id="section-how">
+
+    <div class="section-masthead">
+      <span class="section-num">§ 02 — Onboarding</span>
+      <span class="section-flag">Getting Started</span>
+    </div>
+
+    <div class="section-body">
+      <div class="ledger">
+
+        <div class="ledger-row">
+          <div class="ledger-n">1</div>
+          <div class="ledger-body">
+            <div class="ledger-title">Create a free account</div>
+            <div class="ledger-desc">
+              Name, email, password — then a 6-digit verification code to confirm you're real.
+              No ID upload. No waiting period. You're in in 90 seconds.
+            </div>
+            <span class="ledger-tag">⚡ 90 seconds</span>
+          </div>
+        </div>
+
+        <div class="ledger-row">
+          <div class="ledger-n">2</div>
+          <div class="ledger-body">
+            <div class="ledger-title">Answer two questions</div>
+            <div class="ledger-desc">
+              Risk appetite and time horizon. We use this to point you at the
+              right strategy — not to gatekeep you from anything. You choose what you invest in.
+            </div>
+            <span class="ledger-tag">📊 Takes 60 seconds</span>
+          </div>
+        </div>
+
+        <div class="ledger-row">
+          <div class="ledger-n">3</div>
+          <div class="ledger-body">
+            <div class="ledger-title">Fund your Spot Wallet</div>
+            <div class="ledger-desc">
+              Your Spot Wallet is your liquid balance — it lives separately from any investment.
+              Add at least $1,500 before you can invest in a pool. Move money in, move it out — no lock.
+            </div>
+            <span class="ledger-tag">💳 Min. $1,500 to invest</span>
+          </div>
+        </div>
+
+        <div class="ledger-row">
+          <div class="ledger-n done">✓</div>
+          <div class="ledger-body">
+            <div class="ledger-title">Deploy and let it run</div>
+            <div class="ledger-desc">
+              Pick Steady Accumulator (90 days, 22%) or Alpha Seeker (30 days, 65%).
+              Confirm your investment. The algorithm takes it from there — track your pool
+              position live from the portfolio tab.
+            </div>
+            <span class="ledger-tag green">Tracking starts immediately</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ─── STRATEGIES ────────────────────────────────────────────────────── -->
+  <section class="strategies-section reveal reveal-d2" id="section-plans">
+
+    <div class="section-masthead">
+      <span class="section-num">§ 03 — Strategies</span>
+      <span class="section-flag">Pick Your Pool</span>
+    </div>
+
+    <div class="plan-cols">
+
+      <div class="plan-col green">
+        <div class="plan-apy-num green">22%</div>
+        <div class="plan-apy-label">Target APY</div>
+        <div class="plan-range">Projected range: 18–26%</div>
+        <div class="plan-name">Steady Accumulator</div>
+        <div class="plan-desc">
+          Stablecoin lending + ETH staking + liquidity provision.
+          Zero leverage. Capital only in audited protocols.
+          Designed for people who want growth without nightmares.
+        </div>
+        <div class="plan-meta">
+          <div class="plan-meta-row">
+            <span class="pm-k">Lock period</span>
+            <span class="pm-v">90 days</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Minimum</span>
+            <span class="pm-v">$1,500</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Performance fee</span>
+            <span class="pm-v">15% of profit</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Early exit</span>
+            <span class="pm-v">8% penalty</span>
+          </div>
+        </div>
+        <div class="plan-risk green">Low Risk</div>
+      </div>
+
+      <div class="plan-col amber">
+        <div class="plan-apy-num amber">65%</div>
+        <div class="plan-apy-label">Target APY</div>
+        <div class="plan-range">Projected range: 45–90%</div>
+        <div class="plan-name">Alpha Seeker</div>
+        <div class="plan-desc">
+          Quant momentum signals + funding rate arbitrage + volatile-pair liquidity.
+          Higher ceiling, higher floor risk.
+          Built for investors who understand the tradeoff.
+        </div>
+        <div class="plan-meta">
+          <div class="plan-meta-row">
+            <span class="pm-k">Lock period</span>
+            <span class="pm-v">30 days</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Minimum</span>
+            <span class="pm-v">$1,500</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Performance fee</span>
+            <span class="pm-v">20% of profit</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Early exit</span>
+            <span class="pm-v">15% penalty</span>
+          </div>
+        </div>
+        <div class="plan-risk amber">Med–High Risk</div>
+      </div>
+
+    </div>
+
+  </section>
+
+  <!-- ─── WHY TRUST US ──────────────────────────────────────────────────── -->
+  <section class="trust-section reveal reveal-d1" id="section-trust">
+
+    <div class="section-masthead">
+      <span class="section-num">§ 04 — Infrastructure</span>
+      <span class="section-flag">Why Trust Us</span>
+    </div>
+
+    <div class="section-body">
+      <div class="trust-table">
+
+        <div class="trust-row">
+          <span class="trust-idx">i.</span>
+          <div class="trust-body">
+            <div class="trust-title">An append-only transaction ledger</div>
+            <div class="trust-desc">
+              Every deposit, investment, and claim is an immutable record.
+              Your balance is <em>derived</em> from these transactions — never stored as
+              an editable number. There's no admin panel that can silently change it.
+            </div>
+          </div>
+        </div>
+
+        <div class="trust-row">
+          <span class="trust-idx">ii.</span>
+          <div class="trust-body">
+            <div class="trust-title">We only eat when you eat</div>
+            <div class="trust-desc">
+              Our revenue is a fixed percentage of pool profit. Pool earns zero — we earn zero.
+              This isn't a tagline. It is the fee structure. Our incentive is identical to yours.
+            </div>
+          </div>
+        </div>
+
+        <div class="trust-row">
+          <span class="trust-idx">iii.</span>
+          <div class="trust-body">
+            <div class="trust-title">Cryptographic build integrity</div>
+            <div class="trust-desc">
+              SHA-256 hashes published on every deploy. Supabase Row-Level Security means
+              your data is mathematically isolated — one account cannot touch another's
+              records, not even by accident.
+            </div>
+          </div>
+        </div>
+
+        <div class="trust-row">
+          <span class="trust-idx">iv.</span>
+          <div class="trust-body">
+            <div class="trust-title">Works without internet</div>
+            <div class="trust-desc">
+              Full PWA. Portfolio, transaction history, and holdings are cached locally.
+              A bad signal doesn't mean a blind spot on your money.
+              No app store required — install straight from your browser.
+            </div>
+          </div>
+        </div>
+
+        <div class="trust-row">
+          <span class="trust-idx">v.</span>
+          <div class="trust-body">
+            <div class="trust-title">Live market data — not simulated</div>
+            <div class="trust-desc">
+              Binance WebSocket and CoinGecko feed real-time prices across the market tab.
+              Candlesticks, Fear &amp; Greed index, trending coins — all live.
+              What you see is exactly what the market is doing right now.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ─── BOTTOM CTA ────────────────────────────────────────────────────── -->
+  <section class="bottom-cta reveal" id="section-cta">
+
+    <div class="cta-flag-row">
+      <span class="cta-flag-left">Ready to invest · Min. $1,500</span>
+      <div class="cta-flag-right">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span>Open now</span>
+      </div>
+    </div>
+
+    <div class="cta-inner">
+      <div class="cta-rule" aria-hidden="true"></div>
+      <h2 class="cta-headline">
+        STOP WAITING.<br>START EARNING.
+      </h2>
+      <p class="cta-sub">
+        A savings account won't beat inflation.
+        The market doesn't care when you feel ready.
+        $1,500 is enough to start. Right now.
+      </p>
+      <div class="cta-buttons">
+        <button class="btn-primary" onclick="enterAuth('signup')">
+          OPEN AN ACCOUNT — FREE
+        </button>
+        <button class="btn-ghost" onclick="enterAuth('login')">
+          Sign In
+        </button>
+      </div>
+    </div>
+
+    <footer class="site-footer" role="contentinfo">
+      <div class="footer-seal">
+        <div class="footer-seal-box">
+          <img src="/pwa1.png" alt="NexTrade" class="footer-seal-img">
+        </div>
+      </div>
+      <div class="footer-tagline">Next, trade.</div>
+      <div class="footer-divider" aria-hidden="true"></div>
+      <div class="footer-legal">
+        Investment involves risk. Past performance does not guarantee future results.
+        APY figures are projections based on historical strategy performance — not guarantees.
+        Capital at risk. NexTrade is not a licensed bank or registered financial adviser.
+        Early exit fees apply. Read the Risk Disclosure before investing.
+      </div>
+    </footer>
+
+  </section>
+
+</div><!-- /landing -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     AUTH
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="auth" role="dialog" aria-modal="true" aria-labelledby="formTitle">
+
+  <div class="auth-bar">
+    <button class="auth-back" onclick="resetView()" aria-label="Back to landing">
+      <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+    </button>
+    <div class="auth-bar-name">NEXTRADE</div>
+    <div class="auth-bar-spacer" aria-hidden="true"></div>
+  </div>
+
+  <div class="auth-scroll">
+
+    <div class="auth-head">
+      <div class="auth-title" id="formTitle">Create Account</div>
+      <div class="auth-subtitle" id="formSubtitle">Let's get your portfolio started.</div>
+    </div>
+
+    <div class="auth-form-body">
+
+      <!-- ── SIGNUP ── -->
+      <div id="signupForm">
+        <div class="field">
+          <label for="regName">Full Name</label>
+          <input type="text" id="regName" class="input-field"
+            placeholder="Your full name"
+            autocomplete="name"
+            enterkeyhint="next"
+            spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="regEmail">Email Address</label>
+          <input type="email" id="regEmail" class="input-field"
+            placeholder="you@example.com"
+            autocomplete="email"
+            inputmode="email"
+            enterkeyhint="next"
+            spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="regPassword">
+            <span>Password</span>
+            <span class="field-hint">Min. 8 characters</span>
+          </label>
+          <div class="input-wrap">
+            <input type="password" id="regPassword" class="input-field"
+              placeholder="Choose a strong password"
+              autocomplete="new-password"
+              enterkeyhint="done"
+              minlength="8">
+            <button type="button" class="input-toggle-pw" onclick="togglePw('regPassword', this)" aria-label="Show password">
+              <i class="fa-regular fa-eye"></i>
+            </button>
+          </div>
+        </div>
+        <div class="checkbox-row" onclick="openLegal()">
+          <div class="check-box" id="customCheck" role="checkbox" aria-checked="false">
+            <i class="fa-solid fa-check" aria-hidden="true"></i>
+          </div>
+          <div class="check-label">
+            I've read and agree to the <span>Risk Disclosure &amp; Terms</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── LOGIN ── -->
+      <div id="loginForm" class="hidden">
+        <div class="field">
+          <label for="logEmail">Email Address</label>
+          <input type="email" id="logEmail" class="input-field"
+            placeholder="you@example.com"
+            autocomplete="email"
+            inputmode="email"
+            enterkeyhint="next"
+            spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="logPassword">Password</label>
+          <div class="input-wrap">
+            <input type="password" id="logPassword" class="input-field"
+              placeholder="Your password"
+              autocomplete="current-password"
+              enterkeyhint="done">
+            <button type="button" class="input-toggle-pw" onclick="togglePw('logPassword', this)" aria-label="Show password">
+              <i class="fa-regular fa-eye"></i>
+            </button>
+          </div>
+        </div>
+        <div class="forgot-link" onclick="handleForgotPassword()" role="button" tabindex="0">
+          Forgot password?
+        </div>
+      </div>
+
+      <!-- ── OTP ── -->
+      <div id="otpForm" class="hidden">
+        <div class="otp-wrapper">
+          <p class="otp-label">
+            Enter the 6-digit code sent to<br>
+            <strong id="displayEmail"></strong>
+          </p>
+          <div class="otp-group" id="otpInputs" role="group" aria-label="Verification code">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="one-time-code" aria-label="Digit 1">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 2">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 3">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 4">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 5">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 6">
+          </div>
+          <button class="btn-resend" onclick="handleResendOtp()">
+            Didn't receive a code? Resend
+          </button>
+        </div>
+      </div>
+
+      <button class="btn-submit" id="submitBtn" onclick="handleAction()">CONTINUE</button>
+
+    </div><!-- /auth-form-body -->
+
+  </div><!-- /auth-scroll -->
+
+</div><!-- /auth -->
+
+</div><!-- /app -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     LEGAL MODAL
+══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="legalModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title" id="modalTitle">RISK DISCLOSURE &amp; TERMS</div>
+      <div class="modal-date">Last updated: February 2026</div>
+    </div>
+    <div class="modal-body">
+      <p>
+        <strong style="color:var(--ink);">The short version:</strong>
+        NexTrade runs a managed trading pool. Returns are projected, not guaranteed.
+        You can lose money — including everything in the high-risk strategy.
+        Your principal is never charged fees. We earn only on profit we generate for you.
+      </p>
+      <h4>1. Who Can Use NexTrade</h4>
+      <p>You must be at least 18 years old and legally permitted to trade financial instruments in your jurisdiction. By creating an account, you confirm this. We reserve the right to close accounts that do not meet eligibility requirements.</p>
+      <h4>2. Your Account</h4>
+      <p>You are solely responsible for all activity under your account. Keep your credentials private. One person, one account — no sharing, no transfers to other users. We will never ask for your password via email, chat, or any other channel.</p>
+      <h4>3. Deposits &amp; Withdrawals</h4>
+      <p>Deposits are subject to verification (1–5 business days). Withdrawals go only to verified methods on your account. NexTrade is not a bank. Balances are not covered by any deposit insurance scheme (e.g., FDIC, FSCS). Crypto assets are not SIPC-protected.</p>
+      <h4>4. Investment &amp; Pool Risk</h4>
+      <p>Pool strategies are not savings accounts. Projected APYs (22% for Steady Accumulator, 65% for Alpha Seeker) are based on historical strategy performance — they are not guarantees. Markets move against positions. You can lose part or all of your invested capital, particularly in high-risk strategies.</p>
+      <h4>5. Performance Fee</h4>
+      <p>NexTrade charges a performance fee of 15% (Steady) or 20% (Alpha) on the profit generated by the pool during your investment term. This fee is deducted at the point of claim. Your principal is never subject to fees. If the pool generates zero profit, no fee is charged.</p>
+      <h4>6. Early Exit</h4>
+      <p>Withdrawing before a strategy's lock period expires incurs an early exit penalty of 8% (Steady) or 15% (Alpha) of the total claimed value. This penalty is disclosed clearly before you confirm any early withdrawal.</p>
+      <h4>7. Prohibited Activity</h4>
+      <p>Strictly prohibited: money laundering, fraud, market manipulation, account sharing, scraping, or the use of automated bots without written consent. Violations result in immediate account termination and may be referred to relevant authorities.</p>
+      <h4>8. Our Liability</h4>
+      <p>NexTrade is not liable for losses arising from market movements, your investment decisions, blockchain outages, third-party failures, or your failure to secure your account. Our total liability in any circumstance is capped at the fees you paid to NexTrade in the preceding 12 months.</p>
+      <h4>9. Privacy</h4>
+      <p>We do not sell your personal data. We share it only with regulated third-party service providers under strict data processing agreements, and with authorities when legally required to do so.</p>
+      <h4>10. Disputes &amp; Governing Law</h4>
+      <p>Disputes are subject to binding arbitration under AAA rules, seated in Delaware. You waive the right to a class action and jury trial. Contact support first — we will make every reasonable effort to resolve disputes informally within 30 days. Governing law: State of Delaware, USA.</p>
+      <h4>11. Amendments</h4>
+      <p>We will provide at least 14 days' in-app notice before significant changes take effect. Continued use of the platform after the notice period constitutes acceptance of revised terms. Contact: <span style="color:var(--ink);text-decoration:underline;">legal@nextrade.app</span></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-submit" onclick="confirmLegal()" style="margin-top:0;">
+        I UNDERSTAND &amp; ACCEPT
+      </button>
+    </div>
+  </div>
 </div>
 
 
-  <div id="toast"></div>
+<!-- ══════════════════════════════════════════════════════════════════════
+     SCRIPTS
+══════════════════════════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 
-  <div id="app">
-
-    <!-- Background Mesh -->
-    <div class="mesh"></div>
-
-    <!-- ════════════════════════════════════════════════════════════
-         LANDING
-    ════════════════════════════════════════════════════════════ -->
-    <div id="landing">
-
-      <!-- HERO -->
-      <section class="hero">
-
-        <div class="logo-mark">
-          <div class="logo-icon"><i class="fa-solid fa-bolt"></i></div>
-          <div class="logo-text">Nex<span>Trade</span></div>
-        </div>
-
-        <div class="hero-eyebrow">
-          <i class="fa-solid fa-circle-dot" style="font-size:8px;"></i>
-          Live — 2,341 investors active now
-        </div>
-
-        <h1 class="hero-h1">Institutional wealth,<br><em>finally for you.</em></h1>
-
-        <p class="hero-sub">
-          Deploy your money into the same strategies hedge funds use — automated, transparent, and starting at $1,500.
-        </p>
-
-        <div class="hero-ctas">
-          <button class="btn-primary" onclick="enterAuth('signup')">
-            Create Free Account →
-          </button>
-          <button class="btn-ghost" onclick="enterAuth('login')">
-            I already have an account
-          </button>
-        </div>
-
-        <div class="stats-bar">
-          <div class="stat-item">
-            <div class="stat-val">22%</div>
-            <div class="stat-label">Base APY</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-val">$0</div>
-            <div class="stat-label">Principal Fees</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-val">30d</div>
-            <div class="stat-label">Shortest Term</div>
-          </div>
-        </div>
-
-        <div class="scroll-hint">
-          <div class="scroll-dot"></div>
-          SCROLL TO LEARN MORE
-        </div>
-
-      </section>
-
-      <!-- HOW IT WORKS -->
-      <section class="section reveal" id="section-how">
-        <div class="section-label">Getting Started</div>
-        <h2 class="section-h2">You'll be live in<br>under 5 minutes</h2>
-        <p class="section-sub">No financial background needed. Here's exactly what to do.</p>
-
-        <div class="steps">
-
-          <div class="step">
-            <div class="step-left">
-              <div class="step-num">01</div>
-              <div class="step-line"></div>
-            </div>
-            <div class="step-right">
-              <div class="step-title">Create your account</div>
-              <div class="step-desc">Enter your name, email, and a password. Verify with a 6-digit code sent to your inbox. Takes about 90 seconds.</div>
-              <span class="step-tag">⚡ Takes 90 seconds</span>
-            </div>
-          </div>
-
-          <div class="step">
-            <div class="step-left">
-              <div class="step-num">02</div>
-              <div class="step-line"></div>
-            </div>
-            <div class="step-right">
-              <div class="step-title">Take the investor quiz</div>
-              <div class="step-desc">Two quick questions help us recommend the right strategy for you — conservative growth or aggressive alpha. No wrong answers.</div>
-              <span class="step-tag">📊 2 questions only</span>
-            </div>
-          </div>
-
-          <div class="step">
-            <div class="step-left">
-              <div class="step-num">03</div>
-              <div class="step-line"></div>
-            </div>
-            <div class="step-right">
-              <div class="step-title">Fund your wallet</div>
-              <div class="step-desc">Add at least $1,500 to your Spot Wallet. You can move it into a yield strategy whenever you're ready — no pressure.</div>
-              <span class="step-tag">💳 Min. $1,500</span>
-            </div>
-          </div>
-
-          <div class="step">
-            <div class="step-left">
-              <div class="step-num done"><i class="fa-solid fa-check" style="font-size:12px;"></i></div>
-            </div>
-            <div class="step-right">
-              <div class="step-title">Deploy your first strategy</div>
-              <div class="step-desc">Choose Steady Accumulator or Alpha Seeker. Confirm. Your money starts working immediately — you can track earnings live.</div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- STRATEGIES PREVIEW -->
-      <section class="strategies-section reveal" id="section-plans">
-        <div class="section-label" style="padding: 0 0 14px;">Our Strategies</div>
-        <h2 class="section-h2" style="margin-bottom: 6px;">Two plans.<br>Both built for results.</h2>
-        <p class="section-sub">Performance fee only on profit. Zero fees on your principal. Ever.</p>
-
-        <div class="plan-cards">
-
-          <div class="plan-card green">
-            <div class="plan-card-top">
-              <div class="plan-icon green">🛡️</div>
-              <div class="plan-apy">
-                <div class="plan-apy-val green">22%</div>
-                <div class="plan-apy-label">Proj. APY</div>
-              </div>
-            </div>
-            <div class="plan-name">Steady Accumulator</div>
-            <div class="plan-desc">Stablecoin lending + ETH staking + liquidity provision. Zero leverage. Capital only in audited protocols.</div>
-            <div class="plan-footer">
-              <div class="plan-meta"><strong>90 days</strong> · Min $1,500 · 15% perf. fee</div>
-              <div class="plan-badge green">Low Risk</div>
-            </div>
-          </div>
-
-          <div class="plan-card amber">
-            <div class="plan-card-top">
-              <div class="plan-icon amber">⚡</div>
-              <div class="plan-apy">
-                <div class="plan-apy-val amber">65%</div>
-                <div class="plan-apy-label">Proj. APY</div>
-              </div>
-            </div>
-            <div class="plan-name">Alpha Seeker</div>
-            <div class="plan-desc">Quant momentum signals + funding rate arbitrage + volatile-pair liquidity. Algo-driven, 24/7.</div>
-            <div class="plan-footer">
-              <div class="plan-meta"><strong>30 days</strong> · Min $1,500 · 20% perf. fee</div>
-              <div class="plan-badge amber">Med–High Risk</div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- TRUST -->
-      <section class="trust-strip reveal" id="section-trust">
-        <div class="trust-grid">
-          <div class="trust-item">
-            <div class="trust-icon" style="background:rgba(59,130,246,0.12); color:#60a5fa;">
-              <i class="fa-solid fa-lock"></i>
-            </div>
-            <div class="trust-title">Bank-Grade Security</div>
-            <div class="trust-desc">AES-256 encryption. Supabase-backed auth. Your data never leaves.</div>
-          </div>
-          <div class="trust-item">
-            <div class="trust-icon" style="background:rgba(16,185,129,0.12); color:var(--success);">
-              <i class="fa-solid fa-shield-halved"></i>
-            </div>
-            <div class="trust-title">Zero Principal Fees</div>
-            <div class="trust-desc">We only earn when you earn. No hidden charges on your capital.</div>
-          </div>
-          <div class="trust-item">
-            <div class="trust-icon" style="background:rgba(245,158,11,0.12); color:#f59e0b;">
-              <i class="fa-solid fa-chart-line"></i>
-            </div>
-            <div class="trust-title">Live Earnings Ticker</div>
-            <div class="trust-desc">Watch your balance grow in real time. Full transparency.</div>
-          </div>
-          <div class="trust-item">
-            <div class="trust-icon" style="background:rgba(139,92,246,0.12); color:#a78bfa;">
-              <i class="fa-solid fa-rotate"></i>
-            </div>
-            <div class="trust-title">Auto-Renewing Terms</div>
-            <div class="trust-desc">Strategies renew automatically unless you opt out. Keep compounding.</div>
-          </div>
-        </div>
-      </section>
-
-
-      <!-- BOTTOM CTA ──────────────────────────────────────────── -->
-      <section class="bottom-cta reveal" id="section-cta">
-
-        <div class="bottom-cta-inner">
-
-          <div class="bottom-cta-eyebrow">
-            <span class="pulse-dot"></span>
-            Ready when you are
-          </div>
-
-          <h2 class="bottom-cta-h2">
-            Start building<br><em>your portfolio.</em>
-          </h2>
-
-          <p class="bottom-cta-sub">
-            Join thousands already compounding with institutional-grade strategies.
-          </p>
-
-          <div class="bottom-cta-btns">
-            <button class="btn-primary" onclick="enterAuth('signup')">
-              Create Free Account &rarr;
-            </button>
-            <button class="btn-ghost" onclick="enterAuth('login')">
-              Sign In
-            </button>
-          </div>
-
-        </div>
-
-        <!-- Footer wordmark -->
-        <footer class="site-footer">
-          <div class="footer-wordmark">
-            <div class="footer-icon"><i class="fa-solid fa-bolt"></i></div>
-            <div class="footer-name">Nex<span>Trade</span></div>
-          </div>
-          <div class="footer-tagline">Next, trade.</div>
-        </footer>
-
-      </section>
-
-    </div>
-    <!-- /landing -->
-
-
-    <!-- ════════════════════════════════════════════════════════════
-         AUTH STAGE  (identical logic to Gemini's version)
-    ════════════════════════════════════════════════════════════ -->
-    <div id="auth">
-
-      <div class="auth-nav">
-        <button class="btn-back" onclick="resetView()">
-          <i class="fa-solid fa-chevron-left"></i>
-        </button>
-        <div class="auth-logo">Nex<span>Trade</span></div>
-        <div style="width:40px;"></div>
-      </div>
-
-      <div class="auth-body">
-
-        <div class="auth-title" id="formTitle">Create Account</div>
-        <div class="auth-subtitle" id="formSubtitle">Let's get your portfolio started.</div>
-
-        <!-- SIGNUP FORM -->
-        <div id="signupForm">
-          <div class="field">
-            <label>Full Name</label>
-            <input type="text" id="regName" class="input-field" placeholder="Momoa Johnson" enterkeyhint="next">
-          </div>
-          <div class="field">
-            <label>Email Address</label>
-            <input type="email" id="regEmail" class="input-field" placeholder="you@example.com" enterkeyhint="next">
-          </div>
-          <div class="field">
-            <label>Password</label>
-            <input type="password" id="regPassword" class="input-field" placeholder="••••••••" enterkeyhint="done">
-          </div>
-          <div class="checkbox-row" onclick="openLegal()">
-            <div class="check-box" id="customCheck">
-              <i class="fa-solid fa-check"></i>
-            </div>
-            <div class="check-label">
-              I agree to the <span>Risk Disclosure</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- LOGIN FORM -->
-        <div id="loginForm" class="hidden">
-          <div class="field">
-            <label>Email Address</label>
-            <input type="email" id="logEmail" class="input-field" placeholder="you@example.com" enterkeyhint="next">
-          </div>
-          <div class="field">
-            <label>Password</label>
-            <input type="password" id="logPassword" class="input-field" placeholder="••••••••" enterkeyhint="done">
-          </div>
-          <div class="forgot-link" onclick="handleForgotPassword()">Forgot Password?</div>
-        </div>
-
-        <!-- OTP FORM -->
-        <div id="otpForm" class="hidden">
-          <p style="text-align:center; color:var(--sub); margin-bottom:8px; font-size:14px; line-height:1.6;">
-            Enter the 6-digit code sent to<br>
-            <strong id="displayEmail" style="color:var(--text);"></strong>
-          </p>
-          <div class="otp-group" id="otpInputs">
-            <input type="text" maxlength="1" inputmode="numeric">
-            <input type="text" maxlength="1" inputmode="numeric">
-            <input type="text" maxlength="1" inputmode="numeric">
-            <input type="text" maxlength="1" inputmode="numeric">
-            <input type="text" maxlength="1" inputmode="numeric">
-            <input type="text" maxlength="1" inputmode="numeric">
-          </div>
-          <button class="btn-text" onclick="handleResendOtp()">Resend Code</button>
-        </div>
-
-        <button class="btn-submit" id="submitBtn" onclick="handleAction()">Continue</button>
-
-      </div>
-    </div>
-    <!-- /auth -->
-
-  </div>
-
-  <!-- Legal Modal -->
-  <div class="modal-overlay" id="legalModal">
-    <div class="modal-card">
-
-      <div class="modal-card-header">
-        <h3>Risk Disclosure &amp; Terms</h3>
-        <div class="modal-date">Last updated: February 2026</div>
-      </div>
-
-      <div class="modal-card-body">
-
-        <p><strong style="color:var(--text);">The short version:</strong> NexTrade is a real financial platform regulated in the United States. We want you to make money. To do that safely — for you and for us — there are rules.</p>
-
-        <h4>1. Who Can Use NexTrade</h4>
-        <p>You must be at least 18 years old, a legal U.S. resident or citizen, and not on any government sanctions list. By creating an account, you confirm this is true.</p>
-
-        <h4>2. Your Account</h4>
-        <p>You are responsible for everything that happens under your account. Keep your credentials private. We will never ask for your password. One person, one account — no transfers.</p>
-
-        <h4>3. Deposits &amp; Withdrawals</h4>
-        <p>All deposits are subject to verification (1–5 business days). Withdrawals go only to verified methods on your account. We are not a bank. Cash balances are not FDIC insured. Crypto assets are not covered by SIPC.</p>
-
-        <h4>4. Crypto Trading Risk</h4>
-        <p>Cryptocurrency is extremely volatile. The value of any asset can go to zero. Past performance means nothing. We do not provide personalized financial advice. All trades are final once confirmed.</p>
-
-        <h4>5. Vault Strategy Risk</h4>
-        <p>Vault strategies are not savings accounts and are not guaranteed. APY figures are projections — not promises. You can lose money. In high-risk strategies, you can lose everything. Early exit may incur a penalty fee disclosed at time of investment. Do not invest money you cannot afford to lose.</p>
-
-        <h4>6. Fees</h4>
-        <p>All fees are shown before you confirm any transaction. We give 30 days notice before introducing new fee types. No hidden fees — ever.</p>
-
-        <h4>7. Prohibited Activity</h4>
-        <p>No money laundering, fraud, market manipulation, account sharing, scraping, or automated bots without written permission. Violations result in immediate termination and may be referred to law enforcement.</p>
-
-        <h4>8. Our Liability</h4>
-        <p>We are not liable for losses from market movements, your trading decisions, blockchain outages, or your failure to secure your account. Total liability is capped at fees you paid us in the preceding 12 months.</p>
-
-        <h4>9. Privacy</h4>
-        <p>We do not sell your personal data. We share it only with regulated service providers under strict agreements and with authorities when legally required.</p>
-
-        <h4>10. Disputes</h4>
-        <p>Disputes are resolved through binding arbitration under AAA rules in Delaware. You waive the right to a jury trial and class action. Contact support first — give us 30 days to resolve it informally.</p>
-
-        <h4>11. Changes</h4>
-        <p>Significant changes come with at least 14 days notice in-app. Continued use means acceptance. Governing law: State of Delaware. Questions: <span style="color:var(--primary);">legal@nextrade.app</span></p>
-
-      </div>
-
-      <div class="modal-card-footer">
-        <button class="btn-submit" onclick="confirmLegal()" style="margin-top:0;">I Understand &amp; Accept</button>
-      </div>
-
-    </div>
-  </div>
-
-
-  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js"></script>
-<!-- ── STEP 4: PASTE THIS <script> AT THE VERY BOTTOM OF <body> ─────────── -->
-<!--           (last script tag, after everything else)                        -->
 <script>
-  // ══════════════════════════════════════════════════════════════════════════
-  //  SERVICE WORKER REGISTRATION
-  // ══════════════════════════════════════════════════════════════════════════
-
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' })
-        .then((reg) => {
-          console.log('[PWA] Service worker registered. Scope:', reg.scope);
-
-          // When a new SW is found, activate it immediately
-          reg.addEventListener('updatefound', () => {
-            const newWorker = reg.installing;
-            if (!newWorker) return;
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // New content available — reload silently so user always has latest
-                console.log('[PWA] New version available — activating.');
-                newWorker.postMessage({ type: 'SKIP_WAITING' });
-              }
-            });
+/* ── SERVICE WORKER ─────────────────────────────────────────────────────── */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then(reg => {
+        reg.addEventListener('updatefound', () => {
+          const w = reg.installing;
+          if (!w) return;
+          w.addEventListener('statechange', () => {
+            if (w.state === 'installed' && navigator.serviceWorker.controller) {
+              w.postMessage({ type: 'SKIP_WAITING' });
+            }
           });
-        })
-        .catch((err) => console.warn('[PWA] Service worker registration failed:', err));
-    });
+        });
+      })
+      .catch(err => console.warn('[SW]', err));
+  });
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) { refreshing = true; window.location.reload(); }
+  });
+}
 
-    // When a new SW takes over, reload the page once
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
-      }
-    });
-  }
+/* ── PWA INSTALL ────────────────────────────────────────────────────────── */
+const PWA_DISMISSED_KEY = 'nex_pwa_dismissed';
+let androidInstallEvent = null;
 
+function shouldShowBanner() {
+  if (window.matchMedia('(display-mode: standalone)').matches) return false;
+  if (window.navigator.standalone === true) return false;
+  const ts = localStorage.getItem(PWA_DISMISSED_KEY);
+  if (ts && (Date.now() - Number(ts)) / 86400000 < 7) return false;
+  return true;
+}
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  INSTALL PROMPT LOGIC
-  // ══════════════════════════════════════════════════════════════════════════
+function dismissPWABanner() {
+  localStorage.setItem(PWA_DISMISSED_KEY, String(Date.now()));
+  const ios = document.getElementById('pwa-ios-banner');
+  const and = document.getElementById('pwa-android-banner');
+  if (ios) ios.classList.remove('show');
+  if (and) and.style.display = 'none';
+}
+window.dismissPWABanner = dismissPWABanner;
 
-  const PWA_DISMISSED_KEY = 'nex_pwa_dismissed';
-  let androidInstallEvent = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  androidInstallEvent = e;
+  if (!shouldShowBanner()) return;
+  setTimeout(() => {
+    const b = document.getElementById('pwa-android-banner');
+    if (b) b.style.display = 'flex';
+  }, 2800);
+});
 
-  // Don't show banners if already installed or dismissed in last 7 days
-  function shouldShowBanner() {
-    if (window.matchMedia('(display-mode: standalone)').matches) return false;
-    if (window.navigator.standalone === true) return false; // iOS standalone
-    const dismissed = localStorage.getItem(PWA_DISMISSED_KEY);
-    if (dismissed) {
-      const daysSince = (Date.now() - Number(dismissed)) / 86400000;
-      if (daysSince < 7) return false; // Re-ask after 7 days
+window.triggerAndroidInstall = async () => {
+  if (!androidInstallEvent) return;
+  dismissPWABanner();
+  androidInstallEvent.prompt();
+  const { outcome } = await androidInstallEvent.userChoice;
+  androidInstallEvent = null;
+};
+
+window.addEventListener('appinstalled', () => { dismissPWABanner(); androidInstallEvent = null; });
+
+function isIosSafari() {
+  const ua = navigator.userAgent;
+  return /iphone|ipad|ipod/i.test(ua) && /safari/i.test(ua) && !/crios|fxios|opios|mercury/i.test(ua);
+}
+if (isIosSafari() && shouldShowBanner()) {
+  setTimeout(() => {
+    const b = document.getElementById('pwa-ios-banner');
+    if (b) b.classList.add('show');
+  }, 2800);
+}
+
+/* ── LIVE TICKER ────────────────────────────────────────────────────────── */
+const TICKERS = [
+  { sym: 'BTC',  price: 67842.50, chg: +2.14 },
+  { sym: 'ETH',  price:  3521.80, chg: +1.32 },
+  { sym: 'SOL',  price:   168.42, chg: +3.81 },
+  { sym: 'BNB',  price:   584.10, chg: +0.87 },
+  { sym: 'XRP',  price:    0.6218, chg: -0.43 },
+  { sym: 'ADA',  price:    0.4512, chg: +0.72 },
+  { sym: 'AVAX', price:    38.75, chg: +2.21 },
+  { sym: 'DOGE', price:    0.1642, chg: +1.95 },
+  { sym: 'LINK', price:    14.87, chg: +0.64 },
+  { sym: 'DOT',  price:     7.14, chg: -1.08 },
+  { sym: 'UNI',  price:     9.34, chg: +1.23 },
+  { sym: 'MATIC',price:    0.8812, chg: -0.54 },
+];
+
+function fmtP(p) {
+  return p < 1 ? p.toFixed(4) : p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function buildTicker() {
+  const el = document.getElementById('tickerEl');
+  if (!el) return;
+  const items = [...TICKERS, ...TICKERS];
+  el.innerHTML = items.map(t => `
+    <div class="t-item">
+      <span class="t-sym">${t.sym}/USDT</span>
+      <span class="t-price">${fmtP(t.price)}</span>
+      <span class="${t.chg >= 0 ? 't-up' : 't-dn'}">${t.chg >= 0 ? '+' : ''}${t.chg.toFixed(2)}%</span>
+    </div>`).join('');
+}
+buildTicker();
+
+setInterval(() => {
+  TICKERS.forEach(t => {
+    t.price *= 1 + (Math.random() - 0.5) * 0.004;
+    t.chg = parseFloat((t.chg + (Math.random() - 0.5) * 0.09).toFixed(2));
+  });
+  buildTicker();
+}, 3500);
+
+/* ── DATE ───────────────────────────────────────────────────────────────── */
+(function () {
+  const el = document.getElementById('dateEl');
+  if (!el) return;
+  el.textContent = new Date().toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric'
+  }).toUpperCase();
+})();
+
+/* ── SCROLL REVEAL ──────────────────────────────────────────────────────── */
+const revealObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('in'); revealObserver.unobserve(e.target); }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+/* ── FEE BAR ANIMATION ──────────────────────────────────────────────────── */
+const barObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const bar = e.target.querySelector('.fee-bar-you');
+      if (bar) { setTimeout(() => { bar.style.width = bar.dataset.width; }, 300); }
+      barObserver.unobserve(e.target);
     }
-    return true;
+  });
+}, { threshold: 0.3 });
+const feeSection = document.querySelector('.fee-split');
+if (feeSection) barObserver.observe(feeSection);
+
+/* ── PASSWORD TOGGLE ────────────────────────────────────────────────────── */
+window.togglePw = (inputId, btn) => {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const isHidden = input.type === 'password';
+  input.type = isHidden ? 'text' : 'password';
+  const icon = btn.querySelector('i');
+  if (icon) { icon.className = isHidden ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye'; }
+  btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+};
+
+/* ── AUTH STATE ─────────────────────────────────────────────────────────── */
+let mode = 'signup';
+let termsAccepted = false;
+let pendingEmail = '';
+
+async function init() {
+  let attempts = 0;
+  while (!window.supabaseClient && attempts < 20) {
+    await new Promise(r => setTimeout(r, 100));
+    attempts++;
   }
-
-  function dismissPWABanner() {
-    localStorage.setItem(PWA_DISMISSED_KEY, String(Date.now()));
-    const ios     = document.getElementById('pwa-ios-banner');
-    const android = document.getElementById('pwa-android-banner');
-    if (ios)     { ios.classList.remove('show'); }
-    if (android) { android.style.display = 'none'; }
+  if (!window.supabaseClient) {
+    showToast('Configuration error. Check config.js.');
+    return;
   }
+  const { data } = await window.supabaseClient.auth.getSession();
+  if (data.session) {
+    sessionStorage.setItem('nextrade_fresh_login', 'true');
+    window.location.href = 'index.html';
+    return;
+  }
+  const savedMode = sessionStorage.getItem('saved_auth_mode');
+  if (savedMode === 'otp') {
+    pendingEmail = sessionStorage.getItem('saved_auth_email') || '';
+    mode = 'otp';
+    document.getElementById('landing').style.display = 'none';
+    document.getElementById('auth').classList.add('visible');
+    document.getElementById('signupForm').classList.add('hidden');
+    document.getElementById('otpForm').classList.remove('hidden');
+    document.getElementById('formTitle').textContent = 'Verify Email';
+    document.getElementById('formSubtitle').textContent = 'Check your inbox for the 6-digit code.';
+    document.getElementById('displayEmail').textContent = pendingEmail;
+    document.getElementById('submitBtn').textContent = 'VERIFY CODE';
+  }
+}
+init();
 
-  // Expose globally so the HTML onclick attributes above can reach it
-  window.dismissPWABanner = dismissPWABanner;
+window.enterAuth = (newMode) => {
+  mode = newMode;
+  const landing = document.getElementById('landing');
+  landing.classList.add('exit');
+  if (mode === 'login') {
+    document.getElementById('formTitle').textContent    = 'Welcome Back';
+    document.getElementById('formSubtitle').textContent = 'Enter your credentials to continue.';
+    document.getElementById('signupForm').classList.add('hidden');
+    document.getElementById('loginForm').classList.remove('hidden');
+  }
+  setTimeout(() => {
+    landing.style.display = 'none';
+    document.getElementById('auth').classList.add('visible');
+  }, 260);
+};
 
-  // ── ANDROID / CHROME ────────────────────────────────────────────────────
-  // beforeinstallprompt fires when Chrome decides the app is installable.
-  // We capture it so we can trigger it on our own button instead of the browser mini-bar.
+window.resetView = () => location.reload();
 
-  window.addEventListener('beforeinstallprompt', (e) => {
-    // Prevent the default mini-infobar from Chrome (we show our own)
+/* ── LEGAL ──────────────────────────────────────────────────────────────── */
+window.openLegal = () => {
+  const m = document.getElementById('legalModal');
+  if (m) { m.style.display = 'flex'; m.classList.add('open'); }
+};
+
+window.confirmLegal = () => {
+  termsAccepted = true;
+  const box = document.getElementById('customCheck');
+  if (box) {
+    box.classList.add('checked');
+    box.setAttribute('aria-checked', 'true');
+  }
+  const m = document.getElementById('legalModal');
+  if (m) { m.style.display = 'none'; m.classList.remove('open'); }
+};
+
+/* Tap outside modal to dismiss */
+document.getElementById('legalModal').addEventListener('click', function (e) {
+  if (e.target === this) {
+    this.style.display = 'none';
+    this.classList.remove('open');
+  }
+});
+
+/* ── TOAST ──────────────────────────────────────────────────────────────── */
+window.showToast = (msg, type = 'danger') => {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  if (type === 'danger') {
+    t.style.background  = 'var(--danger-bg)';
+    t.style.borderColor = 'var(--danger)';
+    t.style.color       = 'var(--danger)';
+  } else {
+    t.style.background  = 'var(--live-bg)';
+    t.style.borderColor = 'var(--live)';
+    t.style.color       = 'var(--live)';
+  }
+  t.style.display = 'block';
+  if (t._timer) clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = 'none'; }, 4500);
+};
+
+/* ── KEYBOARD NAVIGATION ────────────────────────────────────────────────── */
+document.addEventListener('keyup', e => {
+  if (e.key !== 'Enter') return;
+  const a = document.activeElement;
+  if (a.id === 'regName')          document.getElementById('regEmail').focus();
+  else if (a.id === 'regEmail')    document.getElementById('regPassword').focus();
+  else if (a.id === 'logEmail')    document.getElementById('logPassword').focus();
+  else if (a.id === 'regPassword' || a.id === 'logPassword') { a.blur(); handleAction(); }
+});
+
+/* ── OTP INPUTS ─────────────────────────────────────────────────────────── */
+const otpInputs = document.querySelectorAll('#otpInputs input');
+otpInputs.forEach((input, i) => {
+  input.addEventListener('input', e => {
+    e.target.value = e.target.value.replace(/[^0-9]/g, '');
+    if (e.target.value) {
+      e.target.classList.add('filled');
+      if (i < otpInputs.length - 1) otpInputs[i + 1].focus();
+    } else {
+      e.target.classList.remove('filled');
+    }
+    if (Array.from(otpInputs).every(x => x.value.length === 1)) handleAction();
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Backspace' && !e.target.value && i > 0) {
+      otpInputs[i - 1].value = '';
+      otpInputs[i - 1].classList.remove('filled');
+      otpInputs[i - 1].focus();
+    }
+  });
+  input.addEventListener('paste', e => {
     e.preventDefault();
-    androidInstallEvent = e;
-
-    if (!shouldShowBanner()) return;
-
-    // Show our custom Android banner after a short delay (user has had a moment to see the page)
-    setTimeout(() => {
-      const banner = document.getElementById('pwa-android-banner');
-      if (banner) banner.style.display = 'flex';
-    }, 2500);
+    const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
+    pasted.split('').forEach((ch, idx) => {
+      if (otpInputs[idx]) {
+        otpInputs[idx].value = ch;
+        otpInputs[idx].classList.add('filled');
+      }
+    });
+    const nextEmpty = Array.from(otpInputs).findIndex(x => !x.value);
+    if (nextEmpty !== -1) otpInputs[nextEmpty].focus();
+    else otpInputs[otpInputs.length - 1].focus();
+    if (Array.from(otpInputs).every(x => x.value.length === 1)) handleAction();
   });
+});
 
-  window.triggerAndroidInstall = async () => {
-    if (!androidInstallEvent) return;
-    dismissPWABanner();
-    androidInstallEvent.prompt();
-    const { outcome } = await androidInstallEvent.userChoice;
-    console.log('[PWA] Install outcome:', outcome);
-    androidInstallEvent = null;
-  };
+function getOtpValue() { return Array.from(otpInputs).map(x => x.value).join(''); }
 
-  // Clean up after install — hide banner if they installed from elsewhere
-  window.addEventListener('appinstalled', () => {
-    console.log('[PWA] App installed.');
-    dismissPWABanner();
-    androidInstallEvent = null;
-  });
+/* ── MAIN AUTH HANDLER ──────────────────────────────────────────────────── */
+window.handleAction = async () => {
+  const btn = document.getElementById('submitBtn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.classList.add('loading');
+  const origText = btn.textContent;
+  btn.textContent = 'PROCESSING…';
 
+  try {
+    if (!window.supabaseClient) throw new Error('Connection error. Please refresh.');
 
-  // ── iOS / SAFARI ────────────────────────────────────────────────────────
-  // Safari never fires beforeinstallprompt.
-  // We detect iOS Safari explicitly and show our custom instruction banner.
+    /* ── SIGNUP ── */
+    if (mode === 'signup') {
+      if (!termsAccepted) throw new Error('Please accept the Risk Disclosure first.');
+      const name     = document.getElementById('regName').value.trim();
+      const email    = document.getElementById('regEmail').value.trim().toLowerCase();
+      const password = document.getElementById('regPassword').value;
+      if (!name)                       throw new Error('Please enter your full name.');
+      if (!email || !email.includes('@')) throw new Error('Please enter a valid email address.');
+      if (password.length < 8)         throw new Error('Password must be at least 8 characters.');
 
-  function isIosSafari() {
-    const ua  = window.navigator.userAgent;
-    const ios = /iphone|ipad|ipod/i.test(ua);
-    // Check it's Safari and NOT a webview (Chrome on iOS, Firefox on iOS etc.)
-    const safari = /safari/i.test(ua) && !/crios|fxios|opios|mercury/i.test(ua);
-    return ios && safari;
-  }
-
-  if (isIosSafari() && shouldShowBanner()) {
-    // Wait 2.5 seconds so user can see the page first
-    setTimeout(() => {
-      const banner = document.getElementById('pwa-ios-banner');
-      if (banner) banner.classList.add('show');
-    }, 2500);
-  }
-</script>
-  <script>
-    // ── SCROLL REVEAL ──────────────────────────────────────────────
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(e => {
-        if (e.isIntersecting) {
-          e.target.classList.add('in');
-          observer.unobserve(e.target);
-        }
+      const { data, error } = await window.supabaseClient.auth.signUp({
+        email, password,
+        options: { data: { full_name: name } }
       });
-    }, { threshold: 0.12 });
-
-    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
-
-
-    // ── AUTH STATE ────────────────────────────────────────────────
-    let mode = 'signup';
-    let termsAccepted = false;
-    let pendingEmail = '';
-
-
-    // ── INIT — check existing session ─────────────────────────────
-    async function init() {
-      let attempts = 0;
-      while (!window.supabaseClient && attempts < 20) {
-        await new Promise(r => setTimeout(r, 100));
-        attempts++;
+      if (error) throw error;
+      if (data.user && data.user.identities && data.user.identities.length === 0) {
+        throw new Error('This email is already registered. Please sign in instead.');
       }
-      if (!window.supabaseClient) {
-        showToast('Configuration failed. Check config.js');
-        return;
-      }
-            const { data } = await window.supabaseClient.auth.getSession();
       if (data.session) {
         sessionStorage.setItem('nextrade_fresh_login', 'true');
         window.location.href = 'index.html';
         return;
       }
 
-      // SHORT-TERM MEMORY: Remember if we were on the OTP screen before we opened the mail app!
-      const savedMode = sessionStorage.getItem('saved_auth_mode');
-      if (savedMode === 'otp') {
-        pendingEmail = sessionStorage.getItem('saved_auth_email');
-        mode = 'otp';
-        
-        // Hide the landing page and show the OTP form directly
-        document.getElementById('landing').style.display = 'none';
-        document.getElementById('auth').classList.add('visible');
-        document.getElementById('signupForm').classList.add('hidden');
-        document.getElementById('otpForm').classList.remove('hidden');
-        
-        document.getElementById('formTitle').textContent = 'Verify Email';
-        document.getElementById('formSubtitle').textContent = 'Check your inbox for the 6-digit code.';
-        document.getElementById('displayEmail').textContent = pendingEmail;
-      }
-    }
-    init();
+      pendingEmail = email;
+      mode = 'otp';
+      sessionStorage.setItem('saved_auth_mode',  'otp');
+      sessionStorage.setItem('saved_auth_email', email);
 
+      document.getElementById('displayEmail').textContent = email;
+      document.getElementById('signupForm').classList.add('hidden');
+      document.getElementById('otpForm').classList.remove('hidden');
+      document.getElementById('formTitle').textContent    = 'Verify Email';
+      document.getElementById('formSubtitle').textContent = 'Check your inbox for the 6-digit code.';
 
-
-    // ── LANDING → AUTH TRANSITION ─────────────────────────────────
-    window.enterAuth = (newMode) => {
-      mode = newMode;
-
-      const landing = document.getElementById('landing');
-      landing.classList.add('exit');
-
-      if (mode === 'login') {
-        document.getElementById('formTitle').textContent    = 'Welcome back';
-        document.getElementById('formSubtitle').textContent = 'Enter your credentials to continue.';
-        document.getElementById('signupForm').classList.add('hidden');
-        document.getElementById('loginForm').classList.remove('hidden');
-      }
-
-      setTimeout(() => {
-        landing.style.display = 'none';
-        document.getElementById('auth').classList.add('visible');
-      }, 280);
-    };
-
-
-    // ── AUTH → LANDING RESET ──────────────────────────────────────
-    window.resetView = () => location.reload();
-
-
-    // ── LEGAL MODAL ───────────────────────────────────────────────
-    window.openLegal = () => {
-      document.getElementById('legalModal').style.display = 'flex';
-    };
-
-    window.confirmLegal = () => {
-      termsAccepted = true;
-      const box = document.getElementById('customCheck');
-      box.style.borderColor = 'var(--success)';
-      box.style.background  = 'var(--success)';
-      box.querySelector('i').style.display = 'block';
-      document.getElementById('legalModal').style.display = 'none';
-    };
-
-
-    // ── TOAST ─────────────────────────────────────────────────────
-    window.showToast = (msg, type = 'danger') => {
-      const t = document.getElementById('toast');
-      t.textContent = msg;
-      t.style.background = type === 'danger' ? 'var(--danger)' : 'var(--success)';
-      t.style.color = 'white';
-      t.style.display = 'block';
-      setTimeout(() => t.style.display = 'none', 4000);
-    };
-
-
-    // ── KEYBOARD UX ───────────────────────────────────────────────
-    document.addEventListener('keyup', (e) => {
-      if (e.key !== 'Enter') return;
-      const a = document.activeElement;
-      if (a.id === 'regName')     document.getElementById('regEmail').focus();
-      else if (a.id === 'regEmail')    document.getElementById('regPassword').focus();
-      else if (a.id === 'logEmail')    document.getElementById('logPassword').focus();
-      else if (a.id === 'regPassword' || a.id === 'logPassword') {
-        a.blur(); handleAction();
-      }
-    });
-
-
-    // ── OTP INPUT ─────────────────────────────────────────────────
-    const otpInputs = document.querySelectorAll('#otpInputs input');
-    otpInputs.forEach((input, i) => {
-      input.addEventListener('input', (e) => {
-        e.target.value = e.target.value.replace(/[^0-9]/g, '');
-        if (e.target.value && i < 5) otpInputs[i + 1].focus();
-        if (Array.from(otpInputs).every(x => x.value)) handleAction();
-      });
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && !e.target.value && i > 0) otpInputs[i - 1].focus();
-      });
-    });
-
-    function getOtpValue() {
-      return Array.from(otpInputs).map(i => i.value).join('');
+      btn.textContent = 'VERIFY CODE';
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      otpInputs[0].focus();
     }
 
+    /* ── LOGIN ── */
+    else if (mode === 'login') {
+      const email    = document.getElementById('logEmail').value.trim().toLowerCase();
+      const password = document.getElementById('logPassword').value;
+      if (!email || !password) throw new Error('Please enter both email and password.');
 
-    // ── SUPABASE AUTH LOGIC (identical to Gemini) ─────────────────
-    window.handleAction = async () => {
-      const btn = document.getElementById('submitBtn');
-      btn.disabled = true;
-      const orig = btn.textContent;
-      btn.textContent = 'Processing…';
+      const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
 
-      try {
-        if (!window.supabaseClient) throw new Error('Connection error. Please refresh.');
+      sessionStorage.setItem('nextrade_fresh_login', 'true');
+      window.location.href = 'index.html';
+    }
 
-        // SIGN UP
-        if (mode === 'signup') {
-          if (!termsAccepted) throw new Error('Please accept the Risk Disclosure first.');
-          const name     = document.getElementById('regName').value.trim();
-          const email    = document.getElementById('regEmail').value.trim();
-          const password = document.getElementById('regPassword').value;
-          if (!name || !email || !password) throw new Error('Please fill in all fields.');
+    /* ── OTP ── */
+    else if (mode === 'otp') {
+      const token = getOtpValue();
+      if (token.length !== 6) throw new Error('Please enter the complete 6-digit code.');
 
-                    const { data, error } = await window.supabaseClient.auth.signUp({
-            email, password, options: { data: { full_name: name } }
-          });
-          if (error) throw error;
+      const { error } = await window.supabaseClient.auth.verifyOtp({
+        email: pendingEmail,
+        token,
+        type: 'signup'
+      });
+      if (error) throw error;
 
-          // THE CLUE: If identities is empty, Supabase is secretly telling us the email is taken!
-          if (data.user && data.user.identities && data.user.identities.length === 0) {
-            throw new Error('This email is already registered. Please log in.');
-          }
-
-          if (data.session) {
-            sessionStorage.setItem('nextrade_fresh_login', 'true');
-            window.location.href = 'index.html';
-            return;
-          }
-
-          // OTP flow
-          pendingEmail = email;
-          mode = 'otp';
-          
-          // SAVE TO MEMORY: So if the phone goes to sleep, we remember!
-          sessionStorage.setItem('saved_auth_mode', 'otp');
-          sessionStorage.setItem('saved_auth_email', email);
-          
-          document.getElementById('displayEmail').textContent = email;
-
-          document.getElementById('signupForm').classList.add('hidden');
-          document.getElementById('otpForm').classList.remove('hidden');
-          document.getElementById('formTitle').textContent    = 'Verify Email';
-          document.getElementById('formSubtitle').textContent = 'Check your inbox for the 6-digit code.';
-          btn.textContent = 'Verify Code';
-          btn.disabled = false;
-        }
-
-        // LOGIN
-        else if (mode === 'login') {
-          const email    = document.getElementById('logEmail').value.trim();
-          const password = document.getElementById('logPassword').value;
-          if (!email || !password) throw new Error('Please enter email and password.');
-
-          const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
-          if (error) throw error;
-
-          sessionStorage.setItem('nextrade_fresh_login', 'true');
-          window.location.href = 'index.html';
-        }
-
-        // VERIFY OTP
-        else if (mode === 'otp') {
-          const token = getOtpValue();
-          if (token.length !== 6) throw new Error('Please enter the full 6-digit code.');
-
-          const { error } = await window.supabaseClient.auth.verifyOtp({
-            email: pendingEmail, token, type: 'signup'
-          });
-          if (error) throw error;
-
-          // Wait for session propagation (original logic preserved)
-          let sessionReady = false;
-          let attempts = 0;
-          while (!sessionReady && attempts < 10) {
-            await new Promise(r => setTimeout(r, 500));
-            const { data: sd } = await window.supabaseClient.auth.getSession();
-            if (sd.session) sessionReady = true;
-            attempts++;
-          }
-
-          if (!sessionReady) throw new Error('Session timeout. Please try logging in manually.');
-
-          showToast('Account Verified! Welcome aboard.', 'success');
-          sessionStorage.setItem('nextrade_fresh_login', 'true');
-          localStorage.setItem('nex_onboarded', 'false');
-          setTimeout(() => window.location.href = 'index.html', 600);
-        }
-
-      } catch (err) {
-        showToast(err.message);
-        btn.disabled = false;
-        btn.textContent = orig;
+      // Poll for session
+      let sessionReady = false, attempts = 0;
+      while (!sessionReady && attempts < 12) {
+        await new Promise(r => setTimeout(r, 500));
+        const { data: sd } = await window.supabaseClient.auth.getSession();
+        if (sd.session) sessionReady = true;
+        attempts++;
       }
-    };
+      if (!sessionReady) throw new Error('Session timeout. Please sign in manually.');
 
-    window.handleResendOtp = async () => {
-      try {
-        const { error } = await window.supabaseClient.auth.resend({
-          type: 'signup', email: pendingEmail
-        });
-        if (error) throw error;
-        showToast('A new code has been sent.', 'success');
-        otpInputs.forEach(i => i.value = '');
-        otpInputs[0].focus();
-      } catch (err) {
-        showToast(err.message);
-      }
-    };
+      sessionStorage.removeItem('saved_auth_mode');
+      sessionStorage.removeItem('saved_auth_email');
+      sessionStorage.setItem('nextrade_fresh_login', 'true');
+      localStorage.setItem('nex_onboarded', 'false');
+      showToast('Account verified. Welcome to NexTrade.', 'success');
+      setTimeout(() => { window.location.href = 'index.html'; }, 700);
+    }
 
-    window.handleForgotPassword = async () => {
-      const email = document.getElementById('logEmail').value.trim();
-      if (!email) {
-        showToast('Enter your email address first.');
-        document.getElementById('logEmail').focus();
-        return;
-      }
-      try {
-        const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin + '/index.html?reset=true'
-        });
-        if (error) throw error;
-        showToast('Password reset link sent to your email.', 'success');
-      } catch (err) {
-        showToast(err.message);
-      }
-    };
-  </script>
-<!-- ── STEP 3: PASTE THESE HTML ELEMENTS just before closing </body> ─────── -->
+  } catch (err) {
+    showToast(err.message || 'Something went wrong. Please try again.');
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.textContent = origText;
+  }
+};
 
+/* ── RESEND OTP ─────────────────────────────────────────────────────────── */
+window.handleResendOtp = async () => {
+  try {
+    const { error } = await window.supabaseClient.auth.resend({
+      type: 'signup',
+      email: pendingEmail
+    });
+    if (error) throw error;
+    showToast('New code sent. Check your inbox.', 'success');
+    otpInputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
+    otpInputs[0].focus();
+  } catch (err) {
+    showToast(err.message || 'Could not resend code. Please try again.');
+  }
+};
+
+/* ── FORGOT PASSWORD ────────────────────────────────────────────────────── */
+window.handleForgotPassword = async () => {
+  const email = document.getElementById('logEmail').value.trim().toLowerCase();
+  if (!email) {
+    showToast('Enter your email address first.');
+    document.getElementById('logEmail').focus();
+    return;
+  }
+  try {
+    const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/index.html?reset=true'
+    });
+    if (error) throw error;
+    showToast('Reset link sent. Check your inbox.', 'success');
+  } catch (err) {
+    showToast(err.message || 'Could not send reset link. Please try again.');
+  }
+};
+
+</script>
 </body>
 </html>

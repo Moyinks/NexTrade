@@ -547,7 +547,17 @@
     card.appendChild(icon);
     card.appendChild(txt);
     card.appendChild(arr);
-    card.addEventListener('click', () => { if (window.App) App.navigate('vault'); });
+    card.addEventListener('click', () => {
+      // Open the investor quiz modal directly.
+      // Vault.openQuiz() uses the Modal system — it works from any page
+      // without requiring the vault page to be mounted first.
+      // Fallback: navigate to vault if the module isn't loaded yet.
+      if (window.Vault && typeof Vault.openQuiz === 'function') {
+        Vault.openQuiz();
+      } else if (window.App) {
+        App.navigate('vault');
+      }
+    });
     wrap.appendChild(card);
     return wrap;
   }

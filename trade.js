@@ -1,57 +1,46 @@
 /**
- * NexTrade — Trade & Transaction Engine v2.1
+ * NexTrade — Trade & Transaction Engine v2.2
  * ══════════════════════════════════════════════════════════════════════════════
- * FIXES (v2.0 → v2.1):
- * 6. Deposit gating — openDeposit() now checks APP_CONFIG.features.realDeposit
- *    before rendering. If false, user sees a clear "not available" message
- *    instead of placeholder addresses. Belt-and-suspenders: runtime placeholder
- *    string detection also blocks display even if flag is misconfigured.
- * 7. Pending withdrawals in ledger derivation — deriveSpotBalance() now fetches
- *    pending withdrawals in addition to completed transactions. Pending
- *    withdrawals count as debits. This prevents the re-login balance restoration
- *    bug where a pending withdrawal was invisible to derivation (status filter
- *    was 'completed' only) and the pre-withdrawal balance was restored each
- *    session. Pending deposits still do NOT count — they require admin
- *    confirmation before crediting.
- * 8. Ledger entry failure is now fatal — txErr in openSpotTrade previously
- *    called console.error and continued execution. The trade would succeed
- *    with no audit trail. Now throws to rollback.
- * 9. Transfer types registered — CREDIT_TYPES now includes 'transfer_in',
- *    DEBIT_TYPES includes 'transfer_out'. wallets.js writes these types when
- *    recording internal transfers. Without registration here, any subsequent
- *    deriveSpotBalance call after a transfer would silently ignore the transfer
- *    ledger entries, re-inflating the balance.
+ * FIXES (v2.1 → v2.2):
+ * 10. Optimistic UI for sell/buy — AppState.set('holdings') and
+ *     AppState.updateBalances() are now called BEFORE the Supabase DB
+ *     operations begin, not after they complete. This eliminates the visible
+ *     lag where a sold asset remained in the holdings list for the full
+ *     duration of the ledger insert + balance derivation + profiles update
+ *     round-trip. On DB failure, both are rolled back to the pre-operation
+ *     snapshot values. No fake data is ever shown — the optimistic values
+ *     are computed from a fresh DB read (double-spend guard), so they are
+ *     financially accurate at the moment of display.
+ *
+ * 11. Double-trigger prevention — a module-level _isTradingLocked flag
+ *     prevents a second openSpotTrade execution while one is already in
+ *     flight. The confirmBtn.disabled guard in the modal only covers
+ *     same-modal re-tap; the module-level lock covers the case where the
+ *     user taps the coin list while a trade modal is mid-flight.
+ *
+ * FIXES (v2.0 → v2.1, carried forward):
+ * 6–9. Deposit gating, pending withdrawals, fatal ledger errors,
+ *      transfer type registration. See v2.1 header.
  *
  * FIXES (v1 → v2.0, carried forward):
- * 1. initiateStripeCheckout — was called but never defined. Removed.
- *    Stripe tab replaced with honest "coming soon" state. No fake security copy.
- * 2. Deposit reference — each deposit session generates a unique reference code
- *    (userId prefix + timestamp). User includes it in their transfer memo.
- *    Admin matches on reference. Replaces the "per-user address" fiction.
- * 3. Ledger-first balance writes — no operation computes a delta client-side
- *    and sends it. Every operation: insert ledger entry → derive balance from
- *    ledger → write derived balance to profiles. The client never sends a
- *    raw balance number it calculated itself.
- * 4. Double-spend guard — balance re-read from DB immediately before execution,
- *    not from stale in-memory snapshot captured when modal opened.
- * 5. Placeholder addresses flagged — the three hardcoded addresses are marked
- *    clearly. Production deployment requires real addresses in env config.
- *    TRC20 placeholder string removed — it was literally "TYour TRC20 AddressHere".
+ * 1–5. Stripe removal, deposit reference, ledger-first writes,
+ *      double-spend guard, placeholder address detection.
  */
 
 const Trade = (() => {
   'use strict';
 
   // ============================================
+  // MODULE-LEVEL PROCESSING LOCK
+  // ============================================
+  // Prevents concurrent trade executions regardless of how many modals
+  // or UI paths the user opens. Complementary to per-button disabled state.
+  let _isTradingLocked = false;
+
+  // ============================================
   // CONFIGURATION
   // ============================================
 
-  // IMPORTANT: Replace these before production deployment.
-  // These are the shared deposit addresses for the platform.
-  // Per-user address generation requires server-side wallet infrastructure
-  // which is outside the scope of this prototype.
-  // The deposit reference code (generated per session below) is the
-  // reconciliation mechanism — admin matches reference to incoming transfer.
   const DEPOSIT_ADDRESSES = {
     USDT_ERC20: {
       address: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
@@ -76,46 +65,19 @@ const Trade = (() => {
     }
   };
 
-  // Strings that indicate an address was never replaced with a real value.
-  // Used as a runtime guard in openDeposit() even if the feature flag is set.
   const PLACEHOLDER_PATTERNS = [
     'YourEth', 'yourBitcoin', 'yourTron',
     'YourERC', 'YourTRC', 'AddressHere', 'YourAddress'
   ];
 
   // ============================================
-  // LEDGER DERIVATION (shared with vault.js pattern)
+  // LEDGER DERIVATION
   // ============================================
 
-  // FIX (v2.1): 'transfer_in' / 'transfer_out' added so that internal
-  // spot↔vault transfers written by wallets.js are correctly reflected
-  // when this function re-derives the spot balance.
   const CREDIT_TYPES = new Set(['deposit', 'sell', 'claim', 'transfer_in']);
   const DEBIT_TYPES  = new Set(['withdraw', 'buy', 'investment', 'transfer_out']);
 
   async function deriveSpotBalance(userId, storedBalance) {
-    // FIX (v2.1 — D2): Two queries instead of one.
-    //
-    // Query 1: All COMPLETED transactions. These are the canonical ledger
-    // entries for every operation that has been fully settled.
-    //
-    // Query 2: PENDING withdrawals only. A pending withdrawal means "the user
-    // requested a payout and admin has not yet processed it, but the funds are
-    // locked." Counting pending withdrawals as debits here prevents the
-    // re-login balance restoration bug: previously, status='completed' filter
-    // caused deriveSpotBalance to ignore the pending withdrawal, so the
-    // pre-withdrawal balance was written back to profiles on the next
-    // derivation call (e.g., next trade). The user effectively got their
-    // pending-withdraw funds back in the UI.
-    //
-    // Pending deposits deliberately do NOT count — external crypto transfers
-    // require admin confirmation before crediting. Counting them before
-    // confirmation would allow balance inflation by submitting fake deposits.
-
-    // 'approved' is the terminal status the admin portal writes when confirming
-    // a deposit. It carries identical financial weight to 'completed'.
-    // The original filter (.eq('status','completed')) caused approved deposits
-    // to be invisible, so spot balance never reflected admin approval.
     const { data: completedTxs, error: err1 } = await window.supabaseClient
       .from('transactions')
       .select('type, amount')
@@ -135,11 +97,6 @@ const Trade = (() => {
 
     const rows = [...(completedTxs || []), ...(pendingWithdrawals || [])];
 
-    // Guard: only a 'deposit' tx proves the account is fully ledger-tracked.
-    // 'claim' excluded — see vaults.js deriveSpotBalanceFromLedger for full rationale.
-    // No-deposit path: apply ledger deltas against storedBalance as seed.
-    // Permanent fix: run the migration in vaults.js to insert deposit records for
-    // all admin-seeded accounts, making this path unreachable going forward.
     const hasDepositTx = (completedTxs || []).some(tx => tx.type === 'deposit');
 
     if (!hasDepositTx) {
@@ -179,8 +136,6 @@ const Trade = (() => {
     return { valid: true, num };
   }
 
-  // Generate a unique deposit reference for this session.
-  // User must include this in their transfer memo so admin can match it.
   function generateDepositReference(userId) {
     const prefix = userId ? userId.slice(0, 8).toUpperCase() : 'ANON';
     const ts     = Date.now().toString(36).toUpperCase();
@@ -198,28 +153,20 @@ const Trade = (() => {
       return;
     }
 
-    // ── FIX (v2.1 — C1): Deposit gating ─────────────────────────────────
-    // Check the feature flag first. If realDeposit is not enabled, show a
-    // clear "not available" message. This is the primary gate.
     if (!window.APP_CONFIG || !APP_CONFIG.features || !APP_CONFIG.features.realDeposit) {
       if (window.App) App.showError('Deposits are not currently available. Please contact support.');
       return;
     }
 
-    // Belt-and-suspenders: even if the flag is enabled, block if any address
-    // still contains a placeholder string. This catches the case where
-    // realDeposit was set to true but the addresses were never replaced.
     const hasPlaceholder = Object.values(DEPOSIT_ADDRESSES).some(coin =>
       PLACEHOLDER_PATTERNS.some(p => coin.address.includes(p))
     );
     if (hasPlaceholder) {
       if (window.App) App.showError('Deposit addresses are not configured. Contact the administrator.');
-      console.error('[TRADE] openDeposit blocked: placeholder addresses detected in DEPOSIT_ADDRESSES.');
+      console.error('[TRADE] openDeposit blocked: placeholder addresses detected.');
       return;
     }
-    // ── END FIX ──────────────────────────────────────────────────────────
 
-    // One reference per deposit session — admin matches this to the transfer
     const depositRef = generateDepositReference(user.id);
     let selectedCoin = 'USDT_ERC20';
 
@@ -231,7 +178,6 @@ const Trade = (() => {
       const wrap = document.createElement('div');
       wrap.style.cssText = 'text-align:center;padding:16px;background:var(--color-surface);border-radius:12px;border:1px solid var(--color-border);';
 
-      // QR code
       const qrBox = document.createElement('div');
       qrBox.style.cssText = 'width:160px;height:160px;background:white;margin:0 auto 12px;padding:8px;border-radius:8px;';
       const qrImg = document.createElement('img');
@@ -240,7 +186,6 @@ const Trade = (() => {
       qrBox.appendChild(qrImg);
       wrap.appendChild(qrBox);
 
-      // Network label
       const networkLabel = document.createElement('div');
       networkLabel.style.cssText = 'display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-bottom:8px;color:' + coin.color + ';';
       networkLabel.innerHTML = '<i class="fas ' + coin.icon + '"></i>';
@@ -252,7 +197,6 @@ const Trade = (() => {
       netSub.textContent = coin.network;
       wrap.appendChild(netSub);
 
-      // Address row
       const addrRow = document.createElement('div');
       addrRow.style.cssText = 'font-family:var(--font-mono);font-size:12px;color:var(--color-text-primary);background:var(--color-surface-elevated);padding:10px 12px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--color-border);word-break:break-all;text-align:left;';
       const addrText = document.createElement('span');
@@ -271,7 +215,6 @@ const Trade = (() => {
       addrRow.appendChild(copyBtn);
       wrap.appendChild(addrRow);
 
-      // Warning
       const warning = document.createElement('div');
       warning.style.cssText = 'margin-top:10px;font-size:11px;color:#f59e0b;display:flex;align-items:center;gap:6px;';
       warning.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
@@ -284,7 +227,6 @@ const Trade = (() => {
     const content = document.createElement('div');
     content.style.cssText = 'display:flex;flex-direction:column;gap:16px;';
 
-    // ── Reference code banner ──────────────────────────────────────────────
     const refBanner = document.createElement('div');
     refBanner.style.cssText = 'background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:12px;padding:12px 14px;';
     const refTitle = document.createElement('div');
@@ -314,7 +256,6 @@ const Trade = (() => {
     refBanner.appendChild(refNote);
     content.appendChild(refBanner);
 
-    // ── Tab switcher ───────────────────────────────────────────────────────
     const tabRow = document.createElement('div');
     tabRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;';
     const tabCrypto = document.createElement('button');
@@ -329,18 +270,16 @@ const Trade = (() => {
     tabRow.appendChild(tabCard);
     content.appendChild(tabRow);
 
-    // ── Crypto panel ───────────────────────────────────────────────────────
     const panelCrypto = document.createElement('div');
 
     const coinSelect = document.createElement('select');
     coinSelect.className = 'input-field';
     coinSelect.style.cssText = 'margin-bottom:12px;padding:10px;';
-    const options = [
+    [
       { value: 'USDT_ERC20', label: 'USDT — ERC-20 (Ethereum)' },
       { value: 'BTC',        label: 'Bitcoin — BTC' },
       { value: 'USDT_TRC20', label: 'USDT — TRC-20 (Tron)' }
-    ];
-    options.forEach(o => {
+    ].forEach(o => {
       const opt = document.createElement('option');
       opt.value = o.value; opt.textContent = o.label;
       coinSelect.appendChild(opt);
@@ -358,7 +297,6 @@ const Trade = (() => {
       cryptoView.appendChild(buildCryptoView(selectedCoin));
     });
 
-    // Amount input
     const amtGroup = document.createElement('div');
     amtGroup.className = 'input-group';
     amtGroup.style.marginTop = '12px;';
@@ -387,7 +325,7 @@ const Trade = (() => {
       if (!user || !user.id) return window.App ? App.showError('Session not found. Please refresh.') : alert('Session error');
 
       confirmDepBtn.disabled = true;
-      confirmDepBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+      confirmDepBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>Submitting...';
 
       try {
         if (window.supabaseClient) {
@@ -404,7 +342,6 @@ const Trade = (() => {
           if (error) throw error;
         }
 
-        // Reflect in local state (pending — does not affect derived balance)
         if (window.AppState) {
           AppState.addTransaction({
             id:          'temp_' + Date.now(),
@@ -428,7 +365,6 @@ const Trade = (() => {
     panelCrypto.appendChild(confirmDepBtn);
     content.appendChild(panelCrypto);
 
-    // ── Card / Bank panel — honest placeholder ─────────────────────────────
     const panelCard = document.createElement('div');
     panelCard.style.display = 'none';
     const cardPlaceholder = document.createElement('div');
@@ -448,7 +384,6 @@ const Trade = (() => {
     panelCard.appendChild(cardPlaceholder);
     content.appendChild(panelCard);
 
-    // Tab logic
     tabCrypto.addEventListener('click', () => {
       panelCrypto.style.display = 'block'; panelCard.style.display = 'none';
       tabCrypto.className = 'btn btn-primary'; tabCard.className = 'btn btn-secondary';
@@ -516,6 +451,7 @@ const Trade = (() => {
     content.appendChild(btn);
 
     btn.addEventListener('click', async () => {
+      if (btn.disabled) return;
       const { valid, num, msg } = validateAmount(amtInput.value, balances.spot);
       if (!valid) return window.App ? App.showError(msg) : alert(msg);
 
@@ -526,16 +462,13 @@ const Trade = (() => {
       }
 
       btn.disabled = true;
-      btn.innerHTML = '<div class="spinner" style="width:20px;height:20px;"></div> Processing...';
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>Processing...';
 
       try {
         const { user: freshUser } = getUserState();
         if (!freshUser || !freshUser.id) throw new Error('User session lost');
 
         if (window.supabaseClient) {
-          // 1. Insert withdrawal ledger entry (pending — admin must approve payout).
-          //    FIX (v2.1 — D2): deriveSpotBalance now includes pending withdrawals
-          //    as debits, so this entry will prevent balance restoration on re-login.
           const { error: txError } = await window.supabaseClient
             .from('transactions')
             .insert({
@@ -548,15 +481,9 @@ const Trade = (() => {
             });
           if (txError) throw txError;
 
-          // 2. Pending withdrawals don't change the derived balance until 'completed'.
-          //    However, we lock the funds optimistically by treating the pending
-          //    withdrawal as a debit in local AppState. This prevents double-withdrawal
-          //    in the same session (before a page reload triggers re-derivation).
           const currentSpot = parseFloat((getUserState().balances || {}).spot || 0);
           const lockedSpot  = Math.max(0, currentSpot - num);
 
-          // Write locked balance to DB. On next re-derivation this will be
-          // correctly computed from the pending withdrawal ledger entry above.
           const { error: balError } = await window.supabaseClient
             .from('profiles')
             .update({ spot_balance: lockedSpot, updated_at: new Date().toISOString() })
@@ -591,10 +518,16 @@ const Trade = (() => {
   }
 
   // ============================================
-  // 3. SPOT TRADE — LEDGER-FIRST + DOUBLE-SPEND GUARD
+  // 3. SPOT TRADE — OPTIMISTIC UI + LEDGER-FIRST
   // ============================================
 
   async function openSpotTrade(coinInput, type) {
+    // Module-level lock — prevents concurrent trade executions
+    if (_isTradingLocked) {
+      if (window.App) App.showError('A trade is already in progress. Please wait.');
+      return;
+    }
+
     if (!coinInput) {
       if (window.App) App.showError('No coin selected');
       return;
@@ -636,7 +569,6 @@ const Trade = (() => {
     const content = document.createElement('div');
     content.style.cssText = 'display:flex;flex-direction:column;gap:20px;';
 
-    // Header row
     const headerRow = document.createElement('div');
     headerRow.style.cssText = 'display:flex;align-items:center;gap:16px;padding-bottom:16px;border-bottom:1px solid var(--color-border);';
     if (coin.image) {
@@ -646,7 +578,7 @@ const Trade = (() => {
       img.onerror = () => img.style.display = 'none';
       headerRow.appendChild(img);
     }
-    const headerText = document.createElement('div');
+    const headerText  = document.createElement('div');
     const headerTitle = document.createElement('div');
     headerTitle.style.cssText = 'font-size:18px;font-weight:700;color:var(--color-text-primary);';
     headerTitle.textContent = type.toUpperCase() + ' ' + coin.name;
@@ -657,7 +589,6 @@ const Trade = (() => {
     headerRow.appendChild(headerText);
     content.appendChild(headerRow);
 
-    // Amount input block
     const amtBlock = document.createElement('div');
     amtBlock.style.cssText = 'position:relative;margin-top:8px;';
     const amtLblEl = document.createElement('label');
@@ -678,7 +609,6 @@ const Trade = (() => {
     amtBlock.appendChild(amtLblEl); amtBlock.appendChild(amtRow); amtBlock.appendChild(divider);
     content.appendChild(amtBlock);
 
-    // Available + max
     const availRow = document.createElement('div');
     availRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
     const availText = document.createElement('div');
@@ -690,7 +620,6 @@ const Trade = (() => {
     availRow.appendChild(availText); availRow.appendChild(maxBtn);
     content.appendChild(availRow);
 
-    // Estimate
     const estBox = document.createElement('div');
     estBox.style.cssText = 'background:var(--color-surface-elevated);padding:16px;border-radius:12px;font-size:13px;color:var(--color-text-secondary);display:flex;justify-content:space-between;align-items:center;';
     const estLabel = document.createElement('span');
@@ -702,7 +631,6 @@ const Trade = (() => {
     estBox.appendChild(estLabel); estBox.appendChild(estVal);
     content.appendChild(estBox);
 
-    // Confirm button
     const confirmBtn = document.createElement('button');
     const btnClass   = isBuy ? 'btn-success' : 'btn-danger';
     confirmBtn.className = 'btn ' + btnClass + ' btn-full';
@@ -710,7 +638,6 @@ const Trade = (() => {
     confirmBtn.textContent = type.toUpperCase() + ' NOW';
     content.appendChild(confirmBtn);
 
-    // Live calculation
     const updateEst = () => {
       const val = parseFloat(tradeAmt.value) || 0;
       estVal.textContent = isBuy
@@ -719,25 +646,29 @@ const Trade = (() => {
     };
 
     tradeAmt.addEventListener('input', updateEst);
-    maxBtn.addEventListener('click',   () => { tradeAmt.value = available; updateEst(); });
+    maxBtn.addEventListener('click', () => { tradeAmt.value = available; updateEst(); });
 
     confirmBtn.addEventListener('click', async () => {
+      if (confirmBtn.disabled || _isTradingLocked) return;
+
       const val = parseFloat(tradeAmt.value);
       if (!val || val <= 0) { if (window.App) App.showError('Invalid Amount'); return; }
       if (val > available)  { if (window.App) App.showError('Insufficient Funds'); return; }
 
       confirmBtn.disabled = true;
-      confirmBtn.innerHTML = '<div class="spinner" style="width:20px;height:20px;"></div> Executing...';
+      confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>Executing...';
+      _isTradingLocked = true;
+
+      // Snapshot pre-operation state for rollback
+      const preOpHoldings = window.AppState ? { ...(AppState.get('holdings') || {}) } : null;
+      const preOpSpot     = window.AppState ? parseFloat((AppState.get('balances') || {}).spot || 0) : null;
 
       try {
         const { user: freshUser } = getUserState();
         if (!freshUser || !freshUser.id) throw new Error('User session lost');
 
-        // ── DOUBLE-SPEND GUARD ─────────────────────────────────────────────
-        // Re-read balance from DB, not from stale in-memory snapshot.
-        // The snapshot was captured when the modal opened; user may have
-        // executed another trade in a different session since then.
-        let freshSpot = 0;
+        // ── DOUBLE-SPEND GUARD — fresh DB read ─────────────────────────────
+        let freshSpot     = 0;
         let freshHoldings = {};
         if (window.supabaseClient) {
           const { data: profile, error: profileErr } = await window.supabaseClient
@@ -750,7 +681,7 @@ const Trade = (() => {
           freshHoldings = profile.holdings || {};
         } else {
           const st  = getUserState();
-          freshSpot = parseFloat((st.balances || {}).spot || 0);
+          freshSpot     = parseFloat((st.balances || {}).spot || 0);
           freshHoldings = st.holdings || {};
         }
 
@@ -760,40 +691,53 @@ const Trade = (() => {
         }
         // ── END DOUBLE-SPEND GUARD ─────────────────────────────────────────
 
+        // Compute final holdings from the fresh DB snapshot
         let newHoldings = { ...freshHoldings };
 
         if (isBuy) {
           const coinAmt = val / coin.current_price;
           newHoldings[assetKey] = (newHoldings[assetKey] || 0) + coinAmt;
         } else {
-          const sellAmt = val;
-          newHoldings[assetKey] -= sellAmt;
+          newHoldings[assetKey] -= val;
           if (newHoldings[assetKey] < 0.00000001) delete newHoldings[assetKey];
         }
 
+        // ── OPTIMISTIC UI UPDATE ───────────────────────────────────────────
+        // Push the computed holdings into AppState BEFORE any DB write so
+        // the UI (holdings list, total equity) reflects the trade immediately.
+        // For buys, optimistically adjust spot too so balance doesn't lag.
+        // Both are rolled back on any subsequent failure.
+        if (window.AppState) {
+          AppState.set('holdings', newHoldings);
+          if (isBuy) {
+            AppState.updateBalances({ spot: Math.max(0, freshSpot - val) });
+          }
+        }
+
+        // Close modal immediately — user sees the optimistic update
+        if (window.Modal) Modal.close();
+        // ── END OPTIMISTIC UPDATE ──────────────────────────────────────────
+
         if (window.supabaseClient) {
-          // 1. Insert ledger entry (source of truth).
-          //    FIX (v2.1 — D3): txErr is now fatal. Previously, a failed ledger
-          //    insert was swallowed (console.error only) and execution continued,
-          //    leaving the trade with no audit trail and the balance in an
-          //    undefined derivation state. Now the entire operation aborts.
           const txAmount = isBuy ? val : (val * coin.current_price);
+
+          // 1. Ledger entry (fatal on failure — rolls back optimistic update)
           const { error: txErr } = await window.supabaseClient
             .from('transactions')
             .insert({
               user_id:     freshUser.id,
-              type:        type,           // 'buy' or 'sell'
+              type:        type,
               amount:      txAmount,
               description: type.toUpperCase() + ' ' + coin.symbol,
               status:      'completed',
               created_at:  new Date().toISOString()
             });
-          if (txErr) throw txErr; // FIX: was console.error + continue
+          if (txErr) throw txErr;
 
-          // 2. Derive new spot balance from ledger
+          // 2. Derive confirmed spot balance from ledger
           const newSpot = await deriveSpotBalance(freshUser.id, freshSpot);
 
-          // 3. Write derived balance + updated holdings to profiles
+          // 3. Write confirmed values to profiles
           const { error: profileErr } = await window.supabaseClient
             .from('profiles')
             .update({
@@ -804,10 +748,9 @@ const Trade = (() => {
             .eq('id', freshUser.id);
           if (profileErr) throw profileErr;
 
-          // 4. Update client state
+          // 4. Replace optimistic balance with the ledger-derived truth
           if (window.AppState) {
             AppState.updateBalances({ spot: newSpot });
-            AppState.set('holdings', newHoldings);
             AppState.addTransaction({
               id:         'tx_' + Date.now(),
               type:       type,
@@ -818,14 +761,29 @@ const Trade = (() => {
           }
         }
 
-        if (window.Modal) Modal.close();
-        if (window.App)   App.showSuccess(type.toUpperCase() + ' Successful');
+        if (window.App) App.showSuccess(type.toUpperCase() + ' Successful');
 
       } catch (err) {
         console.error('[TRADE] Trade execution failed:', err);
+
+        // ── OPTIMISTIC ROLLBACK ────────────────────────────────────────────
+        // Restore pre-operation AppState so the UI is consistent with DB truth.
+        if (window.AppState && preOpHoldings !== null) {
+          AppState.set('holdings', preOpHoldings);
+        }
+        if (window.AppState && preOpSpot !== null) {
+          AppState.updateBalances({ spot: preOpSpot });
+        }
+        // ── END ROLLBACK ───────────────────────────────────────────────────
+
         if (window.App) App.showError(err.message || 'Trade Execution Failed');
+
+        // Re-enable button only if modal is still open
         confirmBtn.disabled = false;
         confirmBtn.textContent = type.toUpperCase() + ' NOW';
+
+      } finally {
+        _isTradingLocked = false;
       }
     });
 
