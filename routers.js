@@ -87,16 +87,18 @@
 
   function createHomeSkeleton() {
     const div = document.createElement('div');
-    div.style.cssText = 'padding: 16px; padding-bottom: 100px;';
+    div.style.cssText = 'display:flex;flex-direction:column;gap:14px;padding-bottom:110px;min-width:0;';
     div.innerHTML = `
-      <div class="skeleton-pulse" style="height: 180px; border-radius: 16px; margin-bottom: 20px;"></div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 24px;">
-        <div class="skeleton-pulse" style="height: 72px; border-radius: 12px;"></div>
-        <div class="skeleton-pulse" style="height: 72px; border-radius: 12px;"></div>
-        <div class="skeleton-pulse" style="height: 72px; border-radius: 12px;"></div>
+      <div class="skeleton-pulse" style="height:132px;border-radius:18px;"></div>
+      <div class="skeleton-pulse" style="height:212px;border-radius:18px;"></div>
+      <div class="skeleton-pulse" style="height:148px;border-radius:18px;"></div>
+      <div class="skeleton-pulse" style="height:180px;border-radius:18px;"></div>
+      <div class="skeleton-pulse" style="height:190px;border-radius:18px;"></div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;">
+        <div class="skeleton-pulse" style="height:108px;border-radius:16px;"></div>
+        <div class="skeleton-pulse" style="height:108px;border-radius:16px;"></div>
+        <div class="skeleton-pulse" style="height:108px;border-radius:16px;"></div>
       </div>
-      <div class="skeleton-pulse" style="height: 200px; border-radius: 12px; margin-bottom: 20px;"></div>
-      <div class="skeleton-pulse" style="height: 300px; border-radius: 12px;"></div>
     `;
     return div;
   }
