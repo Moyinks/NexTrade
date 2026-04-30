@@ -727,7 +727,7 @@ const Wallet = (() => {
         <button id="sell-asset-btn" class="btn btn-secondary btn-full" style="background:rgba(239, 68, 68, 0.1); border-color:#ef4444; color:#ef4444;">
           <i class="fas fa-arrow-down" style="margin-right:6px;"></i>Sell
         </button>
-        <button id="buy-asset-btn" class="btn btn-primary btn-full" style="background:#10b981; border-color:#10b981;">
+        <button id="buy-asset-btn" class="btn btn-primary btn-full">
           <i class="fas fa-arrow-up" style="margin-right:6px;"></i>Buy More
         </button>
       </div>

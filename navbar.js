@@ -35,9 +35,9 @@ const Navbar = (() => {
 
   const PAGES = {
     home:   { label: 'Home',   icon: 'fa-house',       color: '#3B82F6' },
-    market: { label: 'Market', icon: 'fa-chart-line',  color: '#8B5CF6' },
+    market: { label: 'Market', icon: 'fa-chart-line',  color: '#3B82F6' },
     vault:  { label: 'Vault',  icon: 'fa-layer-group', color: '#10B981' },
-    wallet: { label: 'Wallet', icon: 'fa-wallet',      color: '#F59E0B' },
+    wallet: { label: 'Wallet', icon: 'fa-wallet',      color: '#3B82F6' },
   };
 
   // ── USER HELPERS ───────────────────────────────────────────────────────

@@ -68,8 +68,6 @@
       riskLabel:   'Low',
       riskColor:   '#10b981',
       penaltyRate: 0.08,
-      perfFee:     15,
-      accentColor: '#10b981',
       mechanics: [
         { icon: '\u{1F3E6}', title: 'Stablecoin Lending',  pct: 55, desc: 'USDC/USDT loaned to institutional borrowers via audited protocols. Pool earns a continuous yield from real borrower demand \u2014 no speculation.' },
         { icon: '\u27A0',    title: 'ETH Staking',          pct: 30, desc: 'Native ETH staking through validator nodes we operate. Protocol rewards are deposited into the pool every epoch.' },
@@ -97,7 +95,6 @@
       riskColor:   '#f59e0b',
       penaltyRate: 0.15,
       perfFee:     20,
-      accentColor: '#f59e0b',
       mechanics: [
         { icon: '\u{1F4CA}', title: 'Quant Momentum Signals',    pct: 50, desc: 'RSI-divergence and volume-anomaly signals across the top 20 pairs. Positions open and close within hours. Pool captures the spread.' },
         { icon: '\u2696\uFE0F', title: 'Funding Rate Arbitrage', pct: 30, desc: 'When perp futures lean heavily long, shorts collect a payment every 8 hours. We sit on the right side and collect \u2014 market-neutral income.' },
@@ -173,7 +170,7 @@
     return {
       id: strategyId || 'unknown',
       name: fallbackName || 'Investment',
-      accentColor: '#3b82f6',
+      riskColor: '#3b82f6',
       icon: '💼',
       duration: 30,
       penaltyRate: 0.1
@@ -276,7 +273,7 @@
   }
 
   // Build a 7-day SVG sparkline.
-  function _buildSparkline(strategyId, accentColor) {
+  function _buildSparkline(strategyId) {
     const series = _indexSeries(strategyId, 7);
     const min    = Math.min(...series);
     const max    = Math.max(...series);
@@ -893,8 +890,7 @@
 
     const rightCol = el('div', 'text-align:right;flex-shrink:0;');
     if (recommended) {
-      const badge = el('div', 'font-size:9px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:0.8px;margin-bottom:6px;display:inline-block;color:#fff;', '\u2B50 FOR YOU');
-      badge.style.background = strategy.accentColor;
+      const badge = el('div', 'font-size:9px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:0.8px;margin-bottom:6px;display:inline-block;color:#fff;background:var(--color-primary);', '\u2B50 FOR YOU');
       rightCol.appendChild(badge);
     }
     // Show real simulated 30-day pool return instead of a promised APY range
@@ -904,7 +900,7 @@
     const pool30dStr = (pool30d >= 0 ? '+' : '') + pool30d.toFixed(2) + '%';
     rightCol.appendChild(el('div', 'font-size:10px;color:var(--color-text-tertiary);', '30D POOL RETURN'));
     const apyVal = el('div', 'font-size:22px;font-weight:900;letter-spacing:-0.5px;', pool30dStr);
-    apyVal.style.color = pool30d >= 0 ? strategy.accentColor : '#ef4444';
+    apyVal.style.color = pool30d >= 0 ? strategy.riskColor : '#ef4444';
     rightCol.appendChild(apyVal);
     headerRow.appendChild(left); headerRow.appendChild(rightCol);
     body.appendChild(headerRow);
@@ -936,14 +932,14 @@
       const mTitle = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;');
       mTitle.appendChild(el('span', 'font-size:12px;font-weight:700;color:var(--color-text-primary);', m.title));
       const pctLabel = el('span', 'font-size:11px;font-weight:700;', m.pct + '%');
-      pctLabel.style.color = strategy.accentColor;
+      pctLabel.style.color = strategy.riskColor;
       mTitle.appendChild(pctLabel);
       textWrap.appendChild(mTitle);
       const barBg   = el('div', 'height:3px;background:rgba(255,255,255,0.08);border-radius:2px;margin-bottom:5px;');
       const barFill = el('div');
       barFill.style.cssText = 'height:100%;border-radius:2px;';
       barFill.style.width      = m.pct + '%';
-      barFill.style.background = strategy.accentColor;
+      barFill.style.background = strategy.riskColor;
       barBg.appendChild(barFill);
       textWrap.appendChild(barBg);
       textWrap.appendChild(el('div', 'font-size:11px;color:var(--color-text-secondary);line-height:1.5;', m.desc));
@@ -957,7 +953,7 @@
       const row = el('div', 'display:flex;align-items:flex-start;gap:8px;');
       row.style.marginBottom = i < strategy.highlights.length - 1 ? '7px' : '0';
       const tick = el('span', 'font-size:12px;flex-shrink:0;margin-top:1px;', '\u2713');
-      tick.style.color = strategy.accentColor;
+      tick.style.color = strategy.riskColor;
       row.appendChild(tick);
       row.appendChild(el('span', 'font-size:12px;color:var(--color-text-secondary);line-height:1.4;', h));
       hlWrap.appendChild(row);
@@ -1006,7 +1002,7 @@
     // ── Accent dot (left border strip — flat, not gradient) ──────────────
     if (!isCompleted) {
       const strip = el('div');
-      strip.style.cssText = 'height:2px;background:' + strategy.accentColor + ';opacity:0.5;';
+      strip.style.cssText = 'height:2px;background:' + strategy.riskColor + ';opacity:0.5;';
       itemEl.appendChild(strip);
     }
 
@@ -1019,7 +1015,7 @@
     const nameWrap  = el('div');
     nameWrap.appendChild(el('div', 'font-size:14px;font-weight:800;color:var(--color-text-primary);', strategy.name));
 
-    const statusColor = isCompleted ? 'var(--color-text-tertiary)' : (isMatured ? '#10b981' : strategy.accentColor);
+    const statusColor = isCompleted ? 'var(--color-text-tertiary)' : (isMatured ? '#10b981' : '#3b82f6');
     const statusTxt   = isCompleted ? 'Completed' : (isMatured ? '✓ Ready to Claim' : '● Active · Live');
     const statusEl    = el('div', 'font-size:10px;font-weight:700;margin-top:2px;letter-spacing:0.3px;', statusTxt);
     statusEl.style.color = statusColor;
@@ -1027,7 +1023,7 @@
     leftSide.appendChild(iconEl); leftSide.appendChild(nameWrap);
 
     const gainBadge = el('div', 'font-size:13px;font-weight:800;', (gain >= 0 ? '+' : '') + gainPct.toFixed(2) + '%');
-    gainBadge.style.color = gain >= 0 ? '#10b981' : '#ef4444';
+    gainBadge.style.color = gain >= 0 ? 'var(--color-success,#10b981)' : 'var(--color-danger,#ef4444)';
     headerRow.appendChild(leftSide); headerRow.appendChild(gainBadge);
     body.appendChild(headerRow);
 
@@ -1086,7 +1082,7 @@
     valBlock.appendChild(valRow);
 
     // Sparkline
-    valBlock.appendChild(_buildSparkline(strategy.id, strategy.accentColor));
+    valBlock.appendChild(_buildSparkline(strategy.id));
     body.appendChild(valBlock);
 
     // ── Stats row ────────────────────────────────────────────────────────
@@ -1095,7 +1091,7 @@
     [
       { label: 'Invested',    value: fmt(amount),            color: 'var(--color-text-primary)' },
       { label: 'Unrealised',  value: (gain >= 0 ? '+' : '') + fmt(gain), color: gain >= 0 ? '#10b981' : '#ef4444' },
-      { label: 'Pool Index',  value: todayIdx.toFixed(4),   color: strategy.accentColor }
+      { label: 'Pool Index',  value: todayIdx.toFixed(4),   color: 'var(--color-text-secondary)' }
     ].forEach(s => {
       const cell = el('div', 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px;text-align:center;');
       const val  = el('div', 'font-size:13px;font-weight:700;', s.value);
@@ -1125,7 +1121,7 @@
       const barFill = el('div');
       barFill.style.cssText  = 'height:100%;border-radius:2px;transition:width 0.6s ease;';
       barFill.style.width    = pct + '%';
-      barFill.style.background = isMatured ? '#10b981' : strategy.accentColor;
+      barFill.style.background = isMatured ? '#10b981' : '#3b82f6';
       barBg.appendChild(barFill);
       pw.appendChild(barBg);
       body.appendChild(pw);
@@ -1527,8 +1523,8 @@
       content.appendChild(el('div', 'font-size:13px;color:var(--color-text-secondary);text-align:center;line-height:1.6;margin-bottom:20px;', strategy.tagline));
 
       const badge = el('div', 'display:flex;align-items:center;gap:12px;border-radius:12px;padding:12px 14px;margin-bottom:24px;');
-      badge.style.background = strategy.accentColor + '12';
-      badge.style.border = '1px solid ' + strategy.accentColor + '28';
+      badge.style.background = strategy.riskColor + '12';
+      badge.style.border = '1px solid ' + strategy.riskColor + '28';
       badge.appendChild(el('div', 'font-size:22px;', strategy.icon));
       const badgeTxt = el('div', 'flex:1;min-width:0;');
       badgeTxt.appendChild(el('div', 'font-size:12px;font-weight:700;color:var(--color-text-primary);margin-bottom:2px;', strategy.name + ' \u2014 ' + strategy.category));

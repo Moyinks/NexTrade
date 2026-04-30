@@ -301,7 +301,7 @@
     badge.textContent = ready ? 'Live' : 'Syncing';
     row.appendChild(badge);
 
-    const delta = el('div', 'font-size:11px;font-weight:700;color:' + (change.crypto24 >= 0 ? '#10b981' : '#ef4444') + ';');
+    const delta = el('div', 'font-size:11px;font-weight:700;color:' + (change.crypto24 >= 0 ? 'var(--color-success,#10b981)' : 'var(--color-danger,#ef4444)') + ';');
     delta.textContent = hidden ? 'Balance hidden' : ('24h ' + (change.crypto24 >= 0 ? '+' : '-') + formatMoney(Math.abs(change.crypto24)));
     row.appendChild(delta);
 
@@ -353,7 +353,7 @@
       const copy = el('div', 'min-width:0;flex:1;');
       copy.appendChild(el('div', 'font-size:14px;font-weight:700;color:var(--color-text-primary,#fff);margin-bottom:4px;', 'No active positions'));
       copy.appendChild(el('div', 'font-size:12px;line-height:1.4;color:var(--color-text-secondary,#94a3b8);', 'Open Vault to start compounding your balance.'));
-      const btn = el('button', 'border:none;border-radius:12px;padding:10px 14px;background:#3b82f6;color:#fff;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;');
+      const btn = el('button', 'border:none;border-radius:12px;padding:10px 14px;background:var(--color-primary,#3b82f6);color:#fff;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;');
       btn.textContent = 'Open Vault';
       btn.addEventListener('click', () => window.App && App.navigate('vault'));
       empty.appendChild(copy);
@@ -442,8 +442,8 @@
       body = formatMoney(cash) + ' is sitting in cash. Move some into Vault.';
       cta = 'Invest';
       action = () => window.App && App.navigate('vault');
-      tone = 'linear-gradient(135deg, rgba(139,92,246,0.14), rgba(139,92,246,0.06))';
-      border = 'rgba(139,92,246,0.24)';
+      tone = 'linear-gradient(135deg, rgba(59,130,246,0.14), rgba(59,130,246,0.06))';
+      border = 'rgba(59,130,246,0.24)';
     } else if (vault > 0 && cash < Math.max(20, vault * 0.15)) {
       title = 'Reinvest runway';
       body = 'Your Vault is working. Keep cash ready for the next move.';
@@ -653,7 +653,7 @@
       content.appendChild(el('div', 'font-size:44px;text-align:center;', step.icon));
       content.appendChild(el('div', 'font-size:18px;font-weight:900;color:#fff;text-align:center;line-height:1.25;', step.title));
       content.appendChild(el('div', 'font-size:14px;line-height:1.6;color:#cbd5e1;text-align:center;', step.body));
-      const next = el('button', 'width:100%;padding:14px;border:none;border-radius:14px;background:#3b82f6;color:#fff;font-size:14px;font-weight:800;cursor:pointer;', idx === steps.length - 1 ? 'Get started' : 'Next');
+      const next = el('button', 'width:100%;padding:14px;border:none;border-radius:14px;background:var(--color-primary,#3b82f6);color:#fff;font-size:14px;font-weight:800;cursor:pointer;', idx === steps.length - 1 ? 'Get started' : 'Next');
       next.addEventListener('click', () => {
         if (idx === steps.length - 1) {
           markOnboarded();

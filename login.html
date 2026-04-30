@@ -48,6 +48,12 @@
   --rule-mid:     #8A857C;
   --rule-dark:    #0F0E0B;
 
+  /* Action — blue for primary CTAs and interactive focus. Same brand blue
+     as the app's --color-primary, but used here against warm paper. */
+  --action:       #2563EB;
+  --action-hover: #1D4ED8;
+  --action-glow:  rgba(37, 99, 235, 0.15);
+
   /* Accent — used sparingly */
   --live:         #007A4C;
   --live-bg:      rgba(0,122,76,0.08);
@@ -546,18 +552,26 @@ img { display: block; max-width: 100%; }
 .btn-primary {
   display: flex; align-items: center; justify-content: center;
   width: 100%;
-  background: var(--ink); color: var(--paper);
-  border: 2px solid var(--ink);
+  background: var(--action); color: #fff;
+  border: 2px solid var(--action);
   padding: 17px var(--space-6);
   font-family: var(--display);
   font-size: 20px; letter-spacing: 2px;
-  transition: background 0.15s, color 0.15s, transform 0.1s;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s, box-shadow 0.15s;
   position: relative; overflow: hidden;
   user-select: none;
 }
+.btn-primary:hover {
+  background: var(--action-hover);
+  border-color: var(--action-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.30);
+}
 .btn-primary:active {
-  background: var(--ink-2);
+  background: var(--action-hover);
+  border-color: var(--action-hover);
   transform: scale(0.99);
+  box-shadow: none;
 }
 .btn-primary:disabled {
   opacity: 0.4;
@@ -1220,7 +1234,7 @@ img { display: block; max-width: 100%; }
 }
 .input-field::placeholder { color: var(--ink-5); }
 .input-field:focus {
-  border-color: var(--ink);
+  border-color: var(--action);
   background: var(--paper);
 }
 .input-field:focus::placeholder { color: var(--ink-4); }
@@ -1293,17 +1307,22 @@ img { display: block; max-width: 100%; }
 /* Submit button — auth context */
 .btn-submit {
   width: 100%;
-  background: var(--ink); color: var(--paper);
-  border: 2px solid var(--ink);
+  background: var(--action); color: #fff;
+  border: 2px solid var(--action);
   padding: 19px var(--space-6);
   font-family: var(--display);
   font-size: 22px; letter-spacing: 2px;
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s, box-shadow 0.15s;
   position: relative; overflow: hidden;
   user-select: none;
   margin-top: var(--space-2);
 }
-.btn-submit:active { background: var(--ink-2); transform: scale(0.99); }
+.btn-submit:hover {
+  background: var(--action-hover);
+  border-color: var(--action-hover);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.30);
+}
+.btn-submit:active { background: var(--action-hover); border-color: var(--action-hover); transform: scale(0.99); box-shadow: none; }
 .btn-submit:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 .btn-submit.loading::after {
   content: '';
@@ -1341,7 +1360,7 @@ img { display: block; max-width: 100%; }
   transition: border-color 0.15s, background 0.15s;
   caret-color: transparent;
 }
-.otp-group input:focus { border-color: var(--ink); background: var(--paper-warm); }
+.otp-group input:focus { border-color: var(--action); background: var(--paper-warm); }
 .otp-group input.filled { border-color: var(--ink-3); }
 
 .btn-resend {
