@@ -11,20 +11,50 @@
  * Bump CACHE_VERSION whenever you deploy changes so users get fresh files.
  */
 
-const CACHE_VERSION  = 'nextrade-v37.48';
+const CACHE_VERSION  = 'nextrade-v38.0';
 const OFFLINE_URL    = '/login.html';
 
 // ── FILES TO PRECACHE ON INSTALL ──────────────────────────────────────────────
-// All local static files. Add new .css / .js files here as you create them.
+// All local static files. SW install uses Promise.allSettled so one 404
+// does not abort the rest — but every path here should be valid.
 
 const PRECACHE_URLS = [
+  // Pages
   '/login.html',
   '/index.html',
-  '/config.js',
-  '/homess.js',
-  '/wallet.js',
-  '/vaults.js',
+  // Stylesheets
+  '/core.css',
+  '/components.css',
   '/hero-card.css',
+  '/layout.css',
+  '/pages.css',
+  '/mobile.css',
+  // Core scripts (load-order independent — all deferred)
+  '/config.js',
+  '/format.js',
+  '/validation.js',
+  '/storage.js',
+  '/state.js',
+  '/supabase.js',
+  '/api.js',
+  '/session-manager.js',
+  '/bootstraps.js',
+  '/router.js',
+  '/app.js',
+  // Page module scripts
+  '/home.js',
+  '/market.js',
+  '/vault.js',
+  '/wallet.js',
+  '/trade.js',
+  '/feed.js',
+  '/card.js',
+  '/modals.js',
+  '/navbar.js',
+  '/loader.js',
+  '/cache-manager.js',
+  '/virtual-scroller.js',
+  // Assets
   '/manifest.json',
   '/pwa1.png',
   '/pwa2.png',

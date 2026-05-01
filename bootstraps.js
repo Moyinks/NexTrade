@@ -103,7 +103,7 @@ const Bootstraps = (() => {
 
   async function init() {
     if (initialized) {
-      console.warn('Bootstraps: Already initialized.');
+      console.log('Bootstraps: Already initialized.');
       return;
     }
 

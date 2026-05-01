@@ -23,9 +23,6 @@
     const keysToRemove = [
       'nextrade_state_v1',
       'nextrade_last_page',
-      'nextrade_cache',
-      'nextrade_market_cache',
-      'nextrade_user_preferences'
     ];
     
     keysToRemove.forEach(key => {
@@ -48,9 +45,6 @@
       const keysToRemove = [
         'nextrade_state_v1',
         'nextrade_last_page',
-        'nextrade_cache',
-        'nextrade_market_cache',
-        'nextrade_user_preferences'
       ];
       keysToRemove.forEach(key => localStorage.removeItem(key));
       console.log('[SESSION] ✅ App data cleared');

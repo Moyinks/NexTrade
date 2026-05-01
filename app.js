@@ -57,7 +57,8 @@
 
   const state = {
     initialized: false,
-    pollTimer:   null
+    pollTimer:   null,
+    exiting:     false   // set true before intentional signOut to suppress listener re-navigation
   };
 
   // ============================================
@@ -214,18 +215,16 @@
           .eq('id', user.id);
       }
 
-      const currentBalances = (window.AppState && typeof AppState.get === 'function')
-        ? (AppState.get('balances') || {})
-        : {};
-      const parsedVault = Number.parseFloat(profile.vault_balance);
-      const vaultBalance = Number.isFinite(Number(currentBalances.vault))
-        ? Math.max(0, Number(currentBalances.vault) || 0)
-        : Math.max(0, Number.isFinite(parsedVault) ? parsedVault : 0);
+      const currentVault = (window.AppState && AppState.get('balances'))?.vault || 0;
 
       const balanceState = {
         spot:  derivedSpot,
-        vault: vaultBalance,
-        total: derivedSpot + vaultBalance
+        // Never overwrite vault from the DB column — vault is derived exclusively
+        // by syncVaultData() (in state.js) when investments are written.
+        // Using the current AppState vault preserves whatever syncVaultData()
+        // last computed, so syncProfile cannot regress the vault to a stale value.
+        vault: currentVault,
+        total: derivedSpot + currentVault
       };
 
       if (window.AppState) {
@@ -319,7 +318,7 @@
       if (!session) {
         console.log('[APP] ⚠️ No session — redirecting to login');
         if (!window.location.pathname.includes(CONSTANTS.LOGIN_PAGE)) {
-          window.location.href = CONSTANTS.LOGIN_PAGE;
+          window.location.replace(CONSTANTS.LOGIN_PAGE);
         }
         return;
       }
@@ -410,9 +409,17 @@
             cancelText: 'Stay'
           }).then(confirmed => {
             if (confirmed) {
-              // Exiting — remove the listener so it doesn't re-fire during unload
               window.removeEventListener('popstate', handleBack);
-              window.location.href = CONSTANTS.LOGIN_PAGE;
+              // Attempt to close the PWA window — works on Android Chrome standalone.
+              // iOS Safari blocks window.close() for windows it didn't open;
+              // on iOS the user presses the device home button after this.
+              window.close();
+              // If close() was blocked (we're still here after one tick),
+              // silently re-arm the handler so the app keeps working normally.
+              setTimeout(() => {
+                window.history.pushState({ ntx: 1 }, '');
+                window.addEventListener('popstate', handleBack);
+              }, 200);
             } else {
               // Staying — re-push so the next back press fires popstate again
               window.history.pushState({ ntx: 1 }, '');
@@ -438,6 +445,11 @@
           if (!currentUser) return;
           await syncHistory(currentUser);
           await syncProfile(currentUser);
+          // Must re-sync investments every poll cycle: syncProfile writes
+          // balances.vault directly from profile.vault_balance (DB column),
+          // which bypasses syncVaultData(). Without this call, vault balance
+          // shown on Home/Wallet drifts from the computed value after each poll.
+          await syncInvestments(currentUser);
           // Re-mark ready after each successful background poll so the hero
           // stays in its rendered state (not flipped back to syncing).
           if (window.AppState && AppState.get('balanceSyncStatus') !== 'error') {
@@ -486,11 +498,21 @@
 
       // Session expiry watcher
       window.supabaseClient.auth.onAuthStateChange((event, session) => {
+        // Intentional exit/sign-out is handled by the caller — don't double-navigate
+        if (state.exiting) return;
+
+        if (event === 'PASSWORD_RECOVERY') {
+          // User clicked reset-password email that pointed at index.html.
+          // Send them to login.html which has the reset-password UI.
+          window.location.replace(CONSTANTS.LOGIN_PAGE + '?recovery=1');
+          return;
+        }
+
         if (event === 'SIGNED_OUT' || (!session && state.initialized)) {
           console.warn('[APP] Session expired — redirecting');
           if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
           if (window.AppState) AppState.clear();
-          window.location.href = CONSTANTS.LOGIN_PAGE;
+          window.location.replace(CONSTANTS.LOGIN_PAGE);
         }
       });
 
@@ -736,6 +758,7 @@
   window.App = {
     init,
     navigate,
+    deriveSpotBalance,   // canonical single copy — trade.js and vault.js delegate here
 
     /**
      * Called by auth.js after Supabase signIn / signUp succeeds.

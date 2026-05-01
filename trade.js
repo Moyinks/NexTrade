@@ -71,49 +71,20 @@ const Trade = (() => {
   ];
 
   // ============================================
-  // LEDGER DERIVATION
+  // LEDGER DERIVATION — delegate to canonical copy in app.js
   // ============================================
-
-  const CREDIT_TYPES = new Set(['deposit', 'sell', 'claim', 'transfer_in']);
-  const DEBIT_TYPES  = new Set(['withdraw', 'buy', 'investment', 'transfer_out']);
+  // CREDIT_TYPES, DEBIT_TYPES, and the full derivation logic live in app.js.
+  // app.js exposes App.deriveSpotBalance(userId, storedBalance) on window.App.
+  // App is initialized before any user interaction can trigger this path,
+  // so the delegation is safe at runtime even though trade.js loads before app.js.
 
   async function deriveSpotBalance(userId, storedBalance) {
-    const { data: completedTxs, error: err1 } = await window.supabaseClient
-      .from('transactions')
-      .select('type, amount')
-      .eq('user_id', userId)
-      .in('status', ['completed', 'approved']);
-
-    if (err1) throw err1;
-
-    const { data: pendingWithdrawals, error: err2 } = await window.supabaseClient
-      .from('transactions')
-      .select('type, amount')
-      .eq('user_id', userId)
-      .eq('status', 'pending')
-      .in('type', ['withdraw']);
-
-    if (err2) throw err2;
-
-    const rows = [...(completedTxs || []), ...(pendingWithdrawals || [])];
-
-    const hasDepositTx = (completedTxs || []).some(tx => tx.type === 'deposit');
-
-    if (!hasDepositTx) {
-      return Math.max(0, rows.reduce((bal, tx) => {
-        const amt = parseFloat(tx.amount) || 0;
-        if (CREDIT_TYPES.has(tx.type)) return bal + amt;
-        if (DEBIT_TYPES.has(tx.type))  return bal - amt;
-        return bal;
-      }, Math.max(0, parseFloat(storedBalance) || 0)));
+    if (window.App && typeof App.deriveSpotBalance === 'function') {
+      return App.deriveSpotBalance(userId, storedBalance);
     }
-
-    return Math.max(0, rows.reduce((bal, tx) => {
-      const amt = parseFloat(tx.amount) || 0;
-      if (CREDIT_TYPES.has(tx.type)) return bal + amt;
-      if (DEBIT_TYPES.has(tx.type))  return bal - amt;
-      return bal;
-    }, 0));
+    // Fallback: should never be reached in normal operation.
+    console.error('[TRADE] App.deriveSpotBalance unavailable — returning stored balance');
+    return Math.max(0, parseFloat(storedBalance) || 0);
   }
 
   // ============================================

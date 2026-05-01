@@ -406,7 +406,7 @@ const Navbar = (() => {
       sessionStorage.removeItem('saved_auth_mode');
       sessionStorage.removeItem('saved_auth_email');
       if (window.supabaseClient) await supabaseClient.auth.signOut();
-      window.location.href = 'login.html';
+      window.location.replace('login.html');
     }
   }
 

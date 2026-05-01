@@ -265,7 +265,15 @@ img { display: block; max-width: 100%; }
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: none;
   scrollbar-width: none;
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  /* Hidden until init() confirms no active session — prevents the flash
+     where landing renders then immediately redirects to index.html */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.3s ease;
+}
+#landing.ready {
+  opacity: 1;
+  pointer-events: auto;
 }
 #landing::-webkit-scrollbar { display: none; }
 #landing.exit {
@@ -330,8 +338,16 @@ img { display: block; max-width: 100%; }
   animation: tickerScroll 30s linear infinite;
   width: max-content;
   align-items: center;
+  will-change: transform;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
 }
-.masthead-ticker-inner:hover { animation-play-state: paused; }
+/* Hover pause — desktop pointer only. iOS touch taps register as hover
+   and can permanently freeze the ticker, so we scope this to fine pointer. */
+@media (pointer: fine) {
+  .masthead-ticker-inner:hover { animation-play-state: paused; }
+}
 @keyframes tickerScroll {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
@@ -1290,7 +1306,8 @@ img { display: block; max-width: 100%; }
 
 /* Forgot link */
 .forgot-link {
-  display: block; text-align: right;
+  display: flex; align-items: center; justify-content: flex-end;
+  min-height: 44px;
   font-family: var(--mono);
   font-size: 10px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.5px;
@@ -1372,7 +1389,8 @@ img { display: block; max-width: 100%; }
   text-decoration: underline;
   text-decoration-color: var(--rule);
   text-underline-offset: 3px;
-  cursor: pointer; padding: var(--space-2);
+  cursor: pointer; padding: 14px var(--space-2);
+  min-height: 44px;
   transition: color 0.15s;
 }
 .btn-resend:active { color: var(--ink); }
@@ -2195,6 +2213,8 @@ html { text-rendering: optimizeLegibility; }
           <input type="text" id="regName" class="input-field"
             placeholder="Your full name"
             autocomplete="name"
+            autocapitalize="words"
+            autocorrect="off"
             enterkeyhint="next"
             spellcheck="false">
         </div>
@@ -2203,6 +2223,8 @@ html { text-rendering: optimizeLegibility; }
           <input type="email" id="regEmail" class="input-field"
             placeholder="you@example.com"
             autocomplete="email"
+            autocapitalize="none"
+            autocorrect="off"
             inputmode="email"
             enterkeyhint="next"
             spellcheck="false">
@@ -2216,6 +2238,7 @@ html { text-rendering: optimizeLegibility; }
             <input type="password" id="regPassword" class="input-field"
               placeholder="Choose a strong password"
               autocomplete="new-password"
+              autocapitalize="none"
               enterkeyhint="done"
               minlength="8">
             <button type="button" class="input-toggle-pw" onclick="togglePw('regPassword', this)" aria-label="Show password">
@@ -2240,6 +2263,8 @@ html { text-rendering: optimizeLegibility; }
           <input type="email" id="logEmail" class="input-field"
             placeholder="you@example.com"
             autocomplete="email"
+            autocapitalize="none"
+            autocorrect="off"
             inputmode="email"
             enterkeyhint="next"
             spellcheck="false">
@@ -2250,6 +2275,7 @@ html { text-rendering: optimizeLegibility; }
             <input type="password" id="logPassword" class="input-field"
               placeholder="Your password"
               autocomplete="current-password"
+              autocapitalize="none"
               enterkeyhint="done">
             <button type="button" class="input-toggle-pw" onclick="togglePw('logPassword', this)" aria-label="Show password">
               <i class="fa-regular fa-eye"></i>
@@ -2269,16 +2295,97 @@ html { text-rendering: optimizeLegibility; }
             <strong id="displayEmail"></strong>
           </p>
           <div class="otp-group" id="otpInputs" role="group" aria-label="Verification code">
-            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="one-time-code" aria-label="Digit 1">
-            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 2">
-            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 3">
-            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 4">
-            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 5">
-            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 6">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="one-time-code" autocorrect="off" enterkeyhint="next"  aria-label="Digit 1">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="next"  aria-label="Digit 2">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="next"  aria-label="Digit 3">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="next"  aria-label="Digit 4">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="next"  aria-label="Digit 5">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="done" aria-label="Digit 6">
           </div>
           <button class="btn-resend" onclick="handleResendOtp()">
             Didn't receive a code? Resend
           </button>
+        </div>
+      </div>
+
+      <!-- ── FORGOT PASSWORD — email input ── -->
+      <div id="forgotForm" class="hidden">
+        <p class="otp-label" style="margin-bottom:var(--space-5);text-align:left;">
+          Enter your account email and we'll send a reset link.
+        </p>
+        <div class="field">
+          <label for="forgotEmail">Email Address</label>
+          <input type="email" id="forgotEmail" class="input-field"
+            placeholder="you@example.com"
+            autocomplete="email"
+            autocapitalize="none"
+            autocorrect="off"
+            inputmode="email"
+            enterkeyhint="done"
+            spellcheck="false">
+        </div>
+        <div class="forgot-link" onclick="showLogin()" role="button" tabindex="0"
+          style="justify-content:flex-start;margin-top:var(--space-2);">
+          ← Back to Sign In
+        </div>
+      </div>
+
+      <!-- ── FORGOT SENT — confirmation ── -->
+      <div id="forgotSentForm" class="hidden">
+        <div style="text-align:center;padding:var(--space-6) 0 var(--space-4);">
+          <div style="font-size:44px;margin-bottom:var(--space-5);">📬</div>
+          <div style="font-family:var(--display);font-size:18px;letter-spacing:1px;color:var(--ink);margin-bottom:var(--space-3);">CHECK YOUR INBOX</div>
+          <div style="font-size:13px;font-family:var(--mono);color:var(--ink-3);line-height:1.7;">
+            We sent a reset link to<br>
+            <strong id="forgotSentEmail" style="color:var(--ink);"></strong>
+          </div>
+          <div style="font-size:11px;font-family:var(--mono);color:var(--ink-4);margin-top:var(--space-4);line-height:1.6;">
+            Click the link in the email to set a new password.<br>Check your spam folder if you don't see it.
+          </div>
+        </div>
+        <div class="forgot-link" onclick="showForgotForm(document.getElementById('forgotEmail').value)"
+          role="button" tabindex="0" style="justify-content:center;margin-top:0;">
+          Resend or try a different email
+        </div>
+        <div class="forgot-link" onclick="showLogin()" role="button" tabindex="0"
+          style="justify-content:center;margin-top:var(--space-1);">
+          ← Back to Sign In
+        </div>
+      </div>
+
+      <!-- ── PASSWORD RECOVERY — new password input ── -->
+      <div id="recoveryForm" class="hidden">
+        <p class="otp-label" style="margin-bottom:var(--space-6);">
+          Choose a new password for<br>
+          <strong id="recoveryEmail"></strong>
+        </p>
+        <div class="field">
+          <label for="newPassword">New Password</label>
+          <div class="input-wrap">
+            <input type="password" id="newPassword" class="input-field"
+              placeholder="Min. 8 characters"
+              autocomplete="new-password"
+              autocapitalize="none"
+              enterkeyhint="next"
+              minlength="8">
+            <button type="button" class="input-toggle-pw" onclick="togglePw('newPassword', this)" aria-label="Show password">
+              <i class="fa-regular fa-eye"></i>
+            </button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="confirmPassword">Confirm Password</label>
+          <div class="input-wrap">
+            <input type="password" id="confirmPassword" class="input-field"
+              placeholder="Repeat your password"
+              autocomplete="new-password"
+              autocapitalize="none"
+              enterkeyhint="done"
+              minlength="8">
+            <button type="button" class="input-toggle-pw" onclick="togglePw('confirmPassword', this)" aria-label="Show password">
+              <i class="fa-regular fa-eye"></i>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2446,22 +2553,51 @@ function fmtP(p) {
 function buildTicker() {
   const el = document.getElementById('tickerEl');
   if (!el) return;
+  // Double the list so the seamless loop has content to scroll into.
   const items = [...TICKERS, ...TICKERS];
-  el.innerHTML = items.map(t => `
+  el.innerHTML = items.map((t, i) => `
     <div class="t-item">
       <span class="t-sym">${t.sym}/USDT</span>
-      <span class="t-price">${fmtP(t.price)}</span>
-      <span class="${t.chg >= 0 ? 't-up' : 't-dn'}">${t.chg >= 0 ? '+' : ''}${t.chg.toFixed(2)}%</span>
+      <span class="t-price" data-i="${i % TICKERS.length}">${fmtP(t.price)}</span>
+      <span class="${t.chg >= 0 ? 't-up' : 't-dn'} t-chg" data-i="${i % TICKERS.length}">${t.chg >= 0 ? '+' : ''}${t.chg.toFixed(2)}%</span>
     </div>`).join('');
+
+  // Calibrate scroll speed to actual rendered content width so the ticker
+  // reads at ~80px/s regardless of screen width. Must run after paint so
+  // scrollWidth reflects real layout.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const totalW = el.scrollWidth; // full doubled content
+      const halfW  = totalW / 2;     // one loop cycle width
+      const PX_PER_SECOND = 80;
+      const duration = Math.round(halfW / PX_PER_SECOND);
+      el.style.animationDuration = Math.max(duration, 12) + 's';
+    });
+  });
 }
 buildTicker();
 
+// Update prices in-place — never touch innerHTML or animationDuration again.
+// Querying existing spans avoids any animation reset on iOS WebKit.
 setInterval(() => {
-  TICKERS.forEach(t => {
+  TICKERS.forEach((t, i) => {
     t.price *= 1 + (Math.random() - 0.5) * 0.004;
     t.chg = parseFloat((t.chg + (Math.random() - 0.5) * 0.09).toFixed(2));
   });
-  buildTicker();
+
+  const el = document.getElementById('tickerEl');
+  if (!el) return;
+
+  el.querySelectorAll('.t-price').forEach(span => {
+    const i = parseInt(span.dataset.i, 10);
+    span.textContent = fmtP(TICKERS[i].price);
+  });
+  el.querySelectorAll('.t-chg').forEach(span => {
+    const i = parseInt(span.dataset.i, 10);
+    const t = TICKERS[i];
+    span.className = (t.chg >= 0 ? 't-up' : 't-dn') + ' t-chg';
+    span.textContent = (t.chg >= 0 ? '+' : '') + t.chg.toFixed(2) + '%';
+  });
 }, 3500);
 
 /* ── DATE ───────────────────────────────────────────────────────────────── */
@@ -2519,29 +2655,104 @@ async function init() {
   }
   if (!window.supabaseClient) {
     showToast('Configuration error. Check config.js.');
+    document.getElementById('landing').classList.add('ready');
     return;
   }
+
+  // Detect password-reset redirect. redirectTo URL includes ?recovery=1.
+  // Supabase also appends type=recovery to the hash — check both.
+  const isRecovery = window.location.search.includes('recovery=1') ||
+                     window.location.hash.includes('type=recovery');
+
+  // Register the auth listener BEFORE getSession() so PASSWORD_RECOVERY
+  // cannot fire in the gap between the two calls and be silently missed.
+  let recoveryHandled = false;
+  const { data: { subscription: authSub } } =
+    window.supabaseClient.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && !recoveryHandled) {
+        recoveryHandled = true;
+        authSub.unsubscribe();
+        showRecovery(session);
+      } else if (event === 'SIGNED_IN' && mode === 'recovery') {
+        // updateUser() succeeded — full session granted
+        authSub.unsubscribe();
+        sessionStorage.setItem('nextrade_fresh_login', 'true');
+        window.location.replace('index.html');
+      }
+    });
+
   const { data } = await window.supabaseClient.auth.getSession();
-  if (data.session) {
-    sessionStorage.setItem('nextrade_fresh_login', 'true');
-    window.location.href = 'index.html';
+
+  // ── Recovery flow ──────────────────────────────────────────────────────
+  if (isRecovery) {
+    if (data.session && !recoveryHandled) {
+      recoveryHandled = true;
+      authSub.unsubscribe();
+      showRecovery(data.session);
+    } else if (!data.session) {
+      // Link expired
+      window.history.replaceState(null, '', window.location.pathname);
+      showToast('Reset link has expired. Please request a new one.', 'error');
+      authSub.unsubscribe();
+      document.getElementById('landing').classList.add('ready');
+    }
     return;
   }
+
+  // ── Valid session — go to app without ever rendering the landing ────────
+  if (data.session) {
+    authSub.unsubscribe();
+    sessionStorage.setItem('nextrade_fresh_login', 'true');
+    window.location.replace('index.html');
+    return;
+  }
+
+  // ── No session — reveal the landing page ──────────────────────────────
+  authSub.unsubscribe();
+
   const savedMode = sessionStorage.getItem('saved_auth_mode');
   if (savedMode === 'otp') {
     pendingEmail = sessionStorage.getItem('saved_auth_email') || '';
     mode = 'otp';
     document.getElementById('landing').style.display = 'none';
     document.getElementById('auth').classList.add('visible');
-    document.getElementById('signupForm').classList.add('hidden');
+    hideAllForms();
     document.getElementById('otpForm').classList.remove('hidden');
     document.getElementById('formTitle').textContent = 'Verify Email';
     document.getElementById('formSubtitle').textContent = 'Check your inbox for the 6-digit code.';
     document.getElementById('displayEmail').textContent = pendingEmail;
     document.getElementById('submitBtn').textContent = 'VERIFY CODE';
+    // Give iOS keyboard time to appear after app-switch page restore
+    setTimeout(() => {
+      const first = Array.from(otpInputs).find(x => !x.value) || otpInputs[0];
+      if (first) first.focus();
+    }, 350);
+  } else {
+    document.getElementById('landing').classList.add('ready');
   }
 }
 init();
+
+/* ── PASSWORD RECOVERY UI ───────────────────────────────────────────────── */
+function showRecovery(session) {
+  mode = 'recovery';
+  const email = session?.user?.email || sessionStorage.getItem('saved_auth_email') || '';
+  document.getElementById('recoveryEmail').textContent = email;
+  // Hide landing, show auth panel in recovery mode
+  const landing = document.getElementById('landing');
+  landing.style.display = 'none';
+  document.getElementById('auth').classList.add('visible');
+  hideAllForms();
+  document.getElementById('recoveryForm').classList.remove('hidden');
+  document.getElementById('formTitle').textContent    = 'Set New Password';
+  document.getElementById('formSubtitle').textContent = 'Choose a strong password for your account.';
+  const btn = document.getElementById('submitBtn');
+  btn.textContent  = 'UPDATE PASSWORD';
+  btn.style.display = '';
+  btn.disabled     = false;
+  btn.classList.remove('loading');
+  setTimeout(() => document.getElementById('newPassword')?.focus(), 300);
+}
 
 window.enterAuth = (newMode) => {
   mode = newMode;
@@ -2618,8 +2829,26 @@ document.addEventListener('keyup', e => {
 const otpInputs = document.querySelectorAll('#otpInputs input');
 otpInputs.forEach((input, i) => {
   input.addEventListener('input', e => {
-    e.target.value = e.target.value.replace(/[^0-9]/g, '');
-    if (e.target.value) {
+    const raw = e.target.value.replace(/[^0-9]/g, '');
+
+    // iOS autofill can bypass maxlength and fill the full code into field 0.
+    // Detect this and distribute across all fields.
+    if (raw.length > 1) {
+      raw.split('').forEach((ch, idx) => {
+        if (otpInputs[idx]) {
+          otpInputs[idx].value = ch;
+          otpInputs[idx].classList.add('filled');
+        }
+      });
+      const nextEmpty = Array.from(otpInputs).findIndex(x => !x.value);
+      if (nextEmpty !== -1) otpInputs[nextEmpty].focus();
+      else otpInputs[otpInputs.length - 1].focus();
+      if (Array.from(otpInputs).every(x => x.value.length === 1)) handleAction();
+      return;
+    }
+
+    e.target.value = raw;
+    if (raw) {
       e.target.classList.add('filled');
       if (i < otpInputs.length - 1) otpInputs[i + 1].focus();
     } else {
@@ -2684,7 +2913,7 @@ window.handleAction = async () => {
       }
       if (data.session) {
         sessionStorage.setItem('nextrade_fresh_login', 'true');
-        window.location.href = 'index.html';
+        window.location.replace('index.html');
         return;
       }
 
@@ -2715,7 +2944,7 @@ window.handleAction = async () => {
       if (error) throw error;
 
       sessionStorage.setItem('nextrade_fresh_login', 'true');
-      window.location.href = 'index.html';
+      window.location.replace('index.html');
     }
 
     /* ── OTP ── */
@@ -2745,7 +2974,34 @@ window.handleAction = async () => {
       sessionStorage.setItem('nextrade_fresh_login', 'true');
       localStorage.setItem('nex_onboarded', 'false');
       showToast('Account verified. Welcome to NexTrade.', 'success');
-      setTimeout(() => { window.location.href = 'index.html'; }, 700);
+      setTimeout(() => { window.location.replace('index.html'); }, 700);
+    }
+
+    /* ── FORGOT PASSWORD — send reset link ── */
+    else if (mode === 'forgot') {
+      const email = document.getElementById('forgotEmail').value.trim().toLowerCase();
+      if (!email || !email.includes('@')) throw new Error('Please enter a valid email address.');
+      const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/login.html?recovery=1'
+      });
+      if (error) throw error;
+      // Supabase always returns success even for unknown emails (security).
+      // Transition to confirmation screen regardless.
+      showForgotSent(email);
+      // btn is re-enabled inside showForgotSent / already hidden — no need to re-enable here
+    }
+
+    /* ── PASSWORD RECOVERY — set new password ── */
+    else if (mode === 'recovery') {
+      const newPw  = document.getElementById('newPassword').value;
+      const confPw = document.getElementById('confirmPassword').value;
+      if (newPw.length < 8) throw new Error('Password must be at least 8 characters.');
+      if (newPw !== confPw)  throw new Error('Passwords do not match.');
+      const { error } = await window.supabaseClient.auth.updateUser({ password: newPw });
+      if (error) throw error;
+      // onAuthStateChange fires SIGNED_IN → redirects to index.html automatically
+      showToast('Password updated. Signing you in…', 'success');
+      // btn stays disabled/loading — redirect is handled by the auth listener
     }
 
   } catch (err) {
@@ -2772,24 +3028,62 @@ window.handleResendOtp = async () => {
   }
 };
 
-/* ── FORGOT PASSWORD ────────────────────────────────────────────────────── */
-window.handleForgotPassword = async () => {
-  const email = document.getElementById('logEmail').value.trim().toLowerCase();
-  if (!email) {
-    showToast('Enter your email address first.');
-    document.getElementById('logEmail').focus();
-    return;
-  }
-  try {
-    const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + '/index.html?reset=true'
-    });
-    if (error) throw error;
-    showToast('Reset link sent. Check your inbox.', 'success');
-  } catch (err) {
-    showToast(err.message || 'Could not send reset link. Please try again.');
-  }
+/* ── FORGOT PASSWORD — helpers ───────────────────────────────────────────── */
+
+const ALL_FORMS = ['signupForm','loginForm','otpForm','forgotForm','forgotSentForm','recoveryForm'];
+
+function hideAllForms() {
+  ALL_FORMS.forEach(id => document.getElementById(id)?.classList.add('hidden'));
+}
+
+window.showForgotForm = function(prefillEmail) {
+  mode = 'forgot';
+  hideAllForms();
+  document.getElementById('forgotForm').classList.remove('hidden');
+  document.getElementById('formTitle').textContent    = 'Reset Password';
+  document.getElementById('formSubtitle').textContent = 'We\'ll email you a secure link.';
+  const btn = document.getElementById('submitBtn');
+  btn.textContent  = 'SEND RESET LINK';
+  btn.style.display = '';
+  btn.disabled     = false;
+  btn.classList.remove('loading');
+  const emailInput = document.getElementById('forgotEmail');
+  if (prefillEmail) emailInput.value = prefillEmail;
+  setTimeout(() => emailInput.focus(), 300);
 };
+
+function showForgotSent(email) {
+  mode = 'forgot-sent';
+  hideAllForms();
+  document.getElementById('forgotSentForm').classList.remove('hidden');
+  document.getElementById('forgotSentEmail').textContent = email;
+  document.getElementById('formTitle').textContent    = 'Email Sent';
+  document.getElementById('formSubtitle').textContent = '';
+  // No submit action on this screen — hide the button
+  document.getElementById('submitBtn').style.display = 'none';
+}
+
+window.showLogin = function() {
+  mode = 'login';
+  hideAllForms();
+  document.getElementById('loginForm').classList.remove('hidden');
+  document.getElementById('formTitle').textContent    = 'Welcome Back';
+  document.getElementById('formSubtitle').textContent = 'Enter your credentials to continue.';
+  const btn = document.getElementById('submitBtn');
+  btn.textContent  = 'SIGN IN';
+  btn.style.display = '';
+  btn.disabled     = false;
+  btn.classList.remove('loading');
+  setTimeout(() => document.getElementById('logEmail')?.focus(), 200);
+};
+
+/* ── FORGOT PASSWORD — trigger ───────────────────────────────────────────── */
+window.handleForgotPassword = function() {
+  // Pre-populate with whatever the user may have typed in the login email field
+  const prefill = document.getElementById('logEmail')?.value?.trim() || '';
+  window.showForgotForm(prefill);
+};
+
 
 </script>
 </body>

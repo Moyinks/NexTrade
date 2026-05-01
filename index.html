@@ -567,9 +567,8 @@
         return;
       }
 
-      // 2. Initialize App
+      // 2. Initialize App (calls Bootstraps.init() internally at step 1)
       try {
-        await Bootstraps.init();
         await App.init();
 
         // 3. Complete progress bar then dismiss

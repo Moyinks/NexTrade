@@ -763,88 +763,32 @@
   // ============================================
 
   // Local copy of the derivation logic — same as trade.js.
-  // Both read from the same transactions table.
+  // ============================================
+  // LEDGER DERIVATION — delegate to canonical copy in app.js
+  // ============================================
+  // CREDIT_TYPES, DEBIT_TYPES, and the full derivation logic live in app.js.
+  // app.js exposes App.deriveSpotBalance(userId, storedBalance) on window.App.
+  // All fixes (approved deposits, pending withdrawals, deposit-only gate) are
+  // maintained in one place. App is initialized before any user interaction
+  // can trigger invest/claim, so the delegation is safe at runtime.
   //
-  // FIX (v6.2): 'transfer_in' / 'transfer_out' added so that internal
-  // spot↔vault transfers recorded by wallets.js are correctly reflected
-  // when this function re-derives the spot balance after an invest/claim.
-  const CREDIT_TYPES = new Set(['deposit', 'sell', 'claim', 'transfer_in']);
-  const DEBIT_TYPES  = new Set(['withdraw', 'buy', 'investment', 'transfer_out']);
+  // If accounts were admin-seeded without a deposit transaction, run this
+  // migration once in Supabase so the no-deposit fallback path is unreachable:
+  //   INSERT INTO transactions (user_id, type, amount, status, description, created_at)
+  //   SELECT p.id, 'deposit', p.spot_balance, 'completed',
+  //          'Account funding (migration)', NOW() - interval '1 year'
+  //   FROM profiles p
+  //   WHERE NOT EXISTS (
+  //     SELECT 1 FROM transactions t WHERE t.user_id = p.id AND t.type = 'deposit'
+  //   ) AND p.spot_balance > 0;
 
   async function deriveSpotBalanceFromLedger(userId, storedBalance) {
-    // FIX (v6.3 — D1): Query 1 now uses .in('status', ['completed', 'approved']).
-    // Previously .eq('status', 'completed') caused admin-approved deposits to be
-    // invisible to vault's derivation. Any invest or claim operation would
-    // re-derive spot without counting the approved deposit, writing a lower
-    // spot balance back to profiles and AppState. Matches the identical fix
-    // already present in trade.js v2.1.
-    //
-    // FIX (v6.2 — D2): Query 2 — pending withdrawals only. A pending withdrawal
-    // means the user requested a payout that admin has not yet processed, but
-    // the funds are locked. Counting them as debits here prevents the re-login /
-    // re-derive balance restoration bug where deriveSpotBalanceFromLedger ignores
-    // the pending withdrawal (status != completed), then overwrites spot_balance
-    // with the pre-withdrawal amount on the next invest or claim.
-    //
-    // Pending deposits deliberately excluded — external transfers require
-    // admin confirmation before they may be credited.
-
-    const { data: completedTxs, error: err1 } = await window.supabaseClient
-      .from('transactions')
-      .select('type, amount')
-      .eq('user_id', userId)
-      .in('status', ['completed', 'approved']);
-
-    if (err1) throw err1;
-
-    const { data: pendingWithdrawals, error: err2 } = await window.supabaseClient
-      .from('transactions')
-      .select('type, amount')
-      .eq('user_id', userId)
-      .eq('status', 'pending')
-      .in('type', ['withdraw']);
-
-    if (err2) throw err2;
-
-    const rows = [...(completedTxs || []), ...(pendingWithdrawals || [])];
-
-    // Guard: only a 'deposit' transaction proves the account is fully ledger-tracked
-    // from inception. 'claim' is intentionally excluded — including it caused the
-    // guard to flip from false→true on the user's first claim, switching from the
-    // "use stored balance" path to "full replay from 0", silently destroying any
-    // admin-seeded balance that was never recorded as a deposit transaction.
-    //
-    // No-deposit path: apply all ledger movements to storedBalance as the seed.
-    // This is correct on first derivation (storedBalance = raw admin seed).
-    // Permanent fix: run the migration below so this path becomes unreachable.
-    //
-    // Migration (run once in Supabase):
-    //   INSERT INTO transactions (user_id, type, amount, status, description, created_at)
-    //   SELECT p.id, 'deposit', p.spot_balance, 'completed',
-    //          'Account funding (migration)', NOW() - interval '1 year'
-    //   FROM profiles p
-    //   WHERE NOT EXISTS (
-    //     SELECT 1 FROM transactions t WHERE t.user_id = p.id AND t.type = 'deposit'
-    //   ) AND p.spot_balance > 0;
-    const hasDepositTx = (completedTxs || []).some(tx => tx.type === 'deposit');
-
-    if (!hasDepositTx) {
-      // Apply all ledger movements against the stored seed so invest/claim/transfer
-      // deltas are reflected even without a canonical deposit record.
-      return Math.max(0, rows.reduce((bal, tx) => {
-        const amt = parseFloat(tx.amount) || 0;
-        if (CREDIT_TYPES.has(tx.type)) return bal + amt;
-        if (DEBIT_TYPES.has(tx.type))  return bal - amt;
-        return bal;
-      }, Math.max(0, parseFloat(storedBalance) || 0)));
+    if (window.App && typeof App.deriveSpotBalance === 'function') {
+      return App.deriveSpotBalance(userId, storedBalance);
     }
-
-    return Math.max(0, rows.reduce((bal, tx) => {
-      const amt = parseFloat(tx.amount) || 0;
-      if (CREDIT_TYPES.has(tx.type)) return bal + amt;
-      if (DEBIT_TYPES.has(tx.type))  return bal - amt;
-      return bal;
-    }, 0));
+    // Fallback: should never be reached in normal operation.
+    console.error('[VAULT] App.deriveSpotBalance unavailable — returning stored balance');
+    return Math.max(0, parseFloat(storedBalance) || 0);
   }
 
   // ============================================
