@@ -2311,7 +2311,7 @@ html { text-rendering: optimizeLegibility; }
       <!-- ── FORGOT PASSWORD — email input ── -->
       <div id="forgotForm" class="hidden">
         <p class="otp-label" style="margin-bottom:var(--space-5);text-align:left;">
-          Enter your account email and we'll send a reset link.
+          Enter your account email and we'll send a 6-digit reset code.
         </p>
         <div class="field">
           <label for="forgotEmail">Email Address</label>
@@ -2331,25 +2331,24 @@ html { text-rendering: optimizeLegibility; }
       </div>
 
       <!-- ── FORGOT SENT — confirmation ── -->
-      <div id="forgotSentForm" class="hidden">
-        <div style="text-align:center;padding:var(--space-6) 0 var(--space-4);">
-          <div style="font-size:44px;margin-bottom:var(--space-5);">📬</div>
-          <div style="font-family:var(--display);font-size:18px;letter-spacing:1px;color:var(--ink);margin-bottom:var(--space-3);">CHECK YOUR INBOX</div>
-          <div style="font-size:13px;font-family:var(--mono);color:var(--ink-3);line-height:1.7;">
-            We sent a reset link to<br>
-            <strong id="forgotSentEmail" style="color:var(--ink);"></strong>
+      <!-- ── FORGOT OTP — enter reset code ── -->
+      <div id="forgotOtpForm" class="hidden">
+        <div class="otp-wrapper">
+          <p class="otp-label">
+            Enter the 6-digit code sent to<br>
+            <strong id="forgotOtpEmail"></strong>
+          </p>
+          <div class="otp-group" id="forgotOtpInputs" role="group" aria-label="Reset code">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="one-time-code" autocorrect="off" enterkeyhint="next"  aria-label="Digit 1">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="next"  aria-label="Digit 2">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="next"  aria-label="Digit 3">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="next"  aria-label="Digit 4">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="next"  aria-label="Digit 5">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="done" aria-label="Digit 6">
           </div>
-          <div style="font-size:11px;font-family:var(--mono);color:var(--ink-4);margin-top:var(--space-4);line-height:1.6;">
-            Click the link in the email to set a new password.<br>Check your spam folder if you don't see it.
-          </div>
-        </div>
-        <div class="forgot-link" onclick="showForgotForm(document.getElementById('forgotEmail').value)"
-          role="button" tabindex="0" style="justify-content:center;margin-top:0;">
-          Resend or try a different email
-        </div>
-        <div class="forgot-link" onclick="showLogin()" role="button" tabindex="0"
-          style="justify-content:center;margin-top:var(--space-1);">
-          ← Back to Sign In
+          <button class="btn-resend" onclick="handleResendResetOtp()">
+            Didn't receive a code? Resend
+          </button>
         </div>
       </div>
 
@@ -2659,56 +2658,16 @@ async function init() {
     return;
   }
 
-  // Detect password-reset redirect. redirectTo URL includes ?recovery=1.
-  // Supabase also appends type=recovery to the hash — check both.
-  const isRecovery = window.location.search.includes('recovery=1') ||
-                     window.location.hash.includes('type=recovery');
-
-  // Register the auth listener BEFORE getSession() so PASSWORD_RECOVERY
-  // cannot fire in the gap between the two calls and be silently missed.
-  let recoveryHandled = false;
-  const { data: { subscription: authSub } } =
-    window.supabaseClient.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY' && !recoveryHandled) {
-        recoveryHandled = true;
-        authSub.unsubscribe();
-        showRecovery(session);
-      } else if (event === 'SIGNED_IN' && mode === 'recovery') {
-        // updateUser() succeeded — full session granted
-        authSub.unsubscribe();
-        sessionStorage.setItem('nextrade_fresh_login', 'true');
-        window.location.replace('index.html');
-      }
-    });
-
   const { data } = await window.supabaseClient.auth.getSession();
-
-  // ── Recovery flow ──────────────────────────────────────────────────────
-  if (isRecovery) {
-    if (data.session && !recoveryHandled) {
-      recoveryHandled = true;
-      authSub.unsubscribe();
-      showRecovery(data.session);
-    } else if (!data.session) {
-      // Link expired
-      window.history.replaceState(null, '', window.location.pathname);
-      showToast('Reset link has expired. Please request a new one.', 'error');
-      authSub.unsubscribe();
-      document.getElementById('landing').classList.add('ready');
-    }
-    return;
-  }
 
   // ── Valid session — go to app without ever rendering the landing ────────
   if (data.session) {
-    authSub.unsubscribe();
     sessionStorage.setItem('nextrade_fresh_login', 'true');
     window.location.replace('index.html');
     return;
   }
 
   // ── No session — reveal the landing page ──────────────────────────────
-  authSub.unsubscribe();
 
   const savedMode = sessionStorage.getItem('saved_auth_mode');
   if (savedMode === 'otp') {
@@ -2977,18 +2936,31 @@ window.handleAction = async () => {
       setTimeout(() => { window.location.replace('index.html'); }, 700);
     }
 
-    /* ── FORGOT PASSWORD — send reset link ── */
+    /* ── FORGOT PASSWORD — send 6-digit reset code ── */
     else if (mode === 'forgot') {
       const email = document.getElementById('forgotEmail').value.trim().toLowerCase();
       if (!email || !email.includes('@')) throw new Error('Please enter a valid email address.');
-      const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + '/login.html?recovery=1'
-      });
+      // No redirectTo — Supabase sends a 6-digit OTP, not a magic link.
+      // Verify with verifyOtp({ type: 'recovery' }) in the next step.
+      const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email);
       if (error) throw error;
-      // Supabase always returns success even for unknown emails (security).
-      // Transition to confirmation screen regardless.
-      showForgotSent(email);
-      // btn is re-enabled inside showForgotSent / already hidden — no need to re-enable here
+      sessionStorage.setItem('reset_email', email);
+      showForgotOtp(email);
+    }
+
+    /* ── FORGOT OTP — verify recovery code, then show new-password form ── */
+    else if (mode === 'forgot-otp') {
+      const email = sessionStorage.getItem('reset_email') ||
+                    document.getElementById('forgotOtpEmail').textContent.trim();
+      const token = Array.from(document.querySelectorAll('#forgotOtpInputs input'))
+        .map(x => x.value).join('').trim();
+      if (token.length !== 6) throw new Error('Please enter the complete 6-digit code.');
+      const { data: vData, error: vErr } = await window.supabaseClient.auth.verifyOtp({
+        email, token, type: 'recovery'
+      });
+      if (vErr) throw vErr;
+      // Code verified — session is now active. Show new-password form.
+      showRecovery(vData.session);
     }
 
     /* ── PASSWORD RECOVERY — set new password ── */
@@ -3012,7 +2984,59 @@ window.handleAction = async () => {
   }
 };
 
-/* ── RESEND OTP ─────────────────────────────────────────────────────────── */
+/* ── RESEND RESET OTP ────────────────────────────────────────────────────── */
+window.handleResendResetOtp = async () => {
+  const email = sessionStorage.getItem('reset_email') || '';
+  if (!email) { showToast('Session expired. Please start again.'); showForgotForm(''); return; }
+  try {
+    const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email);
+    if (error) throw error;
+    showToast('New code sent. Check your inbox.', 'success');
+    const inputs = document.querySelectorAll('#forgotOtpInputs input');
+    inputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
+    inputs[0]?.focus();
+  } catch (err) {
+    showToast(err.message || 'Could not resend code. Please try again.');
+  }
+};
+
+/* ── FORGOT OTP INPUT WIRING ─────────────────────────────────────────────── */
+// Same pattern as #otpInputs — separate node set, same behaviour.
+const forgotOtpInputs = document.querySelectorAll('#forgotOtpInputs input');
+forgotOtpInputs.forEach((input, i) => {
+  input.addEventListener('input', e => {
+    const raw = e.target.value.replace(/[^0-9]/g, '');
+    if (raw.length > 1) {
+      raw.split('').forEach((ch, idx) => {
+        if (forgotOtpInputs[idx]) { forgotOtpInputs[idx].value = ch; forgotOtpInputs[idx].classList.add('filled'); }
+      });
+      const nextEmpty = Array.from(forgotOtpInputs).findIndex(x => !x.value);
+      if (nextEmpty !== -1) forgotOtpInputs[nextEmpty].focus();
+      else forgotOtpInputs[forgotOtpInputs.length - 1].focus();
+      if (Array.from(forgotOtpInputs).every(x => x.value.length === 1)) handleAction();
+      return;
+    }
+    e.target.value = raw;
+    if (raw) { e.target.classList.add('filled'); if (i < forgotOtpInputs.length - 1) forgotOtpInputs[i + 1].focus(); }
+    else { e.target.classList.remove('filled'); }
+    if (Array.from(forgotOtpInputs).every(x => x.value.length === 1)) handleAction();
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Backspace' && !e.target.value && i > 0) { forgotOtpInputs[i - 1].focus(); }
+  });
+  input.addEventListener('paste', e => {
+    e.preventDefault();
+    const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
+    pasted.split('').forEach((ch, idx) => {
+      if (forgotOtpInputs[idx]) { forgotOtpInputs[idx].value = ch; forgotOtpInputs[idx].classList.add('filled'); }
+    });
+    const next = Math.min(pasted.length, forgotOtpInputs.length - 1);
+    forgotOtpInputs[next]?.focus();
+    if (Array.from(forgotOtpInputs).every(x => x.value.length === 1)) handleAction();
+  });
+});
+
+
 window.handleResendOtp = async () => {
   try {
     const { error } = await window.supabaseClient.auth.resend({
@@ -3030,7 +3054,7 @@ window.handleResendOtp = async () => {
 
 /* ── FORGOT PASSWORD — helpers ───────────────────────────────────────────── */
 
-const ALL_FORMS = ['signupForm','loginForm','otpForm','forgotForm','forgotSentForm','recoveryForm'];
+const ALL_FORMS = ['signupForm','loginForm','otpForm','forgotForm','forgotOtpForm','recoveryForm'];
 
 function hideAllForms() {
   ALL_FORMS.forEach(id => document.getElementById(id)?.classList.add('hidden'));
@@ -3041,9 +3065,9 @@ window.showForgotForm = function(prefillEmail) {
   hideAllForms();
   document.getElementById('forgotForm').classList.remove('hidden');
   document.getElementById('formTitle').textContent    = 'Reset Password';
-  document.getElementById('formSubtitle').textContent = 'We\'ll email you a secure link.';
+  document.getElementById('formSubtitle').textContent = 'We\'ll send a 6-digit code to your email.';
   const btn = document.getElementById('submitBtn');
-  btn.textContent  = 'SEND RESET LINK';
+  btn.textContent  = 'SEND CODE';
   btn.style.display = '';
   btn.disabled     = false;
   btn.classList.remove('loading');
@@ -3052,15 +3076,23 @@ window.showForgotForm = function(prefillEmail) {
   setTimeout(() => emailInput.focus(), 300);
 };
 
-function showForgotSent(email) {
-  mode = 'forgot-sent';
+function showForgotOtp(email) {
+  mode = 'forgot-otp';
   hideAllForms();
-  document.getElementById('forgotSentForm').classList.remove('hidden');
-  document.getElementById('forgotSentEmail').textContent = email;
-  document.getElementById('formTitle').textContent    = 'Email Sent';
-  document.getElementById('formSubtitle').textContent = '';
-  // No submit action on this screen — hide the button
-  document.getElementById('submitBtn').style.display = 'none';
+  document.getElementById('forgotOtpForm').classList.remove('hidden');
+  document.getElementById('forgotOtpEmail').textContent = email;
+  document.getElementById('formTitle').textContent    = 'Check Your Email';
+  document.getElementById('formSubtitle').textContent = 'Enter the 6-digit reset code.';
+  const btn = document.getElementById('submitBtn');
+  btn.textContent  = 'VERIFY CODE';
+  btn.style.display = '';
+  btn.disabled     = false;
+  btn.classList.remove('loading');
+  // Wire OTP inputs — same pattern as signup OTP
+  const inputs = document.querySelectorAll('#forgotOtpInputs input');
+  inputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
+  // Re-attach input handlers (these inputs are static DOM, handlers persist)
+  setTimeout(() => inputs[0]?.focus(), 300);
 }
 
 window.showLogin = function() {
