@@ -2681,9 +2681,27 @@ async function init() {
     document.getElementById('formSubtitle').textContent = 'Check your inbox for the 6-digit code.';
     document.getElementById('displayEmail').textContent = pendingEmail;
     document.getElementById('submitBtn').textContent = 'VERIFY CODE';
-    // Give iOS keyboard time to appear after app-switch page restore
     setTimeout(() => {
       const first = Array.from(otpInputs).find(x => !x.value) || otpInputs[0];
+      if (first) first.focus();
+    }, 350);
+  } else if (savedMode === 'forgot-otp') {
+    const email = sessionStorage.getItem('reset_email') || '';
+    mode = 'forgot-otp';
+    document.getElementById('landing').style.display = 'none';
+    document.getElementById('auth').classList.add('visible');
+    hideAllForms();
+    document.getElementById('forgotOtpForm').classList.remove('hidden');
+    document.getElementById('forgotOtpEmail').textContent = email;
+    document.getElementById('formTitle').textContent    = 'Check Your Email';
+    document.getElementById('formSubtitle').textContent = 'Enter the 6-digit reset code.';
+    const btn = document.getElementById('submitBtn');
+    btn.textContent  = 'VERIFY CODE';
+    btn.style.display = '';
+    btn.disabled     = false;
+    btn.classList.remove('loading');
+    setTimeout(() => {
+      const first = Array.from(forgotOtpInputs).find(x => !x.value) || forgotOtpInputs[0];
       if (first) first.focus();
     }, 350);
   } else {
@@ -2945,6 +2963,7 @@ window.handleAction = async () => {
       const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email);
       if (error) throw error;
       sessionStorage.setItem('reset_email', email);
+      sessionStorage.setItem('saved_auth_mode', 'forgot-otp');
       showForgotOtp(email);
     }
 
@@ -2959,6 +2978,8 @@ window.handleAction = async () => {
         email, token, type: 'recovery'
       });
       if (vErr) throw vErr;
+      sessionStorage.removeItem('saved_auth_mode');
+      sessionStorage.removeItem('reset_email');
       // Code verified — session is now active. Show new-password form.
       showRecovery(vData.session);
     }
@@ -3097,6 +3118,8 @@ function showForgotOtp(email) {
 
 window.showLogin = function() {
   mode = 'login';
+  sessionStorage.removeItem('saved_auth_mode');
+  sessionStorage.removeItem('reset_email');
   hideAllForms();
   document.getElementById('loginForm').classList.remove('hidden');
   document.getElementById('formTitle').textContent    = 'Welcome Back';
