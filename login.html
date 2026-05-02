@@ -2978,6 +2978,7 @@ window.handleAction = async () => {
         email, token, type: 'recovery'
       });
       if (vErr) throw vErr;
+      sessionStorage.setItem('saved_auth_email', email); // fallback for showRecovery if session.user is null
       sessionStorage.removeItem('saved_auth_mode');
       sessionStorage.removeItem('reset_email');
       // Code verified — session is now active. Show new-password form.
@@ -2992,9 +2993,9 @@ window.handleAction = async () => {
       if (newPw !== confPw)  throw new Error('Passwords do not match.');
       const { error } = await window.supabaseClient.auth.updateUser({ password: newPw });
       if (error) throw error;
-      // onAuthStateChange fires SIGNED_IN → redirects to index.html automatically
       showToast('Password updated. Signing you in…', 'success');
-      // btn stays disabled/loading — redirect is handled by the auth listener
+      sessionStorage.setItem('nextrade_fresh_login', 'true');
+      setTimeout(() => { window.location.replace('index.html'); }, 700);
     }
 
   } catch (err) {
