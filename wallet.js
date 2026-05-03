@@ -282,7 +282,7 @@ const Wallet = (() => {
         transition: all 0.2s ease;
         background: ${isActive ? '#3b82f6' : 'transparent'};
         color: ${isActive ? '#ffffff' : '#64748b'};
-        box-shadow: ${isActive ? '0 2px 8px rgba(59, 130, 246, 0.4)' : 'none'};
+        box-shadow: ${isActive ? '0 1px 4px rgba(59, 130, 246, 0.25)' : 'none'};
         display: flex;
         align-items: center;
         justify-content: center;
@@ -308,7 +308,7 @@ const Wallet = (() => {
       const isActive = btn.dataset.tab === tabId;
       btn.style.background = isActive ? '#3b82f6' : 'transparent';
       btn.style.color = isActive ? '#ffffff' : '#64748b';
-      btn.style.boxShadow = isActive ? '0 2px 8px rgba(59, 130, 246, 0.4)' : 'none';
+      btn.style.boxShadow = isActive ? '0 1px 4px rgba(59, 130, 246, 0.25)' : 'none';
     });
     
     const contentContainer = container.querySelector('#tab-content-container');
@@ -376,10 +376,10 @@ const Wallet = (() => {
       border-radius: 0 0 16px 16px;
       padding: 20px;
       margin-bottom: 16px;
-      background: linear-gradient(180deg, #1e3a8a, #0f172a);
+      background: linear-gradient(180deg, rgba(10,16,28,1) 0%, rgba(6,10,18,1) 100%);
       border: none;
-      border-bottom: 1px solid rgba(59, 130, 246, 0.2);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.04);
       min-height: ${CONFIG.HERO_MIN_HEIGHT}px;
       flex-shrink: 0;
     `;
@@ -392,7 +392,7 @@ const Wallet = (() => {
           <div style="font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:rgba(255,255,255,0.5); margin-bottom:6px;">
             Total Equity
           </div>
-          <div id="total-equity-display" style="font-family:var(--font-mono); font-size:32px; font-weight:700; color:white; letter-spacing:-1px; line-height:1; margin-bottom:8px;">
+          <div id="total-equity-display" style="font-family:var(--font-mono); font-size:32px; font-weight:700; color:#ffffff; letter-spacing:-1px; line-height:1.15; margin-bottom:8px;">
             ${formatMoney(summary.totalEquity)}
           </div>
           <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
@@ -961,8 +961,8 @@ const Wallet = (() => {
     
     content.innerHTML = `
       <div style="text-align:center; margin-bottom:20px;">
-        <div style="width:60px; height:60px; margin:0 auto 14px; border-radius:14px; background:linear-gradient(135deg, #8b5cf6, #7c3aed); display:flex; align-items:center; justify-content:center; box-shadow:0 8px 20px rgba(139, 92, 246, 0.4);">
-          <i class="fas fa-exchange-alt" style="font-size:26px; color:white;"></i>
+        <div style="width:60px; height:60px; margin:0 auto 14px; border-radius:14px; background:rgba(139,92,246,0.12); border:1px solid rgba(139,92,246,0.2); display:flex; align-items:center; justify-content:center;">
+          <i class="fas fa-exchange-alt" style="font-size:26px; color:#ffffff;"></i>
         </div>
         <h3 style="font-size:18px; font-weight:700; color:var(--color-text-primary); margin-bottom:6px;">Transfer Funds</h3>
         <p style="font-size:12px; color:var(--color-text-secondary);">Move funds between Spot and Vault</p>
