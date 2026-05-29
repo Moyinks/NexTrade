@@ -39,20 +39,20 @@
   <!-- App name on the home screen -->
   <meta name="apple-mobile-web-app-title" content="NexTrade">
 
-  <!-- iOS home screen icon (pwa1.png = 192x192, iOS scales it down to 180x180) -->
-  <link rel="apple-touch-icon" href="/pwa1.png">
+  <!-- iOS home screen icon (NexTrade-192.png = 192x192, iOS scales it down to 180x180) -->
+  <link rel="apple-touch-icon" href="/NexTrade-192.png">
 
   <!-- ─── General / Android fallback ───────────────────────────────────── -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="application-name" content="NexTrade">
   <meta name="msapplication-TileColor" content="#0B0E11">
-  <meta name="msapplication-TileImage" content="/pwa2.png">
+  <meta name="msapplication-TileImage" content="/NexTrade-512.png">
   <meta name="description" content="Institutional-grade yield strategies. Performance fee only on profit.">
 
   <!-- Favicon fallback -->
-  <link rel="icon" type="image/png" sizes="192x192" href="/pwa1.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="/pwa2.png">
-  <link rel="shortcut icon" href="/pwa1.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/NexTrade-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/NexTrade-512.png">
+  <link rel="shortcut icon" href="/NexTrade-192.png">
 
 
 <!-- ── STEP 2: PASTE THIS <style> INTO <head> ───────────────────────────── -->
@@ -216,11 +216,11 @@
   }
 </style>
 
-  <title>NexTrade</title>
+  <title>NexTrade — Yield on Your Terms</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <link rel="stylesheet" href="core.css" />
@@ -245,7 +245,7 @@
 
     /* ── SPLASH / LOADING SCREEN ──────────────────────────────────────────
        Designed to be a seamless continuation of Chrome's auto-generated
-       PWA splash. Chrome shows pwa2.png centered on #0B0E11 background.
+       PWA splash. Chrome shows NexTrade-512.png centered on #0B0E11 background.
        We match that exactly, then grow the logo slightly and fade in the
        spinner — making Chrome splash → HTML splash feel like one screen. */
 
@@ -322,7 +322,7 @@
       font-family: 'Inter', sans-serif;
     }
 
-    /* Backup spinner — shown only if pwa2.png fails to load */
+    /* Backup spinner — shown only if NexTrade-512.png fails to load */
     .loader-spinner-fallback {
       display: none;
       width: 40px; height: 40px;
@@ -346,10 +346,10 @@
 <!-- iOS Install Banner -->
 <div id="pwa-ios-banner" role="dialog" aria-label="Install NexTrade">
   <div class="pwa-ios-icon">
-    <img src="/pwa1.png" alt="NexTrade" onerror="this.style.display='none'">
+    <img src="/NexTrade-192.png" alt="NexTrade" onerror="this.style.display='none'">
   </div>
   <div class="pwa-ios-body">
-    <div class="pwa-ios-title">Add NexTrade to Home Screen</div>
+    <div class="pwa-ios-title">Add NexTrade — start earning</div>
     <div class="pwa-ios-msg">
       Tap <span class="pwa-ios-share">&#x2191;</span> <strong>Share</strong>,
       then <strong>"Add to Home Screen"</strong> for the full app experience.
@@ -361,7 +361,7 @@
 <!-- Android / Chrome Install Banner -->
 <div id="pwa-android-banner" role="dialog" aria-label="Install NexTrade">
   <div class="pwa-android-icon">
-    <img src="/pwa1.png" alt="NexTrade">
+    <img src="/NexTrade-192.png" alt="NexTrade">
   </div>
   <div class="pwa-android-body">
     <div class="pwa-android-title">NexTrade</div>
@@ -376,7 +376,7 @@
       <!-- Use actual brand image so HTML splash matches Chrome auto-splash visually -->
       <img
         class="loader-brand-img"
-        src="/pwa2.png"
+        src="/NexTrade-512.png"
         alt="NexTrade"
         onerror="this.classList.add('errored'); this.style.display='none';"
       >
@@ -386,7 +386,7 @@
       <div class="loader-bar-track">
         <div class="loader-bar-fill" id="loaderBar"></div>
       </div>
-      <div class="loader-text" id="loaderText">Authenticating</div>
+      <div class="loader-text" id="loaderText">WELCOME TO NEXTRADE</div>
     </div>
   </div>
 
@@ -407,6 +407,7 @@
   <script src="state.js" defer></script>
   <script src="supabase.js" defer></script>
   <script src="api.js" defer></script>
+  <script src="kyc.js" defer></script>
  <script src="trade.js" defer></script>
   <script src="card.js" defer></script>
   <script src="modals.js" defer></script>
@@ -415,6 +416,8 @@
 
   <script src="home.js" defer></script>
   <script src="cache-manager.js" defer></script>
+  <!-- TradingView Lightweight Charts — used by Market coin detail overlay -->
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
   <script src="market.js" defer></script>
   <script src="virtual-scroller.js" defer></script>
   <script src="vault.js" defer></script>

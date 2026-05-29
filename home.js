@@ -2,6 +2,19 @@
 (function () {
   'use strict';
 
+  // Strategy display names — mirrors STRATEGIES in vault.js (single source of truth is vault.js)
+  const STRATEGY_NAMES = {
+    'steady-accumulator': 'Steady Accumulator',
+    'alpha-seeker':       'Surge Pool'
+  };
+  function strategyDisplayName(inv) {
+    if (!inv) return 'Vault Strategy';
+    return STRATEGY_NAMES[inv.strategy_id]
+      || inv.strategy_name
+      || (inv.strategy_id ? inv.strategy_id.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null)
+      || 'Vault Strategy';
+  }
+
   let _container = null;
   let _scrollEl   = null;
   let _destroyed = false;
@@ -164,7 +177,9 @@
     const amount = Math.max(0, Number(inv?.amount) || 0);
     const created = new Date(inv?.created_at || Date.now()).getTime();
     const durationDays = Number(inv?.durationDays || inv?.duration || 0);
-    const maturesAt = inv?.matures_at ? new Date(inv.matures_at).getTime() : (durationDays > 0 ? created + durationDays * 86400000 : NaN);
+    const maturesAt = inv?.matures_at
+      ? new Date(inv.matures_at).getTime()
+      : (durationDays > 0 ? created + durationDays * 86400000 : NaN);
     const now = Date.now();
 
     let progress = 0;
@@ -174,15 +189,19 @@
 
     const apyRaw = Number(inv?.apy);
     const apy = Number.isFinite(apyRaw) ? (apyRaw > 1 ? apyRaw / 100 : apyRaw) : 0;
-    const elapsedYears = Math.max(0, (Math.min(now, Number.isFinite(maturesAt) ? maturesAt : now) - created) / (365 * 86400000));
-    const projected = amount + (amount * apy * elapsedYears);
-    const currentValue = Number(inv?.current_value);
 
-    return {
-      progress,
-      projected: Number.isFinite(currentValue) && currentValue > 0 ? currentValue : projected,
-      maturesAt
-    };
+    // atMaturity: the full cycle return applied to principal.
+    // inv.apy stores the cycle return (67 = 67% over 30 days, 22 = 22% over 90 days),
+    // NOT an annualised rate. Apply it directly — no calendar scaling.
+    const atMaturity = amount > 0 ? amount * (1 + apy) : 0;
+
+    // currentEstimate: linear interpolation toward atMaturity based on progress.
+    // Home page overview only — vault.js uses its own GBM engine for live precision.
+    const dbVal          = Number(inv?.current_value);
+    const linearNow      = amount + (atMaturity - amount) * progress;
+    const currentEstimate = (Number.isFinite(dbVal) && dbVal > amount) ? dbVal : linearNow;
+
+    return { progress, atMaturity, currentEstimate, maturesAt };
   }
 
   function timeRemaining(ts) {
@@ -211,10 +230,12 @@
   function typeMeta(tx) {
     const raw = String(tx?.type || tx?.status || '').toLowerCase();
     if (raw.includes('deposit')) return { label: 'Deposit', icon: '↓', tone: 'positive' };
-    if (raw.includes('withdraw')) return { label: 'Withdraw', icon: '↑', tone: 'negative' };
-    if (raw.includes('claim')) return { label: 'Claim', icon: '✓', tone: 'positive' };
+    if (raw.includes('withdraw')) return { label: 'Withdrawal', icon: '↑', tone: 'negative' };
+    if (raw.includes('claim')) return { label: 'Returns Claimed', icon: '✓', tone: 'positive' };
+    if (raw.includes('invest')) return { label: 'Strategy Entry', icon: '⬡', tone: 'neutral' };
     if (raw.includes('sell')) return { label: 'Sell', icon: '↗', tone: 'negative' };
-    if (raw.includes('buy') || raw.includes('invest')) return { label: 'Trade', icon: '↘', tone: 'neutral' };
+    if (raw.includes('buy')) return { label: 'Trade', icon: '↘', tone: 'neutral' };
+    if (raw.includes('transfer')) return { label: 'Transfer', icon: '⇄', tone: 'neutral' };
     return { label: safeText(tx?.type, 'Activity'), icon: '•', tone: 'neutral' };
   }
 
@@ -346,13 +367,13 @@
 
   function investmentsSection(snapshot) {
     const active = (snapshot.investments || []).filter(inv => inv && inv.status === 'active');
-    const shell = sectionShell('Active investments', 'Highest priority positions');
+    const shell = sectionShell('Active Strategies', 'Open positions in the Vault');
 
     if (!active.length) {
       const empty = el('div', 'border-radius:16px;padding:18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;gap:12px;');
       const copy = el('div', 'min-width:0;flex:1;');
       copy.appendChild(el('div', 'font-size:14px;font-weight:700;color:var(--color-text-primary,#fff);margin-bottom:4px;', 'No active positions'));
-      copy.appendChild(el('div', 'font-size:12px;line-height:1.4;color:var(--color-text-secondary,#94a3b8);', 'Open Vault to start compounding your balance.'));
+      copy.appendChild(el('div', 'font-size:12px;line-height:1.4;color:var(--color-text-secondary,#94a3b8);', 'Open Vault to pick a strategy and start compounding.'));
       const btn = el('button', 'border:none;border-radius:12px;padding:10px 14px;background:var(--color-primary,#3b82f6);color:#fff;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;');
       btn.textContent = 'Open Vault';
       btn.addEventListener('click', () => window.App && App.navigate('vault'));
@@ -364,36 +385,41 @@
 
     const list = el('div', 'display:flex;flex-direction:column;gap:10px;');
     active.slice(0, 4).forEach(inv => {
-      const p = investmentProgress(inv);
-      const name = safeText(inv.strategy_name || inv.name || inv.strategy_id || 'Vault position');
+      const p      = investmentProgress(inv);
+      const name   = strategyDisplayName(inv);
       const amount = Number(inv.amount) || 0;
-      const projected = Number.isFinite(p.projected) ? p.projected : amount;
+      const atMat  = Number.isFinite(p.atMaturity) && p.atMaturity > amount ? p.atMaturity : amount;
+      const profit  = atMat - amount;
+
       const box = el('button', 'width:100%;text-align:left;border-radius:16px;padding:14px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);cursor:pointer;display:flex;flex-direction:column;gap:10px;');
       box.type = 'button';
       box.addEventListener('click', () => {
         if (window.App && typeof App.navigate === 'function') App.navigate('vault');
       });
 
-      const top = el('div', 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;min-width:0;');
+      const top  = el('div', 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;min-width:0;');
       const left = el('div', 'min-width:0;flex:1;');
       left.appendChild(el('div', 'font-size:14px;font-weight:800;line-height:1.2;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', name));
-      left.appendChild(el('div', 'font-size:12px;color:rgba(255,255,255,0.62);margin-top:4px;', formatMoney(amount) + ' invested · ' + timeRemaining(p.maturesAt)));
+      left.appendChild(el('div', 'font-size:12px;color:rgba(255,255,255,0.55);margin-top:4px;', formatMoney(amount) + ' invested \u00B7 ' + timeRemaining(p.maturesAt)));
       top.appendChild(left);
 
       const right = el('div', 'text-align:right;flex-shrink:0;');
-      right.appendChild(el('div', 'font-size:13px;font-weight:800;color:#fff;line-height:1.2;', formatMoney(projected)));
-      right.appendChild(el('div', 'font-size:11px;color:rgba(255,255,255,0.6);margin-top:4px;', 'Projected return'));
+      right.appendChild(el('div', 'font-size:13px;font-weight:800;color:#fff;line-height:1.2;', formatMoney(atMat)));
+      right.appendChild(el('div', 'font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;', 'Est. at maturity'));
+      const profitEl = el('div', 'font-size:10px;font-weight:700;margin-top:3px;', '+' + formatMoney(profit) + ' profit');
+      profitEl.style.color = '#10b981';
+      right.appendChild(profitEl);
       top.appendChild(right);
       box.appendChild(top);
 
-      const bar = el('div', 'width:100%;height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;');
-      const fill = el('div', 'height:100%;width:' + Math.max(8, Math.round((p.progress || 0) * 100)) + '%;border-radius:999px;background:linear-gradient(90deg, rgba(59,130,246,0.95), rgba(16,185,129,0.95));');
+      const bar  = el('div', 'width:100%;height:5px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;');
+      const fill = el('div', 'height:100%;width:' + Math.max(4, Math.round((p.progress || 0) * 100)) + '%;border-radius:999px;background:linear-gradient(90deg,rgba(59,130,246,0.95),rgba(16,185,129,0.95));');
       bar.appendChild(fill);
       box.appendChild(bar);
 
-      const bottom = el('div', 'display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;');
-      bottom.appendChild(el('div', 'font-size:11px;font-weight:700;color:rgba(255,255,255,0.7);', 'Progress ' + Math.min(100, Math.max(0, Math.round((p.progress || 0) * 100))) + '%'));
-      bottom.appendChild(el('div', 'font-size:11px;font-weight:700;color:rgba(255,255,255,0.7);', safeText(inv.apy, '0') + '% APY'));
+      const bottom = el('div', 'display:flex;align-items:center;justify-content:space-between;');
+      bottom.appendChild(el('div', 'font-size:11px;color:rgba(255,255,255,0.5);', Math.round((p.progress || 0) * 100) + '% complete'));
+      bottom.appendChild(el('div', 'font-size:11px;font-weight:700;color:rgba(255,255,255,0.65);', (inv.apy || 0) + '% cycle target'));
       box.appendChild(bottom);
 
       list.appendChild(box);
@@ -404,87 +430,161 @@
   }
 
   function smartContextSection(snapshot) {
-    const total = portfolioTotal(snapshot);
     const active = (snapshot.investments || []).filter(inv => inv && inv.status === 'active');
-    const claimable = active.filter(inv => {
-      const matured = inv?.matures_at ? new Date(inv.matures_at).getTime() <= Date.now() : false;
-      return matured;
-    });
-    const cash = Number(snapshot.balances?.spot) || 0;
-    const vault = Number(snapshot.balances?.vault) || 0;
+    const claimable = active.filter(inv => inv?.matures_at && new Date(inv.matures_at) <= new Date());
+    const cash  = Number(snapshot.balances?.spot)  || 0;
+    const total = portfolioTotal(snapshot);
 
-    let title = 'Add funds';
-    let body = 'Your portfolio is empty. Add money to begin.';
-    let cta = 'Deposit';
-    let action = () => window.Trade && Trade.openDeposit();
-    let tone = 'linear-gradient(135deg, rgba(59,130,246,0.14), rgba(59,130,246,0.06))';
-    let border = 'rgba(59,130,246,0.24)';
+    // Upcoming maturities (sorted soonest first)
+    const upcoming = active
+      .filter(inv => inv?.matures_at && new Date(inv.matures_at) > new Date())
+      .sort((a, b) => new Date(a.matures_at) - new Date(b.matures_at));
+    const next = upcoming[0];
+    const daysToNext = next
+      ? Math.max(1, Math.ceil((new Date(next.matures_at) - Date.now()) / 86400000))
+      : null;
+
+    // Portfolio gain across all active positions
+    const totalInvested = active.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+    const totalEst = active.reduce((s, i) => {
+      const p = investmentProgress(i);
+      return s + (Number.isFinite(p.currentEstimate) ? p.currentEstimate : (Number(i.amount) || 0));
+    }, 0);
+    const unrealisedGain = totalEst - totalInvested;
+
+    let title, body, cta = null, action = null;
+    let tone   = 'linear-gradient(135deg,rgba(59,130,246,0.13),rgba(59,130,246,0.05))';
+    let border = 'rgba(59,130,246,0.22)';
 
     if (snapshot.balanceSyncStatus !== 'ready') {
-      title = 'Syncing balances';
-      body = 'We are fetching the latest ledger and vault state.';
-      cta = 'Refresh';
-      action = () => refresh();
+      title = 'Syncing your portfolio\u2026';
+      body  = 'Fetching latest ledger and pool data.';
+
     } else if (claimable.length > 0) {
-      title = 'Prepare to claim';
-      body = claimable.length + ' position' + (claimable.length > 1 ? 's are' : ' is') + ' ready to settle.';
-      cta = 'Open Vault';
+      const claimVal = claimable.reduce((s, i) => s + (Number(i.current_value) || Number(i.amount) || 0), 0);
+      const plural   = claimable.length > 1;
+      title  = claimable.length + ' position' + (plural ? 's' : '') + ' ready to claim';
+      body   = formatMoney(claimVal) + ' ' + (plural ? 'are' : 'is') + ' waiting. Claim to your Spot Wallet and decide what\u2019s next.';
+      cta    = 'Claim now';
       action = () => window.App && App.navigate('vault');
-      tone = 'linear-gradient(135deg, rgba(16,185,129,0.14), rgba(16,185,129,0.06))';
-      border = 'rgba(16,185,129,0.24)';
+      tone   = 'linear-gradient(135deg,rgba(16,185,129,0.15),rgba(16,185,129,0.05))';
+      border = 'rgba(16,185,129,0.28)';
+
     } else if (total <= 0) {
-      title = 'Add funds';
-      body = 'Put money in your account to start building momentum.';
-      cta = 'Deposit';
+      title  = 'Nothing here yet';
+      body   = 'Deposit funds, pick a strategy, and let the pool work. Steady starts at $100.';
+      cta    = 'Deposit';
       action = () => window.Trade && Trade.openDeposit();
+
     } else if (active.length === 0 && cash > 0) {
-      title = 'Invest idle balance';
-      body = formatMoney(cash) + ' is sitting in cash. Move some into Vault.';
-      cta = 'Invest';
+      title  = formatMoney(cash) + ' sitting idle';
+      body   = 'That cash could be working. Steady Accumulator starts at $100 \u2014 90-day cycle. Surge Pool takes $1,500 \u2014 30-day cycle.';
+      cta    = 'Invest now';
       action = () => window.App && App.navigate('vault');
-      tone = 'linear-gradient(135deg, rgba(59,130,246,0.14), rgba(59,130,246,0.06))';
-      border = 'rgba(59,130,246,0.24)';
-    } else if (vault > 0 && cash < Math.max(20, vault * 0.15)) {
-      title = 'Reinvest runway';
-      body = 'Your Vault is working. Keep cash ready for the next move.';
-      cta = 'Wallet';
+      tone   = 'linear-gradient(135deg,rgba(245,158,11,0.14),rgba(245,158,11,0.05))';
+      border = 'rgba(245,158,11,0.26)';
+
+    } else if (active.length > 0 && daysToNext !== null && daysToNext <= 4) {
+      const sName = strategyDisplayName(next);
+      title  = sName + ' matures in ' + daysToNext + ' day' + (daysToNext === 1 ? '' : 's');
+      body   = formatMoney(Number(next.amount) || 0) + ' is almost done. Plan now: reinvest or withdraw to wallet.';
+      cta    = 'View positions';
+      action = () => window.App && App.navigate('vault');
+      tone   = 'linear-gradient(135deg,rgba(245,158,11,0.14),rgba(245,158,11,0.05))';
+      border = 'rgba(245,158,11,0.26)';
+
+    } else if (active.length > 0 && unrealisedGain > 0) {
+      const pct = totalInvested > 0 ? ((unrealisedGain / totalInvested) * 100).toFixed(1) : '0.0';
+      title  = 'Up ' + formatMoney(unrealisedGain) + ' since entry';
+      body   = active.length + ' position' + (active.length > 1 ? 's' : '') + ' tracking \u2014 '
+             + pct + '% unrealised. '
+             + (daysToNext ? 'Next payout in ' + daysToNext + 'd.' : 'Stay the course.');
+      cta    = 'View';
+      action = () => window.App && App.navigate('vault');
+      tone   = 'linear-gradient(135deg,rgba(16,185,129,0.12),rgba(16,185,129,0.04))';
+      border = 'rgba(16,185,129,0.2)';
+
+    } else if (active.length > 0 && cash < Math.max(50, totalInvested * 0.08)) {
+      title  = 'Fully deployed';
+      body   = 'All capital is in the pool. Keep a small cash buffer for flexibility \u2014 or sit tight until maturity.';
+      cta    = 'Wallet';
       action = () => window.App && App.navigate('wallet');
-      tone = 'linear-gradient(135deg, rgba(245,158,11,0.14), rgba(245,158,11,0.06))';
-      border = 'rgba(245,158,11,0.24)';
+      tone   = 'linear-gradient(135deg,rgba(139,92,246,0.12),rgba(139,92,246,0.04))';
+      border = 'rgba(139,92,246,0.2)';
+
     } else {
-      title = 'Stay ready';
-      body = 'Your money is split across cash, vault, and market exposure.';
-      cta = 'Wallet';
-      action = () => window.App && App.navigate('wallet');
-      tone = 'linear-gradient(135deg, rgba(59,130,246,0.12), rgba(16,185,129,0.06))';
-      border = 'rgba(59,130,246,0.22)';
+      const posStr = active.length + ' position' + (active.length > 1 ? 's' : '') + ' active';
+      title  = 'Portfolio running';
+      body   = posStr + '. ' + (cash > 0 ? formatMoney(cash) + ' available to deploy.' : 'No idle cash right now.');
+      cta    = 'Vault';
+      action = () => window.App && App.navigate('vault');
     }
 
     const shell = sectionShell('Smart context', null);
-    const card = el('div', 'border-radius:16px;padding:16px;background:' + tone + ';border:1px solid ' + border + ';display:flex;align-items:flex-start;justify-content:space-between;gap:12px;');
-    const copy = el('div', 'min-width:0;flex:1;');
-    copy.appendChild(el('div', 'font-size:15px;font-weight:800;line-height:1.15;color:#fff;', title));
-    copy.appendChild(el('div', 'font-size:12px;line-height:1.5;color:rgba(255,255,255,0.72);margin-top:5px;', body));
+    const card  = el('div', 'border-radius:16px;padding:16px;background:' + tone + ';border:1px solid ' + border + ';display:flex;align-items:flex-start;justify-content:space-between;gap:12px;');
+    const copy  = el('div', 'min-width:0;flex:1;');
+    copy.appendChild(el('div', 'font-size:15px;font-weight:800;line-height:1.2;color:#fff;', title));
+    copy.appendChild(el('div', 'font-size:12px;line-height:1.55;color:rgba(255,255,255,0.68);margin-top:6px;', body));
     card.appendChild(copy);
-    const btn = el('button', 'border:none;border-radius:12px;padding:10px 14px;background:rgba(255,255,255,0.12);color:#fff;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;');
-    btn.textContent = cta;
-    btn.addEventListener('click', action);
-    card.appendChild(btn);
+    if (cta && action) {
+      const btn = el('button', 'border:none;border-radius:12px;padding:10px 14px;background:rgba(255,255,255,0.11);color:#fff;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;white-space:nowrap;');
+      btn.textContent = cta;
+      btn.addEventListener('click', action);
+      card.appendChild(btn);
+    }
     shell.appendChild(card);
     return shell;
   }
 
   function activitySection(snapshot) {
     const items = latestActivity(snapshot);
-    const shell = sectionShell('Recent activity', 'Last 5 ledger events', 'Wallet history', () => {
+    const shell = sectionShell('Recent Activity', 'Last 5 ledger events', 'Wallet history', () => {
       if (window.App && typeof App.navigate === 'function') App.navigate('wallet');
       setTimeout(() => { if (window.Wallet && typeof Wallet.switchToActivity === 'function') Wallet.switchToActivity(); }, 120);
     });
 
     if (!items.length) {
-      const empty = el('div', 'border-radius:16px;padding:18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);');
-      empty.appendChild(el('div', 'font-size:14px;font-weight:700;color:#fff;margin-bottom:4px;', 'No activity yet'));
-      empty.appendChild(el('div', 'font-size:12px;line-height:1.4;color:rgba(255,255,255,0.62);', 'Deposits, claims, and trades will appear here.'));
+      const empty = el('div', 'display:flex;flex-direction:column;gap:6px;');
+
+      // Skeleton rows — same dimensions as real activity rows so the
+      // layout feels populated rather than empty.
+      const SKELETONS = [
+        { w1:'52%', w2:'28%', aW:'42px', opacity:'1'    },
+        { w1:'38%', w2:'32%', aW:'36px', opacity:'0.65' },
+        { w1:'60%', w2:'24%', aW:'48px', opacity:'0.35' },
+      ];
+      SKELETONS.forEach(s => {
+        const row = el('div', [
+          'display:flex;align-items:center;gap:12px;min-width:0;',
+          'border-radius:14px;padding:12px 14px;',
+          'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);',
+          'opacity:' + s.opacity + ';'
+        ].join(''));
+
+        const dot = el('div', [
+          'width:32px;height:32px;border-radius:11px;flex:0 0 auto;',
+          'background:rgba(255,255,255,0.07);'
+        ].join(''));
+        row.appendChild(dot);
+
+        const mid = el('div', 'flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;');
+        mid.appendChild(el('div', 'height:10px;border-radius:4px;background:rgba(255,255,255,0.1);width:' + s.w1 + ';', ''));
+        mid.appendChild(el('div', 'height:8px;border-radius:3px;background:rgba(255,255,255,0.05);width:' + s.w2 + ';', ''));
+        row.appendChild(mid);
+
+        const amt = el('div', 'height:12px;border-radius:4px;background:rgba(255,255,255,0.08);flex-shrink:0;width:' + s.aW + ';', '');
+        row.appendChild(amt);
+
+        empty.appendChild(row);
+      });
+
+      const note = el('div', [
+        'margin-top:4px;padding:12px 14px;border-radius:12px;',
+        'background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.12);',
+        'font-size:12px;line-height:1.5;color:rgba(255,255,255,0.5);text-align:center;'
+      ].join(''), 'Your first deposit starts the ledger.');
+      empty.appendChild(note);
+
       shell.appendChild(empty);
       return shell;
     }

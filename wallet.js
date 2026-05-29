@@ -51,6 +51,7 @@ const Wallet = (() => {
      ═══════════════════════════════════════════════════════════════════════════ */
   let container = null;
   let tickerInterval = null;
+  let unsubTx = null; // AppState 'transactions' subscription — cleaned up on re-render
   let virtualScrollers = {};
 
   const state = {
@@ -99,13 +100,17 @@ const Wallet = (() => {
 
   function copyAddress() {
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(CONFIG.WALLET_ADDRESS);
-      if (window.App && App.showSuccess) App.showSuccess('Address Copied');
+      navigator.clipboard.writeText(CONFIG.WALLET_ADDRESS)
+        .then(() => { if (window.App && App.showSuccess) App.showSuccess('Address copied to clipboard'); })
+        .catch(() => { if (window.App && App.showError) App.showError('Could not copy — please copy the address manually.'); });
     } else {
-      alert('Address: ' + CONFIG.WALLET_ADDRESS);
+      try {
+        window.prompt('Copy this address:', CONFIG.WALLET_ADDRESS);
+      } catch (_) {
+        if (window.App && App.showError) App.showError('Could not copy address.');
+      }
     }
   }
-
   /* ═══════════════════════════════════════════════════════════════════════════
      DATA AGGREGATION
      ═══════════════════════════════════════════════════════════════════════════ */
@@ -216,18 +221,26 @@ const Wallet = (() => {
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       filtered = filtered.filter(tx => {
-        return tx.type?.toLowerCase().includes(searchLower) ||
+        const label = TX_META[tx.type]?.label || tx.type || '';
+        return label.toLowerCase().includes(searchLower) ||
+               tx.type?.toLowerCase().includes(searchLower) ||
                tx.status?.toLowerCase().includes(searchLower) ||
-               tx.id?.toLowerCase().includes(searchLower);
+               tx.description?.toLowerCase().includes(searchLower) ||
+               String(tx.id)?.toLowerCase().includes(searchLower);
       });
     }
-    
+
     if (filters.type !== 'all') {
       filtered = filtered.filter(tx => tx.type === filters.type);
     }
-    
+
     if (filters.status !== 'all') {
-      filtered = filtered.filter(tx => tx.status === filters.status);
+      // 'completed' filter also shows 'approved' (admin-confirmed deposits)
+      if (filters.status === 'completed') {
+        filtered = filtered.filter(tx => tx.status === 'completed' || tx.status === 'approved');
+      } else {
+        filtered = filtered.filter(tx => tx.status === filters.status);
+      }
     }
     
     filtered.sort((a, b) => {
@@ -280,9 +293,9 @@ const Wallet = (() => {
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s ease;
-        background: ${isActive ? '#3b82f6' : 'transparent'};
-        color: ${isActive ? '#ffffff' : '#64748b'};
-        box-shadow: ${isActive ? '0 1px 4px rgba(59, 130, 246, 0.25)' : 'none'};
+        background: ${isActive ? 'rgba(255,255,255,0.09)' : 'transparent'};
+        color: ${isActive ? '#ffffff' : '#475569'};
+        box-shadow: ${isActive ? '0 1px 3px rgba(0,0,0,0.35)' : 'none'};
         display: flex;
         align-items: center;
         justify-content: center;
@@ -306,9 +319,9 @@ const Wallet = (() => {
     
     document.querySelectorAll('.wallet-tab-btn').forEach(btn => {
       const isActive = btn.dataset.tab === tabId;
-      btn.style.background = isActive ? '#3b82f6' : 'transparent';
-      btn.style.color = isActive ? '#ffffff' : '#64748b';
-      btn.style.boxShadow = isActive ? '0 1px 4px rgba(59, 130, 246, 0.25)' : 'none';
+      btn.style.background = isActive ? 'rgba(255,255,255,0.09)' : 'transparent';
+      btn.style.color = isActive ? '#ffffff' : '#475569';
+      btn.style.boxShadow = isActive ? '0 1px 3px rgba(0,0,0,0.35)' : 'none';
     });
     
     const contentContainer = container.querySelector('#tab-content-container');
@@ -376,7 +389,7 @@ const Wallet = (() => {
       border-radius: 0 0 16px 16px;
       padding: 20px;
       margin-bottom: 16px;
-      background: linear-gradient(180deg, rgba(10,16,28,1) 0%, rgba(6,10,18,1) 100%);
+      background: linear-gradient(180deg, #111318 0%, #0c0e11 100%);
       border: none;
       border-bottom: 1px solid rgba(255,255,255,0.06);
       box-shadow: 0 1px 0 rgba(255,255,255,0.04);
@@ -435,8 +448,8 @@ const Wallet = (() => {
         label: 'Spot Wallet',
         value: summary.spotBalance,
         icon: 'fa-wallet',
-        color: '#3b82f6',
-        gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'
+        color: '#60a5fa',
+        gradient: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)'
       },
       {
         label: 'Vault',
@@ -819,42 +832,56 @@ const Wallet = (() => {
 
   function createFilterBar() {
     const bar = document.createElement('div');
-    bar.style.cssText = 'margin-bottom:12px; padding:10px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:10px; flex-shrink:0;';
-    
+    bar.style.cssText = 'margin-bottom:8px; padding:6px 8px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:10px; flex-shrink:0;';
+
     bar.innerHTML = `
-      <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-        <input type="text" id="filter-search" placeholder="Search..." style="flex:1; min-width:180px; padding:7px 10px; background:var(--color-surface-elevated); border:1px solid var(--color-border); border-radius:7px; color:var(--color-text-primary); font-size:12px;">
-        <select id="filter-type" style="padding:7px 10px; background:var(--color-surface-elevated); border:1px solid var(--color-border); border-radius:7px; color:var(--color-text-primary); font-size:12px;">
+      <div style="display:grid; grid-template-columns:1fr 100px 100px; gap:5px; align-items:center;">
+        <input type="text" id="filter-search" placeholder="Search…"
+          style="padding:6px 10px; background:var(--color-surface-elevated);
+                 border:1px solid var(--color-border); border-radius:7px;
+                 color:var(--color-text-primary); font-size:12px; min-width:0; outline:none;">
+        <select id="filter-type"
+          style="padding:6px 4px; background:var(--color-surface-elevated);
+                 border:1px solid var(--color-border); border-radius:7px;
+                 color:var(--color-text-primary); font-size:11px; cursor:pointer; outline:none;">
           <option value="all">All Types</option>
-          <option value="deposit">Deposits</option>
-          <option value="withdraw">Withdrawals</option>
-          <option value="trade">Trades</option>
-          <option value="transfer">Transfers</option>
+          <option value="deposit">Deposit</option>
+          <option value="withdraw">Withdraw</option>
+          <option value="buy">Buy</option>
+          <option value="sell">Sell</option>
+          <option value="investment">Strategy Entry</option>
+          <option value="claim">Claim</option>
+          <option value="transfer_in">Transfer In</option>
+          <option value="transfer_out">Transfer Out</option>
         </select>
-        <select id="filter-status" style="padding:7px 10px; background:var(--color-surface-elevated); border:1px solid var(--color-border); border-radius:7px; color:var(--color-text-primary); font-size:12px;">
+        <select id="filter-status"
+          style="padding:6px 4px; background:var(--color-surface-elevated);
+                 border:1px solid var(--color-border); border-radius:7px;
+                 color:var(--color-text-primary); font-size:11px; cursor:pointer; outline:none;">
           <option value="all">All Status</option>
           <option value="completed">Completed</option>
+          <option value="approved">Approved</option>
           <option value="pending">Pending</option>
           <option value="failed">Failed</option>
         </select>
       </div>
     `;
-    
+
     bar.querySelector('#filter-search').oninput = (e) => {
       state.ui.filters.search = e.target.value;
       applyFilters();
     };
-    
+
     bar.querySelector('#filter-type').onchange = (e) => {
       state.ui.filters.type = e.target.value;
       applyFilters();
     };
-    
+
     bar.querySelector('#filter-status').onchange = (e) => {
       state.ui.filters.status = e.target.value;
       applyFilters();
     };
-    
+
     return bar;
   }
 
@@ -866,49 +893,119 @@ const Wallet = (() => {
     }
   }
 
+  /* ─── transaction type metadata ─── */
+  const TX_META = {
+    deposit:      { label: 'Deposit',          icon: 'fa-arrow-down',        iconBg: 'rgba(16,185,129,0.15)',  iconColor: '#10b981', isCredit: true  },
+    withdraw:     { label: 'Withdrawal',       icon: 'fa-arrow-up',          iconBg: 'rgba(239,68,68,0.15)',   iconColor: '#ef4444', isCredit: false },
+    buy:          { label: 'Buy Order',        icon: 'fa-arrow-trend-up',    iconBg: 'rgba(59,130,246,0.15)',  iconColor: '#3b82f6', isCredit: false },
+    sell:         { label: 'Sell Order',       icon: 'fa-arrow-trend-down',  iconBg: 'rgba(245,158,11,0.15)', iconColor: '#f59e0b', isCredit: true  },
+    investment:   { label: 'Strategy Entry',   icon: 'fa-layer-group',       iconBg: 'rgba(139,92,246,0.15)', iconColor: '#8b5cf6', isCredit: false },
+    claim:        { label: 'Cycle Return',     icon: 'fa-coins',             iconBg: 'rgba(16,185,129,0.15)', iconColor: '#10b981', isCredit: true  },
+    transfer_in:  { label: 'Transfer In',      icon: 'fa-arrows-left-right', iconBg: 'rgba(99,102,241,0.15)', iconColor: '#6366f1', isCredit: true  },
+    transfer_out: { label: 'Transfer Out',     icon: 'fa-arrows-left-right', iconBg: 'rgba(99,102,241,0.15)', iconColor: '#6366f1', isCredit: false },
+  };
+
+  const TX_CONTEXT = {
+    deposit:      { pending: 'Awaiting admin confirmation', completed: 'Credited to Spot Wallet', approved: 'Credited to Spot Wallet', failed: 'Deposit rejected' },
+    withdraw:     { pending: 'Processing — funds locked',  completed: 'Sent from Spot Wallet',   approved: 'Sent from Spot Wallet',  failed: 'Withdrawal failed' },
+    buy:          { pending: 'Order pending',              completed: 'Crypto bought via Spot',  approved: 'Crypto bought via Spot', failed: 'Order cancelled' },
+    sell:         { pending: 'Order pending',              completed: 'Proceeds to Spot Wallet', approved: 'Proceeds to Spot Wallet',failed: 'Sell failed' },
+    investment:   { pending: 'Entering strategy…',        completed: 'Capital deployed in Vault', approved: 'Capital deployed in Vault', failed: 'Entry failed' },
+    claim:        { pending: 'Cycle return processing',    completed: 'Principal + cycle return to Spot Wallet', approved: 'Principal + cycle return to Spot Wallet', failed: 'Claim failed' },
+    transfer_in:  { pending: 'Transferring…',             completed: 'Vault \u2192 Spot Wallet', approved: 'Vault \u2192 Spot Wallet', failed: 'Transfer failed' },
+    transfer_out: { pending: 'Transferring…',             completed: 'Spot Wallet \u2192 Vault', approved: 'Spot Wallet \u2192 Vault', failed: 'Transfer failed' },
+  };
+
+  function getTxLabel(tx) {
+    const meta = TX_META[tx.type];
+    return meta ? meta.label : (tx.type || 'Transaction').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function getTxSubline(tx) {
+    // Prefer an explicit description from the DB record
+    if (tx.description && tx.description.length > 2 && tx.description.toLowerCase() !== tx.type) {
+      return tx.description;
+    }
+    const ctx = TX_CONTEXT[tx.type];
+    if (ctx) return ctx[tx.status] || ctx.completed || '';
+    return tx.status ? tx.status.charAt(0).toUpperCase() + tx.status.slice(1) : '';
+  }
+
+  function formatTxDate(dateStr) {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - d;
+    const dayMs = 86400000;
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (diffMs < dayMs) return timeStr + ' · Today';
+    if (diffMs < 2 * dayMs) return timeStr + ' · Yesterday';
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' + timeStr;
+  }
+
   function createTransactionCard(tx) {
     const card = document.createElement('div');
-    card.style.cssText = `
-      display:flex; align-items:center; justify-content:space-between;
-      padding:12px; background:var(--color-surface); border:1px solid var(--color-border);
-      border-radius:10px;
-    `;
-    
-    const isDeposit = tx.type === 'deposit' || tx.type === 'in';
-    const isPending = tx.status === 'pending';
-    
-    let color = isDeposit ? 'var(--color-success)' : 'var(--color-text-primary)';
-    if (isPending) color = 'var(--color-warning)';
-    if (tx.status === 'failed') color = 'var(--color-danger)';
-    
-    const icon = isDeposit ? 'fa-arrow-down' : 'fa-arrow-up';
-    const date = new Date(tx.created_at).toLocaleDateString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
-    
-    const statusColors = {
-      completed: '#10b981',
-      pending: '#f59e0b',
-      failed: '#ef4444'
+    card.style.cssText = [
+      'display:flex; align-items:center; justify-content:space-between;',
+      'padding:12px; background:var(--color-surface); border:1px solid var(--color-border);',
+      'border-radius:10px; gap:10px;'
+    ].join('');
+
+    const meta = TX_META[tx.type] || {
+      label: (tx.type || 'Transaction').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      icon: 'fa-circle-dot', iconBg: 'rgba(148,163,184,0.12)', iconColor: '#94a3b8', isCredit: false
     };
-    
-    const statusColor = statusColors[tx.status] || '#94a3b8';
-    
+
+    const isPending  = tx.status === 'pending';
+    const isFailed   = tx.status === 'failed';
+    const isCredit   = meta.isCredit;
+
+    // Override icon color for status
+    let dotColor = meta.iconColor;
+    if (isPending) dotColor = '#f59e0b';
+    if (isFailed)  dotColor = '#ef4444';
+
+    const statusBadgeColor = { completed:'#10b981', approved:'#10b981', pending:'#f59e0b', failed:'#ef4444', cancelled:'#94a3b8' }[tx.status] || '#94a3b8';
+
+    const amountColor = isFailed ? '#ef4444' : (isCredit ? '#10b981' : 'var(--color-text-primary)');
+    const amountSign  = isFailed ? '' : (isCredit ? '+' : '-');
+
+    const label   = getTxLabel(tx);
+    const subline = getTxSubline(tx);
+    const dateStr = formatTxDate(tx.created_at);
+
     card.innerHTML = `
-      <div style="display:flex; align-items:center; gap:10px;">
-        <div style="width:36px; height:36px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; color:${isPending ? '#f59e0b' : (isDeposit ? '#10b981' : '#3b82f6')}; border:1px solid var(--color-border);">
-          <i class="fas ${icon}" style="font-size:12px;"></i>
+      <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+        <div style="width:36px; height:36px; border-radius:50%; flex-shrink:0;
+                    background:${meta.iconBg}; color:${dotColor};
+                    border:1px solid ${dotColor}22;
+                    display:flex; align-items:center; justify-content:center;">
+          <i class="fas ${meta.icon}" style="font-size:12px;"></i>
         </div>
-        <div>
-          <div style="font-size:13px; font-weight:600; color:var(--color-text-primary); text-transform:capitalize;">${tx.type}</div>
-          <div style="font-size:10px; color:var(--color-text-secondary);">
-            ${date} • <span style="text-transform:uppercase; font-size:9px; font-weight:700; color:${statusColor}">${tx.status}</span>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:600; color:var(--color-text-primary);
+                      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${label}
+          </div>
+          <div style="font-size:11px; color:var(--color-text-secondary); margin-top:2px;
+                      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${subline}
+          </div>
+          <div style="font-size:9px; color:rgba(148,163,184,0.7); margin-top:3px; display:flex; align-items:center; gap:5px;">
+            <span>${dateStr}</span>
+            <span style="display:inline-block; padding:1px 5px; border-radius:3px;
+                         font-weight:700; text-transform:uppercase; letter-spacing:0.3px;
+                         background:${statusBadgeColor}18; color:${statusBadgeColor};">
+              ${tx.status}
+            </span>
           </div>
         </div>
       </div>
-      <div style="font-family:var(--font-mono); font-size:14px; font-weight:700; color:${color};">
-        ${isDeposit ? '+' : '-'}${formatMoney(tx.amount)}
+      <div style="font-family:var(--font-mono); font-size:14px; font-weight:700;
+                  color:${amountColor}; flex-shrink:0; text-align:right;">
+        ${amountSign}${formatMoney(tx.amount)}
       </div>
     `;
-    
+
     return card;
   }
 
@@ -924,32 +1021,118 @@ const Wallet = (() => {
         action: 'Buy Crypto', 
         onclick: () => App.navigate('market') 
       },
-      activity: { 
-        icon: 'fa-list', 
-        title: 'No Transactions', 
-        message: 'Your transaction history will appear here' 
+      activity: {
+        icon: 'fa-list',
+        title: 'No Transactions',
+        message: 'Your transaction history will appear here'
       }
     };
-    
+
     const msg = messages[type] || messages.activity;
-    
     const empty = document.createElement('div');
-    empty.style.cssText = 'text-align:center; padding:60px 20px; color:var(--color-text-tertiary);';
-    empty.innerHTML = `
-      <i class="fas ${msg.icon}" style="font-size:56px; margin-bottom:16px; opacity:0.3; display:block;"></i>
-      <div style="font-size:15px; font-weight:600; color:var(--color-text-primary); margin-bottom:6px;">${msg.title}</div>
-      <div style="font-size:12px; color:var(--color-text-secondary);">${msg.message}</div>
-    `;
-    
-    if (msg.action) {
-      const btn = document.createElement('button');
-      btn.className = 'btn btn-primary';
-      btn.textContent = msg.action;
-      btn.style.marginTop = '16px';
-      btn.onclick = msg.onclick;
-      empty.appendChild(btn);
+
+    if (type === 'activity') {
+      // Skeleton rows — mirror real transaction card layout so the page
+      // looks structurally complete, not empty. Each row shows a greyed-out
+      // placeholder exactly matching createTransactionCard dimensions.
+      empty.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:4px 0;';
+
+      const SKELETON_ROWS = [
+        { icon:'fa-arrow-down', label:'Deposit',    amount:'+$0.00', color:'rgba(16,185,129,0.15)', w1:'55%', w2:'30%' },
+        { icon:'fa-arrow-up',   label:'Trade',      amount:'-$0.00', color:'rgba(59,130,246,0.15)',  w1:'40%', w2:'35%' },
+        { icon:'fa-layer-group',label:'Strategy Entry', amount:'-$0.00', color:'rgba(139,92,246,0.15)', w1:'60%', w2:'25%' },
+        { icon:'fa-arrow-down', label:'Claim',      amount:'+$0.00', color:'rgba(16,185,129,0.15)', w1:'45%', w2:'30%' },
+      ];
+
+      SKELETON_ROWS.forEach((row, i) => {
+        const card = document.createElement('div');
+        card.style.cssText = [
+          'display:flex;align-items:center;justify-content:space-between;',
+          'padding:12px;background:var(--color-surface);border:1px solid var(--color-border);',
+          'border-radius:10px;opacity:' + (1 - i * 0.18) + ';'
+        ].join('');
+
+        const left = document.createElement('div');
+        left.style.cssText = 'display:flex;align-items:center;gap:10px;';
+
+        const avatar = document.createElement('div');
+        avatar.style.cssText = [
+          'width:36px;height:36px;border-radius:50%;',
+          'background:var(--color-surface-elevated);',
+          'display:flex;align-items:center;justify-content:center;',
+          'border:1px solid var(--color-border);'
+        ].join('');
+        avatar.innerHTML = '<i class="fas ' + row.icon + '" style="font-size:12px;color:var(--color-text-tertiary);"></i>';
+
+        const textBlock = document.createElement('div');
+
+        const titleBar = document.createElement('div');
+        titleBar.style.cssText = [
+          'height:10px;border-radius:4px;margin-bottom:6px;',
+          'background:var(--color-border);width:' + row.w1 + ';'
+        ].join('');
+
+        const subBar = document.createElement('div');
+        subBar.style.cssText = [
+          'height:8px;border-radius:3px;',
+          'background:rgba(255,255,255,0.05);width:' + row.w2 + ';'
+        ].join('');
+
+        textBlock.appendChild(titleBar);
+        textBlock.appendChild(subBar);
+        left.appendChild(avatar);
+        left.appendChild(textBlock);
+
+        const amtBar = document.createElement('div');
+        amtBar.style.cssText = 'height:12px;width:48px;border-radius:4px;background:var(--color-border);';
+
+        card.appendChild(left);
+        card.appendChild(amtBar);
+        empty.appendChild(card);
+      });
+
+      // Call to action overlaid at bottom
+      const cta = document.createElement('div');
+      cta.style.cssText = [
+        'margin-top:16px;padding:16px;text-align:center;',
+        'border-radius:12px;background:rgba(59,130,246,0.06);',
+        'border:1px solid rgba(59,130,246,0.15);'
+      ].join('');
+      cta.innerHTML = [
+        '<div style="font-size:13px;font-weight:700;color:var(--color-text-primary);margin-bottom:4px;">',
+        'No transactions yet</div>',
+        '<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.5;">',
+        'Deposit funds to start. Every deposit, trade, and claim appears here in real time.</div>'
+      ].join('');
+
+      const depositBtn = document.createElement('button');
+      depositBtn.className = 'btn btn-primary';
+      depositBtn.style.cssText = 'margin-top:12px;width:100%;';
+      depositBtn.textContent = 'Make First Deposit';
+      depositBtn.addEventListener('click', () => {
+        if (window.Trade) Trade.openDeposit();
+      });
+      cta.appendChild(depositBtn);
+      empty.appendChild(cta);
+
+    } else {
+      // Generic empty state for other types (assets etc.)
+      empty.style.cssText = 'text-align:center; padding:60px 20px; color:var(--color-text-tertiary);';
+      empty.innerHTML = [
+        '<i class="fas ' + msg.icon + '" style="font-size:56px;margin-bottom:16px;opacity:0.3;display:block;"></i>',
+        '<div style="font-size:15px;font-weight:600;color:var(--color-text-primary);margin-bottom:6px;">' + msg.title + '</div>',
+        '<div style="font-size:12px;color:var(--color-text-secondary);">' + msg.message + '</div>'
+      ].join('');
+      if (msg.action) {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-primary';
+        btn.textContent = msg.action;
+        btn.style.marginTop = '16px';
+        btn.onclick = msg.onclick;
+        empty.appendChild(btn);
+      }
     }
-    
+
     return empty;
   }
 
@@ -1165,6 +1348,7 @@ const Wallet = (() => {
      ═══════════════════════════════════════════════════════════════════════════ */
   function render(element) {
     if (tickerInterval) clearInterval(tickerInterval);
+    if (unsubTx) { unsubTx(); unsubTx = null; }
     Object.values(virtualScrollers).forEach(scroller => {
       if (scroller && scroller.destroy) scroller.destroy();
     });
@@ -1195,6 +1379,44 @@ const Wallet = (() => {
     container.appendChild(contentContainer);
     
     startLiveTicker();
+
+    // Re-render the active tab whenever a transaction is added (e.g. pending
+    // deposit). AppState.addTransaction() emits 'transactions' — subscribing
+    // here means the wallet page updates instantly without navigation.
+    if (window.AppState) {
+      unsubTx = AppState.subscribe('transactions', (txs) => {
+        state.transactions = txs || [];
+        const contentEl = document.getElementById('tab-content-container');
+        if (contentEl) {
+          contentEl.innerHTML = '';
+          contentEl.appendChild(renderTabContent(state.ui.activeTab));
+        }
+      });
+
+      // Re-render when balances or holdings change (e.g. after a trade).
+      // Without these, the wallet page shows stale numbers until the user
+      // navigates away and back — state.balances is only seeded at render()
+      // time and never updated by the transactions subscription alone.
+      AppState.subscribe('balances', (bals) => {
+        state.balances = bals || { spot: 0, vault: 0 };
+        state.holdings = AppState.get('holdings') || {};
+        const contentEl = document.getElementById('tab-content-container');
+        if (contentEl) {
+          contentEl.innerHTML = '';
+          contentEl.appendChild(renderTabContent(state.ui.activeTab));
+        }
+      });
+
+      AppState.subscribe('holdings', (holdings) => {
+        state.holdings = holdings || {};
+        const contentEl = document.getElementById('tab-content-container');
+        if (contentEl) {
+          contentEl.innerHTML = '';
+          contentEl.appendChild(renderTabContent(state.ui.activeTab));
+        }
+      });
+    }
+
     if (window.Navbar) Navbar.setActive('wallet');
   }
 

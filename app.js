@@ -166,28 +166,38 @@
         return existing;
       }
 
-      console.log('[APP] 📝 Creating new profile for user:', user.id);
+      // Profile not found — the handle_new_user trigger may still be committing.
+      // Wait 1s and retry once before returning a safe default.
+      console.log('[APP] ⏳ Profile not found, retrying in 1s…');
+      await new Promise(r => setTimeout(r, 1000));
 
-      const newProfile = {
-        id:          user.id,
-        email:       user.email,
-        spot_balance: 0,
-        vault_balance: 0,
-        holdings:    {},
-        created_at:  new Date().toISOString(),
-        updated_at:  new Date().toISOString()
-      };
-
-      const { data: created, error: createError } = await window.supabaseClient
+      const { data: retried, error: retryError } = await window.supabaseClient
         .from('profiles')
-        .upsert(newProfile, { onConflict: 'id', ignoreDuplicates: false })
-        .select()
+        .select('*')
+        .eq('id', user.id)
         .single();
 
-      if (createError) throw createError;
+      if (!retryError && retried) {
+        console.log('[APP] ✅ Profile found on retry');
+        return retried;
+      }
 
-      console.log('[APP] ✅ Profile created');
-      return created;
+      // Still not found — return a minimal in-memory default so the app can
+      // continue. The trigger will create the real row asynchronously; the
+      // next background poll will pick it up.
+      console.warn('[APP] ⚠️ Profile still not found — using temporary default');
+      return {
+        id:            user.id,
+        email:         user.email,
+        full_name:     user.user_metadata?.full_name || '',
+        spot_balance:  0,
+        vault_balance: 0,
+        holdings:      {},
+        kyc_status:    'none',
+        is_admin:      false,
+        created_at:    new Date().toISOString(),
+        updated_at:    new Date().toISOString()
+      };
 
     } catch (err) {
       console.error('[APP] ❌ Profile creation/fetch error:', err);
@@ -205,15 +215,9 @@
       // Derive spot balance from ledger (source of truth)
       const derivedSpot = await deriveSpotBalance(user.id, profile.spot_balance);
 
-      // Write derived balance back to profiles if it differs (self-healing)
-      const storedSpot = parseFloat(profile.spot_balance) || 0;
-      if (Math.abs(derivedSpot - storedSpot) > 0.001) {
-        console.log(`[APP] 🔧 Correcting spot_balance: stored=${storedSpot} derived=${derivedSpot}`);
-        await window.supabaseClient
-          .from('profiles')
-          .update({ spot_balance: derivedSpot, updated_at: new Date().toISOString() })
-          .eq('id', user.id);
-      }
+      // The database is now the write authority; the browser only derives the
+      // current balance for display and local state. Any cache repair is handled
+      // by server-side RPCs, not by direct client writes.
 
       const currentVault = (window.AppState && AppState.get('balances'))?.vault || 0;
 
@@ -403,7 +407,7 @@
         // the app immediately after location.href = LOGIN_PAGE fires.
         if (window.Modal) {
           Modal.confirm({
-            title: 'Exit NexTrade?',
+            title: 'Leave NexTrade?',
             message: 'Are you sure you want to leave the app?',
             confirmText: 'Exit',
             cancelText: 'Stay'
@@ -712,26 +716,60 @@
     return wrap;
   }
 
-  function showToast(message, type) {
+  function showToast(message, type, title) {
     _injectToastStyles();
     const cfg  = TOAST_CFG[type] || TOAST_CFG.info;
-    const dur  = type === 'error' ? 5000 : (CONSTANTS.TOAST_DURATION || 3500);
+    const dur  = type === 'error' ? 5000 : type === 'success' ? 4500 : (CONSTANTS.TOAST_DURATION || 3500);
     const wrap = _getOrCreateWrap();
 
+    // Build toast via DOM (not innerHTML) so the message text is never
+    // interpreted as HTML — prevents XSS if any caller passes user-derived content.
     const toast = document.createElement('div');
     toast.className = 'ntm-toast';
-    toast.innerHTML = `
-      <div class="ntm-toast-accent" style="background:${cfg.color};"></div>
-      <div class="ntm-toast-icon" style="background:${cfg.bg};color:${cfg.color};">
-        <i class="fa-solid ${cfg.icon}"></i>
-      </div>
-      <div class="ntm-toast-body">
-        <div class="ntm-toast-title">${cfg.title}</div>
-        <div class="ntm-toast-msg">${message}</div>
-      </div>
-      <div class="ntm-toast-close"><i class="fa-solid fa-xmark"></i></div>
-      <div class="ntm-toast-progress" style="background:${cfg.color};opacity:0.35;animation:ntm-progress ${dur}ms linear forwards;"></div>
-    `;
+
+    const accent = document.createElement('div');
+    accent.className = 'ntm-toast-accent';
+    accent.style.background = cfg.color;
+
+    const iconWrap = document.createElement('div');
+    iconWrap.className = 'ntm-toast-icon';
+    iconWrap.style.background = cfg.bg;
+    iconWrap.style.color = cfg.color;
+    const iconEl = document.createElement('i');
+    iconEl.className = 'fa-solid ' + cfg.icon;
+    iconWrap.appendChild(iconEl);
+
+    const body = document.createElement('div');
+    body.className = 'ntm-toast-body';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ntm-toast-title';
+    titleEl.textContent = (title && String(title)) || cfg.title;
+
+    const msgEl = document.createElement('div');
+    msgEl.className = 'ntm-toast-msg';
+    msgEl.textContent = String(message || '');   // textContent — never parsed as HTML
+
+    body.appendChild(titleEl);
+    body.appendChild(msgEl);
+
+    const closeEl = document.createElement('div');
+    closeEl.className = 'ntm-toast-close';
+    const closeIcon = document.createElement('i');
+    closeIcon.className = 'fa-solid fa-xmark';
+    closeEl.appendChild(closeIcon);
+
+    const progress = document.createElement('div');
+    progress.className = 'ntm-toast-progress';
+    progress.style.background = cfg.color;
+    progress.style.opacity = '0.35';
+    progress.style.animation = `ntm-progress ${dur}ms linear forwards`;
+
+    toast.appendChild(accent);
+    toast.appendChild(iconWrap);
+    toast.appendChild(body);
+    toast.appendChild(closeEl);
+    toast.appendChild(progress);
 
     wrap.appendChild(toast);
     _toastStack.push(toast);
@@ -783,10 +821,10 @@
       }
     },
 
-    showSuccess: (msg) => showToast(msg, 'success'),
-    showError:   (msg) => showToast(msg, 'error'),
-    showWarning: (msg) => showToast(msg, 'warning'),
-    showInfo:    (msg) => showToast(msg, 'info'),
+    showSuccess: (msg, title) => showToast(msg, 'success', title),
+    showError:   (msg, title) => showToast(msg, 'error',   title),
+    showWarning: (msg, title) => showToast(msg, 'warning', title),
+    showInfo:    (msg, title) => showToast(msg, 'info',    title),
 
     // Getter wired to internal flag — not a permanently-false literal
     get initialized() { return state.initialized; }

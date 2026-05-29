@@ -75,9 +75,10 @@
   
   /* Tracking */
   --tracking-tighter: -0.04em;
-  --tracking-tight: -0.02em;
-  --tracking-normal: 0em;
-  --tracking-wide: 0.05em;
+  --tracking-tight:   -0.02em;
+  --tracking-normal:   0em;
+  --tracking-wide:     0.03em;   /* Subtle: caps labels, button text */
+  --tracking-widest:   0.08em;   /* Reserved: badge/tag micro-text only */
 
   /* ----------------------------------
      SPACING: 4px Grid System
@@ -99,22 +100,27 @@
      SHAPES & DEPTH
      ---------------------------------- */
      
-  --radius-sm: 6px;
-  --radius-base: 12px;  /* Modern standard */
-  --radius-lg: 16px;    /* Cards */
-  --radius-xl: 24px;    /* Modals / Large Surfaces */
+  --radius-sm:   8px;   /* Chips, badges, small inputs */
+  --radius-base: 12px;  /* Buttons, inputs, small cards */
+  --radius-lg:   16px;  /* Standard cards */
+  --radius-xl:   22px;  /* Modals, hero card bottom */
   --radius-pill: 9999px;
 
   /* Shadows (Atmospheric) */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-  --shadow-base: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
-  --shadow-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.08); /* Top edge light */
-  
-  /* Animations */
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-bounce: 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --shadow-sm:   0 1px 2px 0 rgba(0, 0, 0, 0.35);
+  --shadow-base: 0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -1px rgba(0, 0, 0, 0.25);
+  --shadow-md:   0 6px 16px -4px rgba(0, 0, 0, 0.55), 0 2px 6px -2px rgba(0, 0, 0, 0.30);
+  --shadow-lg:   0 12px 24px -6px rgba(0, 0, 0, 0.60), 0 4px 8px -2px rgba(0, 0, 0, 0.35);
+  --shadow-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.07); /* Top edge light */
+
+  /* ── MISSING TOKENS referenced in JS but not declared ── */
+  --color-text-disabled: #475569;   /* For disabled buttons / inputs */
+
+  /* Animations — deceleration curve for enters, acceleration for exits */
+  --transition-fast:   150ms cubic-bezier(0.25, 0, 0.15, 1);
+  --transition-base:   240ms cubic-bezier(0.25, 0, 0.15, 1);
+  --transition-slow:   380ms cubic-bezier(0.25, 0, 0.15, 1);
+  --transition-bounce: 400ms cubic-bezier(0.34, 1.4, 0.64, 1);
   
   /* Layout Constaints */
   --container-max-width: 1200px;

@@ -563,23 +563,45 @@ const API = (() => {
     try {
       console.log('[API] 🔄 Starting database sync for user:', userId);
 
-      const [profileData, txsData, invsData] = await Promise.all([
-        supabaseClient.getProfile(userId),
-        supabaseClient.getTransactions(userId),
-        supabaseClient.getInvestments(userId)
+      const [profileRes, txsRes, invsRes] = await Promise.all([
+        window.supabaseClient
+          .from('profiles')
+          .select('spot_balance, vault_balance, holdings, kyc_status, role, full_name, avatar_url')
+          .eq('id', userId)
+          .single(),
+        window.supabaseClient
+          .from('transactions')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false }),
+        window.supabaseClient
+          .from('investments')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
       ]);
 
+      if (profileRes.error) throw profileRes.error;
+      if (txsRes.error) throw txsRes.error;
+      if (invsRes.error) throw invsRes.error;
+
+      const profileData = profileRes.data || null;
+      const txsData = txsRes.data || [];
+      const invsData = invsRes.data || [];
+
       if (profileData) {
-        if (profileData.balances) AppState.updateBalances(profileData.balances);
-        if (profileData.holdings) AppState.set('holdings', profileData.holdings);
+        if (window.AppState && typeof AppState.updateBalances === 'function') {
+          AppState.updateBalances({
+            spot:  parseFloat(profileData.spot_balance)  || 0,
+            vault: parseFloat(profileData.vault_balance) || 0
+          });
+        }
+        if (window.AppState && profileData.holdings) AppState.set('holdings', profileData.holdings);
       }
 
-      if (txsData && txsData.success && Array.isArray(txsData.data)) {
-        AppState.set('transactions', txsData.data);
-      }
-
-      if (invsData && invsData.success && Array.isArray(invsData.data)) {
-        AppState.set('investments', invsData.data);
+      if (window.AppState) {
+        AppState.set('transactions', txsData);
+        AppState.set('investments', invsData);
       }
 
       console.log('[API] ✅ Database sync complete');

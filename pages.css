@@ -151,3 +151,246 @@
   max-width: 100%;
   box-sizing: border-box;
 }
+
+/* ============================================
+   3. MARKET PAGE — System Classes
+   (replaces inline styles from market.js)
+   ============================================ */
+
+/* Trending card */
+.mkt-trending-card {
+  flex-shrink: 0;
+  width: 148px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  position: relative;
+  cursor: pointer;
+  transition: border-color var(--transition-base), transform var(--transition-base);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.mkt-trending-card:active {
+  transform: scale(0.97);
+  border-color: var(--color-border-hover);
+}
+.mkt-trending-rank {
+  position: absolute;
+  top: 8px; right: 8px;
+  font-size: 10px; font-weight: 700;
+  color: var(--color-text-tertiary);
+  background: var(--color-surface-elevated);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+}
+.mkt-coin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mkt-coin-icon {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: var(--color-surface-elevated);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.mkt-coin-icon img { width: 100%; height: 100%; }
+.mkt-coin-name {
+  font-size: 14px; font-weight: 700;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mkt-coin-sub {
+  font-size: 10px;
+  color: var(--color-text-tertiary);
+  margin-top: 1px;
+}
+.mkt-coin-price {
+  font-family: var(--font-mono);
+  font-size: 14px; font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 4px;
+}
+.mkt-coin-change {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 700;
+  font-family: var(--font-mono);
+}
+.mkt-coin-change-up   { color: var(--color-success); }
+.mkt-coin-change-down { color: var(--color-danger); }
+
+/* Full market list row */
+.mkt-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.mkt-list-row:last-child { border-bottom: none; }
+.mkt-list-row:active { background: var(--color-surface-elevated); }
+.mkt-list-icon {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--color-surface-elevated);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.mkt-list-icon img { width: 100%; height: 100%; }
+.mkt-list-name-row {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 2px;
+}
+.mkt-list-symbol {
+  font-size: 15px; font-weight: 700;
+  color: var(--color-text-primary);
+}
+.mkt-list-rank {
+  font-size: 10px; color: var(--color-text-tertiary);
+  background: var(--color-surface-elevated);
+  padding: 2px 6px; border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+}
+.mkt-list-fullname {
+  font-size: 12px; color: var(--color-text-secondary);
+}
+.mkt-list-price {
+  font-family: var(--font-mono);
+  font-size: 15px; font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+}
+.mkt-list-change {
+  display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+  font-size: 12px; font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+/* Market section header */
+.mkt-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+.mkt-section-title {
+  font-size: 15px; font-weight: 700;
+  color: var(--color-text-primary);
+  display: flex; align-items: center; gap: 6px;
+}
+.mkt-refresh-btn {
+  background: none; border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer; padding: 6px;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.mkt-refresh-btn:active {
+  color: var(--color-text-secondary);
+  background: var(--color-surface-elevated);
+}
+
+/* ============================================
+   4. HOME — Section classes
+   (reduces inline styles from home.js)
+   ============================================ */
+
+.home-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+}
+.home-section-sub {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+  margin-top: 3px;
+}
+.home-section-action {
+  border: none; background: none;
+  padding: 0; margin: 0;
+  font-size: 12px; font-weight: 600;
+  color: var(--color-primary);
+  cursor: pointer; flex-shrink: 0;
+}
+.home-empty-block {
+  border-radius: 14px;
+  padding: 18px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.home-plan-card {
+  width: 100%;
+  text-align: left;
+  border-radius: 14px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  background: rgba(255,255,255,0.025);
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 10px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  transition: border-color var(--transition-base), transform var(--transition-base);
+}
+.home-plan-card:active {
+  transform: scale(0.99);
+  border-color: var(--color-border-hover);
+}
+
+/* ============================================
+   5. WALLET — Activity/Asset rows
+   ============================================ */
+
+.wallet-asset-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.wallet-asset-row:last-child { border-bottom: none; }
+.wallet-asset-row:active { background: var(--color-surface-elevated); }
+.wallet-asset-icon {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: var(--color-surface-elevated);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.wallet-asset-icon img { width: 100%; height: 100%; }
+.wallet-asset-name {
+  font-size: 14px; font-weight: 700;
+  color: var(--color-text-primary);
+}
+.wallet-asset-amount {
+  font-size: 11px; color: var(--color-text-secondary);
+}
+.wallet-asset-value {
+  font-family: var(--font-mono);
+  font-size: 14px; font-weight: 700;
+  color: var(--color-text-primary);
+  text-align: right;
+}
+.wallet-asset-change {
+  font-size: 11px; font-weight: 600;
+  text-align: right;
+  font-family: var(--font-mono);
+}

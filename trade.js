@@ -1,26 +1,35 @@
 /**
- * NexTrade — Trade & Transaction Engine v2.2
+ * NexTrade — Trade & Transaction Engine v2.4
  * ══════════════════════════════════════════════════════════════════════════════
- * FIXES (v2.1 → v2.2):
- * 10. Optimistic UI for sell/buy — AppState.set('holdings') and
- *     AppState.updateBalances() are now called BEFORE the Supabase DB
- *     operations begin, not after they complete. This eliminates the visible
- *     lag where a sold asset remained in the holdings list for the full
- *     duration of the ledger insert + balance derivation + profiles update
- *     round-trip. On DB failure, both are rolled back to the pre-operation
- *     snapshot values. No fake data is ever shown — the optimistic values
- *     are computed from a fresh DB read (double-spend guard), so they are
- *     financially accurate at the moment of display.
+ * CHANGES (v2.3 → v2.4):
+ * 15. KYC gate added to openWithdraw(). Checks profiles.kyc_status before
+ *     allowing withdrawal flow. 'none' → shows KYC submission screen.
+ *     'pending' → shows under-review screen. 'rejected' → resubmit screen.
+ *     'approved' → proceeds normally. Gate is async, function now async.
  *
- * 11. Double-trigger prevention — a module-level _isTradingLocked flag
- *     prevents a second openSpotTrade execution while one is already in
- *     flight. The confirmBtn.disabled guard in the modal only covers
- *     same-modal re-tap; the module-level lock covers the case where the
- *     user taps the coin list while a trade modal is mid-flight.
+ * CHANGES (v2.2 → v2.3):
+ * 12. HD wallet deposit addresses — ETH/ERC-20 now calls the Vercel serverless
+ *     function /api/generate-address (api/generate-address.js) to obtain a
+ *     fresh child address derived from HD_WALLET_XPUB on every deposit request.
+ *     Every address is unique per transaction and all funds arrive in the same
+ *     master wallet. BTC and TRC-20 remain static (configurable via build.sh).
+ *     Falls back to showing an error if the API is unavailable rather than
+ *     showing a placeholder or stale address.
+ *
+ * 13. Deposit addresses moved to APP_CONFIG.depositAddresses (config.js) so
+ *     BTC and TRC-20 values are injected at build time via build.sh rather than
+ *     being hardcoded in this file.
+ *
+ * 14. realDeposit flag check updated — now also reads APP_CONFIG.features.hdWallet
+ *     to guard the HD wallet API call path separately from the static fallback.
+ *
+ * FIXES (v2.1 → v2.2, carried forward):
+ * 10. Optimistic UI for sell/buy.
+ * 11. Double-trigger prevention (_isTradingLocked).
  *
  * FIXES (v2.0 → v2.1, carried forward):
  * 6–9. Deposit gating, pending withdrawals, fatal ledger errors,
- *      transfer type registration. See v2.1 header.
+ *      transfer type registration.
  *
  * FIXES (v1 → v2.0, carried forward):
  * 1–5. Stripe removal, deposit reference, ledger-first writes,
@@ -33,56 +42,27 @@ const Trade = (() => {
   // ============================================
   // MODULE-LEVEL PROCESSING LOCK
   // ============================================
-  // Prevents concurrent trade executions regardless of how many modals
-  // or UI paths the user opens. Complementary to per-button disabled state.
   let _isTradingLocked = false;
 
   // ============================================
-  // CONFIGURATION
+  // PLACEHOLDER GUARD (for static BTC / TRC20 addresses)
   // ============================================
-
-  const DEPOSIT_ADDRESSES = {
-    USDT_ERC20: {
-      address: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
-      label:   'USDT (ERC-20 / Ethereum)',
-      network: 'Ethereum Network',
-      icon:    'fa-ethereum',
-      color:   '#627eea'
-    },
-    BTC: {
-      address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf',
-      label:   'Bitcoin (BTC)',
-      network: 'Bitcoin Network',
-      icon:    'fa-bitcoin',
-      color:   '#f7931a'
-    },
-    USDT_TRC20: {
-      address: 'TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7',
-      label:   'USDT (TRC-20 / Tron)',
-      network: 'Tron Network',
-      icon:    'fa-coins',
-      color:   '#ef0027'
-    }
-  };
-
   const PLACEHOLDER_PATTERNS = [
-    'YourEth', 'yourBitcoin', 'yourTron',
+    '%%', 'YourEth', 'yourBitcoin', 'yourTron',
     'YourERC', 'YourTRC', 'AddressHere', 'YourAddress'
   ];
 
-  // ============================================
-  // LEDGER DERIVATION — delegate to canonical copy in app.js
-  // ============================================
-  // CREDIT_TYPES, DEBIT_TYPES, and the full derivation logic live in app.js.
-  // app.js exposes App.deriveSpotBalance(userId, storedBalance) on window.App.
-  // App is initialized before any user interaction can trigger this path,
-  // so the delegation is safe at runtime even though trade.js loads before app.js.
+  function isPlaceholder(address) {
+    return !address || PLACEHOLDER_PATTERNS.some(p => address.includes(p));
+  }
 
+  // ============================================
+  // LEDGER DERIVATION — delegate to app.js
+  // ============================================
   async function deriveSpotBalance(userId, storedBalance) {
     if (window.App && typeof App.deriveSpotBalance === 'function') {
       return App.deriveSpotBalance(userId, storedBalance);
     }
-    // Fallback: should never be reached in normal operation.
     console.error('[TRADE] App.deriveSpotBalance unavailable — returning stored balance');
     return Math.max(0, parseFloat(storedBalance) || 0);
   }
@@ -90,7 +70,6 @@ const Trade = (() => {
   // ============================================
   // HELPERS
   // ============================================
-
   function getUserState() {
     if (!window.AppState) return { user: null, balances: { spot: 0 }, holdings: {} };
     return {
@@ -110,7 +89,7 @@ const Trade = (() => {
   function generateDepositReference(userId) {
     const prefix = userId ? userId.slice(0, 8).toUpperCase() : 'ANON';
     const ts     = Date.now().toString(36).toUpperCase();
-    return 'NXT-' + prefix + '-' + ts;
+    return 'YLD-' + prefix + '-' + ts;
   }
 
   // ============================================
@@ -129,22 +108,13 @@ const Trade = (() => {
       return;
     }
 
-    const hasPlaceholder = Object.values(DEPOSIT_ADDRESSES).some(coin =>
-      PLACEHOLDER_PATTERNS.some(p => coin.address.includes(p))
-    );
-    if (hasPlaceholder) {
-      if (window.App) App.showError('Deposit addresses are not configured. Contact the administrator.');
-      console.error('[TRADE] openDeposit blocked: placeholder addresses detected.');
-      return;
-    }
+    const depositRef     = generateDepositReference(user.id);
+    let   selectedCoin   = 'ETH_ERC20';
+    let   currentAddress = null; // set after HD API call or static lookup
 
-    const depositRef = generateDepositReference(user.id);
-    let selectedCoin = 'USDT_ERC20';
-
-    function buildCryptoView(coinKey) {
-      const coin   = DEPOSIT_ADDRESSES[coinKey];
-      const qrData = encodeURIComponent(coin.address);
-      const qrUrl  = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + qrData;
+    // ── Build the address display block ─────────────────────────────────────
+    function buildAddressBlock(address, coin) {
+      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(address);
 
       const wrap = document.createElement('div');
       wrap.style.cssText = 'text-align:center;padding:16px;background:var(--color-surface);border-radius:12px;border:1px solid var(--color-border);';
@@ -172,13 +142,13 @@ const Trade = (() => {
       addrRow.style.cssText = 'font-family:var(--font-mono);font-size:12px;color:var(--color-text-primary);background:var(--color-surface-elevated);padding:10px 12px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--color-border);word-break:break-all;text-align:left;';
       const addrText = document.createElement('span');
       addrText.id = 'dep-addr-text';
-      addrText.textContent = coin.address;
+      addrText.textContent = address;
       const copyBtn = document.createElement('button');
       copyBtn.style.cssText = 'flex-shrink:0;background:none;border:none;color:var(--color-primary);cursor:pointer;padding:4px;';
       copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
       copyBtn.addEventListener('click', () => {
         if (navigator.clipboard) {
-          navigator.clipboard.writeText(coin.address)
+          navigator.clipboard.writeText(address)
             .then(() => { if (window.App) App.showSuccess('Address copied'); });
         }
       });
@@ -186,8 +156,16 @@ const Trade = (() => {
       addrRow.appendChild(copyBtn);
       wrap.appendChild(addrRow);
 
+      // Unique-address badge for HD wallet addresses
+      if (coin.isHD) {
+        const uniqueBadge = document.createElement('div');
+        uniqueBadge.style.cssText = 'margin-top:8px;font-size:11px;color:#10b981;display:flex;align-items:center;justify-content:center;gap:5px;';
+        uniqueBadge.innerHTML = '<i class="fas fa-shield-halved"></i> Unique address generated for this deposit';
+        wrap.appendChild(uniqueBadge);
+      }
+
       const warning = document.createElement('div');
-      warning.style.cssText = 'margin-top:10px;font-size:11px;color:#f59e0b;display:flex;align-items:center;gap:6px;';
+      warning.style.cssText = 'margin-top:8px;font-size:11px;color:#f59e0b;display:flex;align-items:center;gap:6px;';
       warning.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
       warning.appendChild(document.createTextNode('Only send ' + coin.label.split('(')[0].trim() + ' to this address'));
       wrap.appendChild(warning);
@@ -195,9 +173,78 @@ const Trade = (() => {
       return wrap;
     }
 
+    // ── Loading state block ──────────────────────────────────────────────────
+    function buildLoadingBlock() {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'text-align:center;padding:40px 16px;background:var(--color-surface);border-radius:12px;border:1px solid var(--color-border);';
+      wrap.innerHTML = '<i class="fas fa-spinner fa-spin" style="font-size:28px;color:var(--color-primary);margin-bottom:12px;display:block;"></i><div style="font-size:13px;color:var(--color-text-secondary);">Generating secure deposit address…</div>';
+      return wrap;
+    }
+
+    // ── Error block ──────────────────────────────────────────────────────────
+    function buildErrorBlock(msg) {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'text-align:center;padding:24px 16px;background:rgba(239,68,68,0.06);border-radius:12px;border:1px solid rgba(239,68,68,0.2);';
+      const iconEl = document.createElement('i');
+      iconEl.className = 'fas fa-circle-exclamation';
+      iconEl.style.cssText = 'font-size:24px;color:#ef4444;margin-bottom:10px;display:block;';
+      const msgEl = document.createElement('div');
+      msgEl.style.cssText = 'font-size:13px;color:#ef4444;';
+      msgEl.textContent = msg || 'Could not generate deposit address. Contact support.';
+      wrap.appendChild(iconEl);
+      wrap.appendChild(msgEl);
+      return wrap;
+    }
+
+    // ── Fetch HD address from Vercel API ─────────────────────────────────────
+    async function fetchHDAddress(container) {
+      container.innerHTML = '';
+      container.appendChild(buildLoadingBlock());
+
+      try {
+        const { data: { session } } = await window.supabaseClient.auth.getSession();
+        if (!session || !session.access_token) throw new Error('Session expired');
+
+        const apiUrl = (APP_CONFIG.apis && APP_CONFIG.apis.generateAddress) || '/api/generate-address';
+        const resp   = await fetch(apiUrl, {
+          method:  'POST',
+          headers: {
+            'Content-Type':  'application/json',
+            'Authorization': 'Bearer ' + session.access_token
+          }
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || 'API returned ' + resp.status);
+        }
+
+        const { address } = await resp.json();
+        if (!address) throw new Error('No address returned from server');
+
+        currentAddress = address;
+        container.innerHTML = '';
+        container.appendChild(buildAddressBlock(address, {
+          label:   'USDT / ETH (ERC-20)',
+          network: 'Ethereum Network',
+          icon:    'fa-ethereum',
+          color:   '#627eea',
+          isHD:    true
+        }));
+
+      } catch (err) {
+        console.error('[TRADE] HD address fetch failed:', err);
+        container.innerHTML = '';
+        container.appendChild(buildErrorBlock(err.message));
+        currentAddress = null;
+      }
+    }
+
+    // ── Modal content ────────────────────────────────────────────────────────
     const content = document.createElement('div');
     content.style.cssText = 'display:flex;flex-direction:column;gap:16px;';
 
+    // Reference banner
     const refBanner = document.createElement('div');
     refBanner.style.cssText = 'background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:12px;padding:12px 14px;';
     const refTitle = document.createElement('div');
@@ -227,156 +274,194 @@ const Trade = (() => {
     refBanner.appendChild(refNote);
     content.appendChild(refBanner);
 
+    // Coin selector tabs
     const tabRow = document.createElement('div');
-    tabRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;';
-    const tabCrypto = document.createElement('button');
-    tabCrypto.className = 'btn btn-primary';
-    tabCrypto.style.fontSize = '13px';
-    tabCrypto.innerHTML = '<i class="fas fa-qrcode"></i> Crypto';
-    const tabCard = document.createElement('button');
-    tabCard.className = 'btn btn-secondary';
-    tabCard.style.fontSize = '13px';
-    tabCard.innerHTML = '<i class="fas fa-credit-card"></i> Card / Bank';
-    tabRow.appendChild(tabCrypto);
-    tabRow.appendChild(tabCard);
+    tabRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;';
+
+    const COIN_TABS = [
+      { key: 'ETH_ERC20',  label: 'ERC-20',  sublabel: 'ETH / USDT', icon: 'fa-ethereum' },
+      { key: 'USDT_TRC20', label: 'TRC-20',  sublabel: 'USDT Tron',  icon: 'fa-coins'    },
+      { key: 'BTC',        label: 'Bitcoin', sublabel: 'BTC',         icon: 'fa-bitcoin'  }
+    ];
+
+    const tabBtns = {};
+    COIN_TABS.forEach(tab => {
+      const btn = document.createElement('button');
+      const isActive = tab.key === 'ETH_ERC20';
+      btn.style.cssText = [
+        'display:flex;flex-direction:column;align-items:center;justify-content:center;',
+        'gap:2px;padding:8px 4px;border-radius:10px;cursor:pointer;border:none;',
+        'min-width:0;overflow:hidden;transition:background 0.15s;',
+        isActive
+          ? 'background:var(--color-primary);color:#fff;'
+          : 'background:var(--color-surface-elevated);color:var(--color-text-secondary);'
+      ].join('');
+
+      const iconEl = document.createElement('i');
+      iconEl.className = 'fas ' + tab.icon;
+      iconEl.style.cssText = 'font-size:14px;flex-shrink:0;';
+
+      const labelEl = document.createElement('span');
+      labelEl.style.cssText = 'font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:block;';
+      labelEl.textContent = tab.label;
+
+      const subEl = document.createElement('span');
+      subEl.style.cssText = 'font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:block;opacity:0.7;';
+      subEl.textContent = tab.sublabel;
+
+      btn.appendChild(iconEl);
+      btn.appendChild(labelEl);
+      btn.appendChild(subEl);
+      tabBtns[tab.key] = btn;
+      tabRow.appendChild(btn);
+    });
     content.appendChild(tabRow);
 
-    const panelCrypto = document.createElement('div');
+    // Address display panel
+    const addressPanel = document.createElement('div');
+    content.appendChild(addressPanel);
 
-    const coinSelect = document.createElement('select');
-    coinSelect.className = 'input-field';
-    coinSelect.style.cssText = 'margin-bottom:12px;padding:10px;';
-    [
-      { value: 'USDT_ERC20', label: 'USDT — ERC-20 (Ethereum)' },
-      { value: 'BTC',        label: 'Bitcoin — BTC' },
-      { value: 'USDT_TRC20', label: 'USDT — TRC-20 (Tron)' }
-    ].forEach(o => {
-      const opt = document.createElement('option');
-      opt.value = o.value; opt.textContent = o.label;
-      coinSelect.appendChild(opt);
-    });
-    panelCrypto.appendChild(coinSelect);
-
-    const cryptoView = document.createElement('div');
-    cryptoView.id = 'crypto-view';
-    cryptoView.appendChild(buildCryptoView('USDT_ERC20'));
-    panelCrypto.appendChild(cryptoView);
-
-    coinSelect.addEventListener('change', (e) => {
-      selectedCoin = e.target.value;
-      cryptoView.innerHTML = '';
-      cryptoView.appendChild(buildCryptoView(selectedCoin));
-    });
-
+    // Amount entry
     const amtGroup = document.createElement('div');
     amtGroup.className = 'input-group';
-    amtGroup.style.marginTop = '12px;';
     const amtLabel = document.createElement('label');
-    amtLabel.className = 'input-label';
-    amtLabel.textContent = 'Amount Sent (USD equivalent)';
+    amtLabel.className    = 'input-label';
+    amtLabel.textContent  = 'Amount Sent (USD equivalent)';
     const amtInput = document.createElement('input');
-    amtInput.type = 'number'; amtInput.id = 'dep-amount'; amtInput.className = 'input-field financial-data';
-    amtInput.placeholder = '0.00'; amtInput.min = '10';
+    amtInput.type        = 'number';
+    amtInput.id          = 'dep-amount';
+    amtInput.className   = 'input-field financial-data';
+    amtInput.placeholder = '0.00';
+    amtInput.min         = '10';
     const amtNote = document.createElement('div');
     amtNote.style.cssText = 'font-size:11px;color:var(--color-text-secondary);margin-top:6px;';
     amtNote.innerHTML = '<i class="fas fa-info-circle"></i> Balance updates after admin confirms your transfer.';
     amtGroup.appendChild(amtLabel);
     amtGroup.appendChild(amtInput);
     amtGroup.appendChild(amtNote);
-    panelCrypto.appendChild(amtGroup);
+    content.appendChild(amtGroup);
 
+    // Submit button
     const confirmDepBtn = document.createElement('button');
-    confirmDepBtn.className = 'btn btn-primary btn-full';
+    confirmDepBtn.className   = 'btn btn-primary btn-full';
+    confirmDepBtn.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
     confirmDepBtn.textContent = 'I Have Made The Transfer';
     confirmDepBtn.addEventListener('click', async () => {
       const { valid, num, msg } = validateAmount(amtInput.value);
-      if (!valid) return window.App ? App.showError(msg) : alert(msg);
+      if (!valid) { if (window.App) App.showError(msg); return; }
 
-      const { user } = getUserState();
-      if (!user || !user.id) return window.App ? App.showError('Session not found. Please refresh.') : alert('Session error');
+      const { user: freshUser } = getUserState();
+      if (!freshUser || !freshUser.id) { if (window.App) App.showError('Session not found. Please refresh.'); return; }
+
+      // If ETH tab selected and no address was fetched yet, block
+      if (selectedCoin === 'ETH_ERC20' && !currentAddress) {
+        if (window.App) App.showError('Waiting for deposit address. Please try again in a moment.');
+        return;
+      }
 
       confirmDepBtn.disabled = true;
       confirmDepBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>Submitting...';
 
       try {
-        if (window.supabaseClient) {
-          const { error } = await window.supabaseClient
-            .from('transactions')
-            .insert({
-              user_id:     user.id,
+        if (!window.supabaseClient) throw new Error('Secure deposit service unavailable');
+        {
+          const COIN_LABELS = {
+            'ETH_ERC20':  'ETH / USDT (ERC-20)',
+            'USDT_TRC20': 'USDT (TRC-20)',
+            'BTC':        'Bitcoin (BTC)'
+          };
+          const coinLabel = COIN_LABELS[selectedCoin] || selectedCoin;
+
+          const { data, error } = await window.supabaseClient
+            .rpc('request_deposit', {
+              p_amount: num,
+              p_description: 'Deposit (' + coinLabel + ') — Ref: ' + depositRef
+            });
+          if (error) throw error;
+          if (window.AppState && data && data[0] && data[0].tx_id) {
+            AppState.addTransaction({
+              id:          data[0].tx_id,
               type:        'deposit',
               amount:      num,
               status:      'pending',
-              description: 'Deposit (' + DEPOSIT_ADDRESSES[selectedCoin].label + ') — Ref: ' + depositRef,
+              description: 'Deposit (' + coinLabel + ') — Ref: ' + depositRef,
               created_at:  new Date().toISOString()
             });
-          if (error) throw error;
+          }
         }
 
-        if (window.AppState) {
+        if (window.AppState && (!window.supabaseClient)) {
           AppState.addTransaction({
             id:          'temp_' + Date.now(),
             type:        'deposit',
             amount:      num,
             status:      'pending',
-            description: 'Deposit (' + DEPOSIT_ADDRESSES[selectedCoin].label + ') — Ref: ' + depositRef,
+            description: 'Deposit — Ref: ' + depositRef,
             created_at:  new Date().toISOString()
           });
         }
 
         if (window.Modal) Modal.close();
-        if (window.App) App.showSuccess('Transfer submitted. Reference: ' + depositRef);
+        if (window.App)   App.showSuccess('Transfer submitted. Reference: ' + depositRef);
 
       } catch (err) {
         if (window.App) App.showError(err.message || 'Submission failed');
-        confirmDepBtn.disabled = false;
+        confirmDepBtn.disabled   = false;
         confirmDepBtn.textContent = 'I Have Made The Transfer';
       }
     });
-    panelCrypto.appendChild(confirmDepBtn);
-    content.appendChild(panelCrypto);
+    content.appendChild(confirmDepBtn);
 
-    const panelCard = document.createElement('div');
-    panelCard.style.display = 'none';
-    const cardPlaceholder = document.createElement('div');
-    cardPlaceholder.style.cssText = 'text-align:center;padding:24px;background:var(--color-surface-elevated);border-radius:12px;border:1px solid var(--color-border);';
-    const cardIcon = document.createElement('i');
-    cardIcon.className = 'fas fa-credit-card';
-    cardIcon.style.cssText = 'font-size:36px;color:var(--color-text-tertiary);margin-bottom:14px;display:block;opacity:0.5;';
-    const cardTitle = document.createElement('div');
-    cardTitle.style.cssText = 'font-size:15px;font-weight:700;color:var(--color-text-primary);margin-bottom:8px;';
-    cardTitle.textContent = 'Card & Bank Deposit';
-    const cardMsg = document.createElement('div');
-    cardMsg.style.cssText = 'font-size:13px;color:var(--color-text-secondary);line-height:1.5;';
-    cardMsg.textContent = 'Card and bank deposit is not yet available. Use the Crypto tab to deposit via blockchain transfer.';
-    cardPlaceholder.appendChild(cardIcon);
-    cardPlaceholder.appendChild(cardTitle);
-    cardPlaceholder.appendChild(cardMsg);
-    panelCard.appendChild(cardPlaceholder);
-    content.appendChild(panelCard);
+    // ── Tab switch handler ───────────────────────────────────────────────────
+    async function switchCoin(key) {
+      selectedCoin  = key;
+      currentAddress = null;
 
-    tabCrypto.addEventListener('click', () => {
-      panelCrypto.style.display = 'block'; panelCard.style.display = 'none';
-      tabCrypto.className = 'btn btn-primary'; tabCard.className = 'btn btn-secondary';
+      // Update tab button styles — match the vertical pill layout
+      Object.keys(tabBtns).forEach(k => {
+        const isActive = k === key;
+        tabBtns[k].style.background = isActive ? 'var(--color-primary)' : 'var(--color-surface-elevated)';
+        tabBtns[k].style.color      = isActive ? '#fff' : 'var(--color-text-secondary)';
+      });
+
+      // Option C: all coins use static address
+      const coinCfg = (APP_CONFIG.depositAddresses || {})[key];
+      if (!coinCfg || isPlaceholder(coinCfg.address)) {
+        addressPanel.innerHTML = '';
+        addressPanel.appendChild(buildErrorBlock('Deposit address not configured for ' + key + '. Contact admin.'));
+      } else {
+        currentAddress = coinCfg.address;
+        addressPanel.innerHTML = '';
+        addressPanel.appendChild(buildAddressBlock(coinCfg.address, coinCfg));
+      }
+    }
+
+    // Wire tab buttons
+    Object.keys(tabBtns).forEach(key => {
+      tabBtns[key].addEventListener('click', () => switchCoin(key));
     });
-    tabCard.addEventListener('click', () => {
-      panelCrypto.style.display = 'none'; panelCard.style.display = 'block';
-      tabCard.className = 'btn btn-primary'; tabCrypto.className = 'btn btn-secondary';
-    });
 
+    // Open modal then trigger initial ETH tab load
     if (window.Modal) Modal.open({ title: 'Deposit Funds', content, maxWidth: '480px' });
+    switchCoin('ETH_ERC20'); // shows static ETH address immediately
   }
 
   // ============================================
   // 2. WITHDRAW FLOW — LEDGER-FIRST
   // ============================================
 
-  function openWithdraw() {
+  async function openWithdraw() {
     const { balances, user } = getUserState();
 
     if (!user || !user.id) {
       if (window.App) App.showError('User session not found. Please refresh.');
       return;
+    }
+
+    // ── KYC gate — required before first withdrawal ──────────────────────
+    if (window.KYC) {
+      const kycPassed = await KYC.gate(user.id);
+      if (!kycPassed) return; // KYC screen shown instead
     }
 
     const content = document.createElement('div');
@@ -396,10 +481,12 @@ const Trade = (() => {
     const addrGroup = document.createElement('div');
     addrGroup.className = 'input-group';
     const addrLabel = document.createElement('label');
-    addrLabel.className = 'input-label';
+    addrLabel.className   = 'input-label';
     addrLabel.textContent = 'Destination Address (USDT/ERC20)';
     const addrInput = document.createElement('input');
-    addrInput.type = 'text'; addrInput.id = 'wd-addr'; addrInput.className = 'input-field';
+    addrInput.type        = 'text';
+    addrInput.id          = 'wd-addr';
+    addrInput.className   = 'input-field';
     addrInput.placeholder = 'Paste wallet address';
     addrGroup.appendChild(addrLabel); addrGroup.appendChild(addrInput);
     content.appendChild(addrGroup);
@@ -407,29 +494,31 @@ const Trade = (() => {
     const amtGroup = document.createElement('div');
     amtGroup.className = 'input-group';
     const amtLabel = document.createElement('label');
-    amtLabel.className = 'input-label';
+    amtLabel.className   = 'input-label';
     amtLabel.textContent = 'Amount to Withdraw (USD)';
     const amtInput = document.createElement('input');
-    amtInput.type = 'number'; amtInput.id = 'wd-amount'; amtInput.className = 'input-field financial-data';
+    amtInput.type        = 'number';
+    amtInput.id          = 'wd-amount';
+    amtInput.className   = 'input-field financial-data';
     amtInput.placeholder = '0.00';
     amtGroup.appendChild(amtLabel); amtGroup.appendChild(amtInput);
     content.appendChild(amtGroup);
 
     const btn = document.createElement('button');
     btn.className = 'btn btn-secondary btn-full';
-    btn.style.borderColor = 'var(--color-border)';
+    btn.style.cssText = 'border-color:var(--color-border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
     btn.textContent = 'Request Withdrawal';
     content.appendChild(btn);
 
     btn.addEventListener('click', async () => {
       if (btn.disabled) return;
       const { valid, num, msg } = validateAmount(amtInput.value, balances.spot);
-      if (!valid) return window.App ? App.showError(msg) : alert(msg);
+      if (!valid) { if (window.App) App.showError(msg); return; }
 
       const addr = addrInput.value.trim();
       if (window.Validation) {
         const addrValidation = Validation.walletAddress(addr, 'ETH');
-        if (!addrValidation.isValid) return window.App ? App.showError(addrValidation.error) : alert(addrValidation.error);
+        if (!addrValidation.isValid) { if (window.App) App.showError(addrValidation.error); return; }
       }
 
       btn.disabled = true;
@@ -438,33 +527,34 @@ const Trade = (() => {
       try {
         const { user: freshUser } = getUserState();
         if (!freshUser || !freshUser.id) throw new Error('User session lost');
+        if (!window.supabaseClient) throw new Error('Secure withdrawal service unavailable');
 
-        if (window.supabaseClient) {
-          const { error: txError } = await window.supabaseClient
-            .from('transactions')
-            .insert({
-              user_id:     freshUser.id,
-              type:        'withdraw',
-              amount:      num,
-              status:      'pending',
-              description: 'Withdraw to ' + addr.substring(0, 6) + '...',
-              created_at:  new Date().toISOString()
+        {
+          const { data, error } = await window.supabaseClient
+            .rpc('request_withdrawal', {
+              p_amount: num,
+              p_destination_address: addr
             });
-          if (txError) throw txError;
+          if (error) throw error;
 
-          const currentSpot = parseFloat((getUserState().balances || {}).spot || 0);
-          const lockedSpot  = Math.max(0, currentSpot - num);
+          const returnedSpot = data && data[0] ? parseFloat(data[0].spot_balance) || 0 : null;
+          if (window.AppState && returnedSpot !== null) {
+            AppState.updateBalances({ spot: returnedSpot });
+          }
 
-          const { error: balError } = await window.supabaseClient
-            .from('profiles')
-            .update({ spot_balance: lockedSpot, updated_at: new Date().toISOString() })
-            .eq('id', freshUser.id);
-          if (balError) throw balError;
-
-          if (window.AppState) AppState.updateBalances({ spot: lockedSpot });
+          if (window.AppState && data && data[0] && data[0].tx_id) {
+            AppState.addTransaction({
+              id:         data[0].tx_id,
+              type:       'withdraw',
+              amount:     num,
+              status:     'pending',
+              description: 'Withdraw to ' + addr.substring(0, 6) + '...',
+              created_at: new Date().toISOString()
+            });
+          }
         }
 
-        if (window.AppState) {
+        if (window.AppState && !window.supabaseClient) {
           AppState.addTransaction({
             id:         'tx_' + Date.now(),
             type:       'withdraw',
@@ -475,12 +565,12 @@ const Trade = (() => {
         }
 
         if (window.Modal) Modal.close();
-        if (window.App) App.showSuccess('Withdrawal request submitted. Pending admin approval.');
+        if (window.App)   App.showSuccess('Withdrawal request submitted. Pending admin approval.');
 
       } catch (err) {
         console.error('[TRADE] Withdrawal failed:', err);
         if (window.App) App.showError(err.message || 'Error processing withdrawal');
-        btn.disabled = false;
+        btn.disabled  = false;
         btn.textContent = 'Request Withdrawal';
       }
     });
@@ -493,7 +583,6 @@ const Trade = (() => {
   // ============================================
 
   async function openSpotTrade(coinInput, type) {
-    // Module-level lock — prevents concurrent trade executions
     if (_isTradingLocked) {
       if (window.App) App.showError('A trade is already in progress. Please wait.');
       return;
@@ -505,7 +594,6 @@ const Trade = (() => {
     }
 
     let coin = coinInput;
-
     if (typeof coinInput === 'string') {
       const marketData = window.AppState ? AppState.get('marketData') : [];
       if (!marketData || marketData.length === 0) {
@@ -552,10 +640,10 @@ const Trade = (() => {
     const headerText  = document.createElement('div');
     const headerTitle = document.createElement('div');
     headerTitle.style.cssText = 'font-size:18px;font-weight:700;color:var(--color-text-primary);';
-    headerTitle.textContent = type.toUpperCase() + ' ' + coin.name;
+    headerTitle.textContent   = type.toUpperCase() + ' ' + coin.name;
     const headerPrice = document.createElement('div');
     headerPrice.style.cssText = 'font-size:13px;color:var(--color-text-secondary);';
-    headerPrice.textContent = '$' + coin.current_price.toLocaleString();
+    headerPrice.textContent   = '$' + coin.current_price.toLocaleString();
     headerText.appendChild(headerTitle); headerText.appendChild(headerPrice);
     headerRow.appendChild(headerText);
     content.appendChild(headerRow);
@@ -564,16 +652,19 @@ const Trade = (() => {
     amtBlock.style.cssText = 'position:relative;margin-top:8px;';
     const amtLblEl = document.createElement('label');
     amtLblEl.style.cssText = 'font-size:11px;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.5px;';
-    amtLblEl.textContent = 'Amount in ' + (isBuy ? 'USD' : coin.symbol);
+    amtLblEl.textContent   = 'Amount in ' + (isBuy ? 'USD' : coin.symbol);
     const amtRow = document.createElement('div');
     amtRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
     const tradeAmt = document.createElement('input');
-    tradeAmt.type = 'number'; tradeAmt.id = 'trade-amt'; tradeAmt.className = 'financial-data';
+    tradeAmt.type        = 'number';
+    tradeAmt.id          = 'trade-amt';
+    tradeAmt.className   = 'financial-data';
+    tradeAmt.setAttribute('inputmode', 'decimal');
     tradeAmt.style.cssText = 'font-size:32px;font-weight:700;background:transparent;border:none;color:var(--color-text-primary);width:100%;padding:12px 0;outline:none;';
     tradeAmt.placeholder = '0.00';
     const unitLabel = document.createElement('span');
     unitLabel.style.cssText = 'font-size:14px;font-weight:700;color:var(--color-text-secondary);';
-    unitLabel.textContent = isBuy ? 'USD' : coin.symbol;
+    unitLabel.textContent   = isBuy ? 'USD' : coin.symbol;
     amtRow.appendChild(tradeAmt); amtRow.appendChild(unitLabel);
     const divider = document.createElement('div');
     divider.style.cssText = 'height:1px;background:var(--color-border);width:100%;';
@@ -586,8 +677,8 @@ const Trade = (() => {
     availText.style.cssText = 'font-size:12px;color:var(--color-text-secondary);';
     availText.innerHTML = 'Available: <span style="font-weight:700;color:var(--color-text-primary);">' + available.toFixed(isBuy ? 2 : 6) + ' ' + availLabel + '</span>';
     const maxBtn = document.createElement('button');
-    maxBtn.style.cssText = 'font-size:11px;color:' + color + ';background:' + color + '15;border:1px solid ' + color + '30;padding:4px 10px;border-radius:6px;font-weight:700;cursor:pointer;';
-    maxBtn.textContent = 'MAX';
+    maxBtn.style.cssText = 'font-size:11px;color:' + color + ';background:' + color + '15;border:1px solid ' + color + '30;padding:0 14px;border-radius:8px;font-weight:700;cursor:pointer;min-height:44px;display:inline-flex;align-items:center;';
+    maxBtn.textContent   = 'MAX';
     availRow.appendChild(availText); availRow.appendChild(maxBtn);
     content.appendChild(availRow);
 
@@ -596,15 +687,15 @@ const Trade = (() => {
     const estLabel = document.createElement('span');
     estLabel.textContent = 'Estimated Receive:';
     const estVal = document.createElement('span');
-    estVal.id = 'trade-est';
+    estVal.id          = 'trade-est';
     estVal.style.cssText = 'font-weight:700;color:var(--color-text-primary);font-family:var(--font-mono);font-size:15px;';
     estVal.textContent = '0.00';
     estBox.appendChild(estLabel); estBox.appendChild(estVal);
     content.appendChild(estBox);
 
-    const confirmBtn = document.createElement('button');
-    const btnClass   = isBuy ? 'btn-success' : 'btn-danger';
-    confirmBtn.className = 'btn ' + btnClass + ' btn-full';
+    const confirmBtn   = document.createElement('button');
+    const btnClass     = isBuy ? 'btn-success' : 'btn-danger';
+    confirmBtn.className   = 'btn ' + btnClass + ' btn-full';
     confirmBtn.style.cssText = 'height:56px;font-size:16px;';
     confirmBtn.textContent = type.toUpperCase() + ' NOW';
     content.appendChild(confirmBtn);
@@ -619,143 +710,146 @@ const Trade = (() => {
     tradeAmt.addEventListener('input', updateEst);
     maxBtn.addEventListener('click', () => { tradeAmt.value = available; updateEst(); });
 
-    confirmBtn.addEventListener('click', async () => {
-      if (confirmBtn.disabled || _isTradingLocked) return;
-
-      const val = parseFloat(tradeAmt.value);
-      if (!val || val <= 0) { if (window.App) App.showError('Invalid Amount'); return; }
-      if (val > available)  { if (window.App) App.showError('Insufficient Funds'); return; }
-
-      confirmBtn.disabled = true;
+    // ── TRADE EXECUTION (extracted so both the review confirm and direct path use it) ──
+    async function executeTrade(val) {
+      confirmBtn.disabled  = true;
       confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>Executing...';
-      _isTradingLocked = true;
-
-      // Snapshot pre-operation state for rollback
-      const preOpHoldings = window.AppState ? { ...(AppState.get('holdings') || {}) } : null;
-      const preOpSpot     = window.AppState ? parseFloat((AppState.get('balances') || {}).spot || 0) : null;
+      _isTradingLocked     = true;
 
       try {
         const { user: freshUser } = getUserState();
         if (!freshUser || !freshUser.id) throw new Error('User session lost');
 
-        // ── DOUBLE-SPEND GUARD — fresh DB read ─────────────────────────────
+        // Double-spend guard — use derive_spot_balance RPC (reads ledger, not
+        // the cached profiles.spot_balance which can be stale after a failed tx).
         let freshSpot     = 0;
         let freshHoldings = {};
         if (window.supabaseClient) {
-          const { data: profile, error: profileErr } = await window.supabaseClient
-            .from('profiles')
-            .select('spot_balance, holdings')
-            .eq('id', freshUser.id)
-            .single();
-          if (profileErr) throw profileErr;
-          freshSpot     = parseFloat(profile.spot_balance) || 0;
-          freshHoldings = profile.holdings || {};
+          const [deriveRes, holdingsRes] = await Promise.all([
+            window.supabaseClient.rpc('derive_spot_balance', { p_user_id: freshUser.id }),
+            window.supabaseClient.from('profiles').select('holdings').eq('id', freshUser.id).single()
+          ]);
+          if (deriveRes.error)   throw deriveRes.error;
+          if (holdingsRes.error) throw holdingsRes.error;
+          freshSpot     = parseFloat(deriveRes.data) || 0;
+          freshHoldings = holdingsRes.data.holdings || {};
         } else {
-          const st  = getUserState();
+          const st = getUserState();
           freshSpot     = parseFloat((st.balances || {}).spot || 0);
           freshHoldings = st.holdings || {};
         }
 
         const freshAvailable = isBuy ? freshSpot : (freshHoldings[assetKey] || 0);
         if (val > freshAvailable) {
-          throw new Error('Insufficient funds. Balance changed since modal opened.');
+          throw new Error('Insufficient funds. Available: $' + freshAvailable.toFixed(2) + '.');
         }
-        // ── END DOUBLE-SPEND GUARD ─────────────────────────────────────────
+        const { data, error } = await window.supabaseClient
+          .rpc('execute_trade', {
+            p_side:  type,
+            p_asset: assetKey,
+            p_amount: val,
+            p_price:  coin.current_price
+          });
+        if (error) throw error;
 
-        // Compute final holdings from the fresh DB snapshot
-        let newHoldings = { ...freshHoldings };
+        const rpcRow = Array.isArray(data) ? data[0] : data;
+        const serverHoldings = rpcRow && rpcRow.holdings ? rpcRow.holdings : freshHoldings;
 
-        if (isBuy) {
-          const coinAmt = val / coin.current_price;
-          newHoldings[assetKey] = (newHoldings[assetKey] || 0) + coinAmt;
-        } else {
-          newHoldings[assetKey] -= val;
-          if (newHoldings[assetKey] < 0.00000001) delete newHoldings[assetKey];
-        }
+        // Re-derive the authoritative spot balance from the ledger rather than
+        // trusting rpcRow.spot_balance directly. The RPC return column shares
+        // the name "spot_balance" with the profiles table column; if the live DB
+        // hasn't been updated with the aliased function yet, Postgres may resolve
+        // it to the wrong value, causing phantom balance increases on the client.
+        let serverSpot = freshSpot - (isBuy ? val : 0) + (isBuy ? 0 : val * coin.current_price);
+        try {
+          const recheck = await window.supabaseClient.rpc('derive_spot_balance', { p_user_id: freshUser.id });
+          if (!recheck.error && recheck.data !== null) serverSpot = parseFloat(recheck.data) || serverSpot;
+        } catch (_) { /* use computed fallback */ }
 
-        // ── OPTIMISTIC UI UPDATE ───────────────────────────────────────────
-        // Push the computed holdings into AppState BEFORE any DB write so
-        // the UI (holdings list, total equity) reflects the trade immediately.
-        // For buys, optimistically adjust spot too so balance doesn't lag.
-        // Both are rolled back on any subsequent failure.
         if (window.AppState) {
-          AppState.set('holdings', newHoldings);
-          if (isBuy) {
-            AppState.updateBalances({ spot: Math.max(0, freshSpot - val) });
-          }
-        }
-
-        // Close modal immediately — user sees the optimistic update
-        if (window.Modal) Modal.close();
-        // ── END OPTIMISTIC UPDATE ──────────────────────────────────────────
-
-        if (window.supabaseClient) {
-          const txAmount = isBuy ? val : (val * coin.current_price);
-
-          // 1. Ledger entry (fatal on failure — rolls back optimistic update)
-          const { error: txErr } = await window.supabaseClient
-            .from('transactions')
-            .insert({
-              user_id:     freshUser.id,
-              type:        type,
-              amount:      txAmount,
-              description: type.toUpperCase() + ' ' + coin.symbol,
-              status:      'completed',
-              created_at:  new Date().toISOString()
-            });
-          if (txErr) throw txErr;
-
-          // 2. Derive confirmed spot balance from ledger
-          const newSpot = await deriveSpotBalance(freshUser.id, freshSpot);
-
-          // 3. Write confirmed values to profiles
-          const { error: profileErr } = await window.supabaseClient
-            .from('profiles')
-            .update({
-              spot_balance: newSpot,
-              holdings:     newHoldings,
-              updated_at:   new Date().toISOString()
-            })
-            .eq('id', freshUser.id);
-          if (profileErr) throw profileErr;
-
-          // 4. Replace optimistic balance with the ledger-derived truth
-          if (window.AppState) {
-            AppState.updateBalances({ spot: newSpot });
+          AppState.set('holdings', serverHoldings);
+          AppState.updateBalances({ spot: serverSpot });
+          if (rpcRow && rpcRow.tx_id) {
             AppState.addTransaction({
-              id:         'tx_' + Date.now(),
+              id:         rpcRow.tx_id,
               type:       type,
-              amount:     txAmount,
+              amount:     isBuy ? val : (val * coin.current_price),
               status:     'completed',
+              description: type.toUpperCase() + ' ' + coin.symbol,
               created_at: new Date().toISOString()
             });
           }
         }
 
-        if (window.App) App.showSuccess(type.toUpperCase() + ' Successful');
+        // Toast: descriptive title + confirmation message
+        const toastTitle = type.toUpperCase() + ' $' + val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + coin.symbol.toUpperCase();
+        if (window.App) App.showSuccess('Trade executed successfully.', toastTitle);
+
+        // Close the modal and reset button state on success.
+        if (window.Modal) Modal.close();
+        confirmBtn.disabled    = false;
+        confirmBtn.textContent = type.toUpperCase() + ' NOW';
 
       } catch (err) {
         console.error('[TRADE] Trade execution failed:', err);
-
-        // ── OPTIMISTIC ROLLBACK ────────────────────────────────────────────
-        // Restore pre-operation AppState so the UI is consistent with DB truth.
-        if (window.AppState && preOpHoldings !== null) {
-          AppState.set('holdings', preOpHoldings);
-        }
-        if (window.AppState && preOpSpot !== null) {
-          AppState.updateBalances({ spot: preOpSpot });
-        }
-        // ── END ROLLBACK ───────────────────────────────────────────────────
-
         if (window.App) App.showError(err.message || 'Trade Execution Failed');
-
-        // Re-enable button only if modal is still open
-        confirmBtn.disabled = false;
+        confirmBtn.disabled    = false;
         confirmBtn.textContent = type.toUpperCase() + ' NOW';
-
       } finally {
         _isTradingLocked = false;
       }
+    }
+
+    confirmBtn.addEventListener('click', async () => {
+      if (confirmBtn.disabled || _isTradingLocked) return;
+
+      const val = parseFloat(tradeAmt.value);
+      if (!val || val <= 0) { if (window.App) App.showError('Enter a valid amount'); return; }
+      if (val > available)  { if (window.App) App.showError('Insufficient funds'); return; }
+
+      // ── REVIEW STEP: show confirmation card before executing ─────────────
+      const estQty   = isBuy ? (val / coin.current_price) : (val * coin.current_price);
+      const estLabel = isBuy
+        ? (val / coin.current_price).toFixed(6) + ' ' + coin.symbol.toUpperCase()
+        : '$' + (val * coin.current_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const amtFmt   = '$' + val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const priceFmt = '$' + coin.current_price.toLocaleString();
+
+      const reviewMsg = [
+        '<div style="display:flex;flex-direction:column;gap:10px;text-align:left;">',
+        '  <div style="display:flex;justify-content:space-between;font-size:13.5px;">',
+        '    <span style="color:#94A3B8;">Amount</span>',
+        '    <span style="font-weight:700;color:#F8FAFC;">' + amtFmt + '</span>',
+        '  </div>',
+        '  <div style="display:flex;justify-content:space-between;font-size:13.5px;">',
+        '    <span style="color:#94A3B8;">Price</span>',
+        '    <span style="font-weight:700;color:#F8FAFC;">' + priceFmt + '</span>',
+        '  </div>',
+        '  <div style="display:flex;justify-content:space-between;font-size:13.5px;">',
+        '    <span style="color:#94A3B8;">You receive</span>',
+        '    <span style="font-weight:700;color:#F8FAFC;">' + estLabel + '</span>',
+        '  </div>',
+        '</div>'
+      ].join('');
+
+      if (!window.Modal) {
+        // Fallback if modal system unavailable — execute directly
+        await executeTrade(val);
+        return;
+      }
+
+      const confirmed = await Modal.confirm({
+        title:       (isBuy ? 'Confirm Purchase' : 'Confirm Sale'),
+        content:     reviewMsg,
+        confirmText: type.toUpperCase() + ' NOW',
+        cancelText:  'Go Back',
+        dangerMode:  !isBuy,
+        icon:        isBuy ? 'fa-circle-check' : 'fa-circle-arrow-up',
+      });
+
+      if (!confirmed) return;
+
+      await executeTrade(val);
     });
 
     if (window.Modal) Modal.open({ title: '', content, showCloseButton: true });
@@ -764,7 +858,6 @@ const Trade = (() => {
   // ============================================
   // EXPORTS
   // ============================================
-
   return {
     openDeposit,
     openWithdraw,

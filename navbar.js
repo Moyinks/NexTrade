@@ -36,7 +36,7 @@ const Navbar = (() => {
   const PAGES = {
     home:   { label: 'Home',   icon: 'fa-house',       color: '#3B82F6' },
     market: { label: 'Market', icon: 'fa-chart-line',  color: '#3B82F6' },
-    vault:  { label: 'Vault',  icon: 'fa-layer-group', color: '#10B981' },
+    vault:  { label: 'Earn',   icon: 'fa-layer-group', color: '#10B981' },
     wallet: { label: 'Wallet', icon: 'fa-wallet',      color: '#3B82F6' },
   };
 
@@ -106,6 +106,21 @@ const Navbar = (() => {
     // Sync active state with current page
     const currentPage = (window.AppState && AppState.get('ui.currentPage')) || 'home';
     setActive(currentPage);
+
+    // ── KEYBOARD HIDE/SHOW ─────────────────────────────────────────────
+    // When the soft keyboard opens on mobile, window.innerHeight stays fixed
+    // but visualViewport.height shrinks to the visible area.  The pill nav is
+    // position:fixed so it would otherwise sit on top of the search/filter UI.
+    // Hide it while the keyboard is open; restore it the moment it closes.
+    if (window.visualViewport) {
+      const _onViewportResize = () => {
+        // Keyboard is open when the visible height is materially smaller than
+        // the full window height.  0.75 threshold is reliable across iOS/Android.
+        const keyboardOpen = window.visualViewport.height < window.innerHeight * 0.75;
+        if (footerEl) footerEl.style.display = keyboardOpen ? 'none' : '';
+      };
+      window.visualViewport.addEventListener('resize', _onViewportResize);
+    }
   }
 
   // ── PILL STYLES ────────────────────────────────────────────────────────
@@ -199,10 +214,10 @@ const Navbar = (() => {
 
       /* ── LABEL ── */
       .ntm-pill-label {
-        font-family: 'DM Sans', sans-serif;
+        font-family: 'Inter', system-ui, sans-serif;
         font-size: 9px;
-        font-weight: 700;
-        letter-spacing: 0.4px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
         text-transform: uppercase;
         color: #4B5563;
         line-height: 1;
@@ -278,18 +293,18 @@ const Navbar = (() => {
     const initials    = buildInitials(displayName);
 
     const titleHTML = pageId === 'home'
-      ? `<span style="font-size:17px;font-weight:800;letter-spacing:-0.3px;">Nex<span style="color:#3B82F6;">Trade</span></span>`
-      : `<span style="font-size:17px;font-weight:700;letter-spacing:-0.3px;">${cfg.label}</span>`;
+      ? `<span style="font-size:17px;font-weight:800;letter-spacing:-0.5px;font-family:'Inter',system-ui,sans-serif;color:#F8FAFC;">NexTrade</span>`
+      : `<span style="font-size:16px;font-weight:600;letter-spacing:-0.3px;font-family:'Inter',system-ui,sans-serif;color:#F8FAFC;">${cfg.label}</span>`;
 
     headerEl.innerHTML = `
-      <div style="display:flex;align-items:center;gap:9px;font-family:'DM Sans',sans-serif;">
-        <img src="NexTrade-192.png" alt="NexTrade"
+      <div style="display:flex;align-items:center;gap:10px;font-family:'Inter',system-ui,sans-serif;">
+        <img src="pwa2.png" alt="NexTrade"
              style="width:28px;height:28px;border-radius:8px;object-fit:cover;flex-shrink:0;display:block;"
              onerror="this.style.display='none'">
         ${titleHTML}
       </div>
       <div style="position:relative;">
-        <button id="profile-menu-btn" style="width:38px;height:38px;border-radius:12px;background:${SURFACE};border:1px solid ${BORDER_HOVER};display:flex;align-items:center;justify-content:center;color:#F8FAFC;cursor:pointer;transition:all 0.2s;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;letter-spacing:0.5px;box-shadow:${TOP_EDGE};">
+        <button id="profile-menu-btn" style="width:36px;height:36px;border-radius:10px;background:${SURFACE};border:1px solid rgba(255,255,255,0.10);display:flex;align-items:center;justify-content:center;color:#F8FAFC;cursor:pointer;transition:all 0.2s;font-family:'Inter',system-ui,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.3px;box-shadow:${TOP_EDGE};">
           ${initials}
         </button>
         <div id="profile-dropdown" class="profile-dropdown">
@@ -358,23 +373,23 @@ const Navbar = (() => {
     const s = document.createElement('style');
     s.id = 'navbar-premium-styles';
     s.textContent = `
-      .profile-dropdown{position:absolute;top:calc(100% + 12px);right:0;width:260px;background:rgba(21,25,33,0.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,0.09);border-radius:20px;box-shadow:0 12px 40px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.08);opacity:0;transform:translateY(-10px);pointer-events:none;transition:all 0.3s cubic-bezier(0.34,1.2,0.64,1);z-index:9999;overflow:hidden;font-family:'DM Sans',sans-serif;}
+      .profile-dropdown{position:absolute;top:calc(100% + 10px);right:0;width:256px;background:rgba(21,25,33,0.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,0.09);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.07);opacity:0;transform:translateY(-8px);pointer-events:none;transition:all 0.25s cubic-bezier(0.25,0,0.15,1);z-index:9999;overflow:hidden;font-family:'Inter',system-ui,sans-serif;}
       .profile-dropdown.open{opacity:1;transform:translateY(0);pointer-events:all;}
-      .profile-header{display:flex;align-items:center;gap:12px;padding:18px;border-bottom:1px solid rgba(255,255,255,0.06);}
-      .profile-avatar{width:44px;height:44px;border-radius:12px;background:#3B82F6;display:flex;align-items:center;justify-content:center;color:white;font-size:15px;font-weight:700;flex-shrink:0;letter-spacing:0.5px;}
+      .profile-header{display:flex;align-items:center;gap:12px;padding:16px;border-bottom:1px solid rgba(255,255,255,0.06);}
+      .profile-avatar{width:40px;height:40px;border-radius:10px;background:#3B82F6;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:700;flex-shrink:0;}
       .profile-info{flex:1;min-width:0;}
-      .profile-name{font-size:15px;font-weight:700;color:#F8FAFC;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-0.2px;}
-      .profile-email{font-size:12px;color:#94A3B8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-      .profile-verification{display:flex;align-items:center;gap:8px;padding:12px 18px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.06);}
+      .profile-name{font-size:14px;font-weight:600;color:#F8FAFC;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-0.2px;}
+      .profile-email{font-size:11px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+      .profile-verification{display:flex;align-items:center;gap:8px;padding:10px 16px;font-size:11px;font-weight:600;letter-spacing:0.02em;border-bottom:1px solid rgba(255,255,255,0.06);}
       .profile-verification.verified{color:#10b981;background:rgba(16,185,129,0.05);}
       .profile-verification.unverified{color:#f59e0b;background:rgba(245,158,11,0.05);}
-      .profile-menu{padding:8px 0;}
-      .profile-menu-item{width:100%;display:flex;align-items:center;gap:12px;padding:10px 18px;background:none;border:none;color:#F8FAFC;font-family:inherit;font-size:14px;font-weight:600;text-align:left;cursor:pointer;transition:background 0.15s;}
-      .profile-menu-item:hover{background:rgba(255,255,255,0.04);}
-      .menu-icon{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:12px;}
+      .profile-menu{padding:6px 0;}
+      .profile-menu-item{width:100%;display:flex;align-items:center;gap:10px;padding:10px 16px;background:none;border:none;color:#F8FAFC;font-family:'Inter',system-ui,sans-serif;font-size:14px;font-weight:500;text-align:left;cursor:pointer;transition:background 0.12s;}
+      .profile-menu-item:active{background:rgba(255,255,255,0.05);}
+      .menu-icon{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:12px;flex-shrink:0;}
       .profile-menu-item.danger{color:#EF4444;}
-      .profile-menu-item.danger .menu-icon{background:rgba(239,68,68,0.1);color:#EF4444;}
-      .profile-menu-divider{height:1px;background:rgba(255,255,255,0.06);margin:6px 0;}
+      .profile-menu-item.danger .menu-icon{background:rgba(239,68,68,0.10);color:#EF4444;}
+      .profile-menu-divider{height:1px;background:rgba(255,255,255,0.06);margin:4px 0;}
     `;
     document.head.appendChild(s);
   }

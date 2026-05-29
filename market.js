@@ -291,7 +291,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
           <i class="fas fa-fire" style="color:#f59e0b; margin-right:6px; font-size:14px;"></i>
           Trending Now
         </h3>
-        <button onclick="Market.refreshTrending()" style="background:none; border:none; color:var(--color-text-tertiary); cursor:pointer; padding:4px;">
+        <button class="trending-refresh-btn" onclick="Market.refreshTrending()" style="background:none; border:none; color:var(--color-text-tertiary); cursor:pointer; padding:4px;">
           <i class="fas fa-sync-alt" style="font-size:12px;"></i>
         </button>
       </div>
@@ -445,7 +445,8 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
       if (coinId) showCoinDetails(coinId);
     }, { once: false });
 
-    setTimeout(() => renderTrendingSparklines(), 100);
+    // 250ms gives the DOM time to paint before canvas draws
+    requestAnimationFrame(() => requestAnimationFrame(() => renderTrendingSparklines()));
   }
 
   function renderTrendingSparklines() {
@@ -672,7 +673,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
       ${coin.sparkline && coin.sparkline.length > 0 ? `
         <div style="margin-top:12px; height:50px; position:relative;">
-          <canvas class="market-sparkline" data-coin-id="${coin.id}" width="300" height="50"></canvas>
+          <canvas class="market-sparkline" data-coin-id="${encodeURIComponent(String(coin.id || ''))}" width="300" height="50"></canvas>
         </div>
       ` : ''}
     `;
@@ -703,7 +704,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
   }
 
   function renderSparkline(coinId, data, isUp) {
-    const canvas = document.querySelector(`.market-sparkline[data-coin-id="${coinId}"]`);
+    const canvas = document.querySelector(`.market-sparkline[data-coin-id="${encodeURIComponent(String(coinId || ''))}"]`);
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
@@ -903,136 +904,675 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
   }
 
   async function refreshTrending() {
-    const btn = document.querySelector('#trending-container button');
+    // Correct selector — the refresh btn is a sibling of #trending-container,
+    // not a child. Both live inside the createTrendingSection() wrapper div.
+    const btn = document.querySelector('.trending-refresh-btn');
     if (btn) {
-      const originalHTML = btn.innerHTML;
       btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="font-size:12px;"></i>';
       btn.disabled = true;
     }
-    
     try {
       await CacheManager.getTrendingCoins(true);
       await loadTrendingCoins();
       renderTrendingCards();
     } catch (error) {
       console.error('[MARKET] ❌ Trending refresh failed:', error);
-    }
-    
-    if (btn) {
-      btn.innerHTML = '<i class="fas fa-sync-alt" style="font-size:12px;"></i>';
-      btn.disabled = false;
+    } finally {
+      if (btn) {
+        btn.innerHTML = '<i class="fas fa-sync-alt" style="font-size:12px;"></i>';
+        btn.disabled = false;
+      }
     }
   }
 
   // ============================================
-  // COIN DETAILS MODAL
+  // COIN DETAIL OVERLAY — full-screen with chart
   // ============================================
 
-  function showCoinDetails(coinIdOrObject) {
-    if (!window.Modal) {
-      console.warn('[MARKET] Modal not available');
+  // Active chart instance — destroyed on close to free memory
+  let _chartInstance  = null;
+  let _chartSeries    = null;
+  let _chartEl        = null;   // chart container element — needed for RO cleanup
+  let _activeRange    = '1W';   // default range shown on open
+  let _overlayEl      = null;
+  let _liveWs         = null;   // Binance WebSocket — null when no overlay is open
+  let _lastOHLC       = null;   // last historical candle — live WS updates this
+  let _liveBadgeEl    = null;   // "● LIVE" badge DOM element
+  let _livePriceLine  = null;   // current live price guide line
+
+  // Binance symbol map — CoinGecko ID → Binance trading pair
+  // Binance public WS is free, no API key required.
+  const BINANCE_SYM = {
+    'bitcoin':        'btcusdt',  'ethereum':       'ethusdt',
+    'solana':         'solusdt',  'binancecoin':    'bnbusdt',
+    'ripple':         'xrpusdt',  'cardano':        'adausdt',
+    'avalanche-2':    'avaxusdt', 'chainlink':      'linkusdt',
+    'matic-network':  'maticusdt','uniswap':        'uniusdt',
+    'dogecoin':       'dogeusdt', 'toncoin':        'tonusdt',
+    'polkadot':       'dotusdt',  'litecoin':       'ltcusdt',
+    'tron':           'trxusdt',  'near':           'nearusdt',
+    'stellar':        'xlmusdt',  'sui':            'suiusdt',
+  };
+
+  // RANGE_DAYS → Binance kline interval that best matches the historical candle size
+  const RANGE_WS_INTERVAL = { '1D': '30m', '1W': '4h', '1M': '1d', '3M': '1d' };
+
+  // Surge Pool coins NexTrade trades — drives the "NexTrade trades this" card
+  const NEXTRADE_TRADED_COINS = new Set([
+    'bitcoin','ethereum','solana','binancecoin','ripple',
+    'cardano','avalanche-2','chainlink','matic-network','uniswap'
+  ]);
+
+  // Time range → CoinGecko `days` param
+  const RANGE_DAYS = { '1D': 1, '1W': 7, '1M': 30, '3M': 90 };
+
+  function stopLiveWs() {
+    if (_liveWs) {
+      try { _liveWs.close(); } catch (_) {}
+      _liveWs = null;
+    }
+    if (_chartSeries && _livePriceLine && typeof _chartSeries.removePriceLine === 'function') {
+      try { _chartSeries.removePriceLine(_livePriceLine); } catch (_) {}
+    }
+    _livePriceLine = null;
+    _lastOHLC = null;
+    if (_liveBadgeEl) { _liveBadgeEl.style.opacity = '0'; }
+  }
+
+  function destroyChart() {
+    stopLiveWs();
+    if (_chartInstance) {
+      try { _chartInstance.remove(); } catch (_) {}
+      _chartInstance = null;
+      _chartSeries   = null;
+    }
+    // Disconnect ResizeObserver using the stored element reference.
+    // The old querySelector('[id^="chart-"]') never matched because chartEl
+    // has no id, so the RO was leaking on every overlay open/close.
+    if (_chartEl && _chartEl._ro) { try { _chartEl._ro.disconnect(); } catch (_) {} _chartEl._ro = null; }
+    _chartEl = null;
+  }
+
+  // Start Binance WebSocket kline stream — updates last candle in real time.
+  // Called after historical OHLC loads. Gracefully falls back if:
+  //   - coin has no Binance mapping
+  //   - WebSocket fails to connect
+  //   - Network is unavailable
+  function startLiveWs(coinId, range, reconnectAttempt) {
+    reconnectAttempt = reconnectAttempt || 0;
+    stopLiveWs();
+    const sym = BINANCE_SYM[coinId];
+    // Match the live feed interval to the visible chart range so candles
+    // actually advance in real time instead of mutating one frozen bar.
+    const interval = RANGE_WS_INTERVAL[range] || '1m';
+    if (!sym || typeof WebSocket === 'undefined') return;
+
+    try {
+      const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${sym}@kline_${interval}`);
+
+      ws.onopen = () => {
+        if (_liveBadgeEl) {
+          _liveBadgeEl.textContent = '● LIVE';
+          _liveBadgeEl.style.opacity = '1';
+          _liveBadgeEl.style.color   = '#10b981';
+        }
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const { k } = JSON.parse(event.data);
+          if (!k || !_chartSeries) return;
+
+          const open  = parseFloat(k.o);
+          const high  = parseFloat(k.h);
+          const low   = parseFloat(k.l);
+          const close = parseFloat(k.c);
+          const time  = Math.floor((k.t || k.T || Date.now()) / 1000);
+
+          if (![open, high, low, close, time].every(Number.isFinite)) return;
+
+          const update = { time, open, high, low, close };
+          _chartSeries.update(update);
+          _lastOHLC = update;
+
+          if (_chartSeries && typeof _chartSeries.removePriceLine === 'function' && _livePriceLine) {
+            try { _chartSeries.removePriceLine(_livePriceLine); } catch (_) {}
+            _livePriceLine = null;
+          }
+          if (_chartSeries && typeof _chartSeries.createPriceLine === 'function') {
+            _livePriceLine = _chartSeries.createPriceLine({
+              price: close,
+              color: close >= open ? '#10b981' : '#ef4444',
+              lineWidth: 1,
+              lineStyle: LightweightCharts.LineStyle.Dashed,
+              axisLabelVisible: true,
+              title: 'LIVE'
+            });
+          }
+
+          if (_chartInstance && typeof _chartInstance.timeScale === 'function') {
+            try { _chartInstance.timeScale().scrollToRealTime(); } catch (_) {}
+          }
+        } catch (_) {}
+      };
+
+      ws.onerror = () => {
+        // onerror always fires before onclose — update badge only; let onclose handle reconnect.
+        if (_liveBadgeEl) {
+          _liveBadgeEl.textContent = 'Delayed';
+          _liveBadgeEl.style.color = 'var(--color-text-tertiary)';
+        }
+      };
+
+      ws.onclose = (evt) => {
+        _liveWs = null;
+        // Auto-reconnect only when: overlay is still open AND close was not
+        // user-initiated (code 1000 = normal/intentional, sent by stopLiveWs).
+        if (_overlayEl && evt.code !== 1000 && reconnectAttempt < 3) {
+          const delay = Math.min(2000 * Math.pow(2, reconnectAttempt), 16000);
+          const attempt = reconnectAttempt + 1;
+          setTimeout(() => {
+            if (_overlayEl) startLiveWs(coinId, range, attempt);
+          }, delay);
+        }
+      };
+
+      _liveWs = ws;
+    } catch (err) {
+      console.warn('[MARKET] Binance WS failed:', err.message);
+    }
+  }
+
+  function closeOverlay() {
+    destroyChart();
+    if (_overlayEl && _overlayEl.parentNode) {
+      // Capture the element being closed into a local const so that if
+      // showCoinDetails() is called again before the 250 ms animation
+      // finishes, the deferred removal targets THIS overlay — not whatever
+      // _overlayEl points to at callback time (which would be the new one).
+      const el = _overlayEl;
+      _overlayEl = null;
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(20px)';
+      setTimeout(() => {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }, 250);
+    } else {
+      _overlayEl = null;
+    }
+  }
+
+  async function fetchOHLC(coinId, days) {
+    // CoinGecko /coins/{id}/ohlc — returns [timestamp, o, h, l, c] arrays
+    // Free tier: max 90 days. No API key required.
+    const url = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(coinId)}/ohlc?vs_currency=usd&days=${days}`;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000); // 8s timeout
+      let resp;
+      try {
+        resp = await fetch(url, { signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+      if (!resp.ok) throw new Error('CoinGecko ' + resp.status);
+      const raw = await resp.json();
+      if (!Array.isArray(raw) || raw.length === 0) throw new Error('Empty OHLC response');
+      // LightweightCharts expects { time (unix seconds), open, high, low, close }
+      return raw.map(([ts, o, h, l, c]) => ({
+        time:  Math.floor(ts / 1000),
+        open:  o, high: h, low: l, close: c
+      }));
+    } catch (err) {
+      console.warn('[MARKET] OHLC fetch failed, using sparkline fallback:', err.message);
+      return null;
+    }
+  }
+
+  function buildSparklineAsOHLC(sparkline) {
+    // Converts sparkline (hourly prices, last 7d) into pseudo-OHLC for the chart
+    // Groups into 4-hour candles so the chart has a reasonable density
+    const prices = sparkline || [];
+    if (prices.length === 0) return [];
+    const now      = Math.floor(Date.now() / 1000);
+    const interval = 14400; // 4 hours in seconds
+    const startTs  = now - prices.length * 3600;
+    const candles  = [];
+    const chunkSize = 4;
+    for (let i = 0; i < prices.length; i += chunkSize) {
+      const chunk = prices.slice(i, i + chunkSize);
+      if (chunk.length === 0) continue;
+      candles.push({
+        time:  startTs + i * 3600,
+        open:  chunk[0],
+        high:  Math.max(...chunk),
+        low:   Math.min(...chunk),
+        close: chunk[chunk.length - 1]
+      });
+    }
+    return candles;
+  }
+
+  async function renderChart(coinId, days, chartEl, coin) {
+    // Guard: if the overlay was closed (e.g. rapid reopen) while we were
+    // waiting for data, chartEl is no longer in the DOM — bail silently.
+    if (!chartEl.isConnected) return;
+
+    destroyChart();
+    _chartEl = chartEl; // store for RO cleanup in destroyChart()
+    chartEl.innerHTML = '';
+    const loader = document.createElement('div');
+    loader.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--color-text-tertiary);font-size:13px;';
+    loader.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading chart…';
+    chartEl.appendChild(loader);
+
+    let ohlc = await fetchOHLC(coinId, days);
+
+    // Second guard: overlay may have been closed during the network fetch.
+    if (!chartEl.isConnected) return;
+
+    // Fallback to sparkline for 1W if OHLC fails
+    if (!ohlc && days === 7 && coin.sparkline && coin.sparkline.length > 0) {
+      ohlc = buildSparklineAsOHLC(coin.sparkline);
+    }
+
+    chartEl.innerHTML = '';
+
+    if (!ohlc || ohlc.length === 0 || !window.LightweightCharts) {
+      const err = document.createElement('div');
+      err.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-tertiary);font-size:13px;text-align:center;';
+      err.textContent = 'Chart unavailable — try again in a moment';
+      chartEl.appendChild(err);
       return;
     }
 
+    try {
+      _initChart(coinId, days, chartEl, coin, ohlc);
+    } catch (chartErr) {
+      // Chart boot failed — show graceful fallback; overlay already visible.
+      console.warn('[MARKET] Chart init failed (non-fatal):', chartErr.message);
+      _chartInstance = null; _chartSeries = null;
+      chartEl.innerHTML = '';
+      const err = document.createElement('div');
+      err.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-tertiary);font-size:13px;text-align:center;';
+      err.textContent = 'Chart unavailable — try again in a moment';
+      chartEl.appendChild(err);
+    }
+  }
+
+  // Inner synchronous chart initialisation — separated so the try/catch in
+  // renderChart() cleanly catches any LightweightCharts exception.
+  function _initChart(coinId, days, chartEl, coin, ohlc) {
+    const upColor   = '#10b981';
+    const downColor = '#ef4444';
+
+    _chartInstance = LightweightCharts.createChart(chartEl, {
+      width:  chartEl.offsetWidth  || 340,
+      height: chartEl.offsetHeight || 200,
+      layout: {
+        background:  { color: 'transparent' },
+        textColor:   'rgba(255,255,255,0.7)',
+        fontFamily:  'var(--font-mono, monospace)'
+      },
+      grid: {
+        vertLines:   { color: 'rgba(255,255,255,0.05)' },
+        horzLines:   { color: 'rgba(255,255,255,0.05)' }
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal
+      },
+      rightPriceScale: {
+        borderColor:   'rgba(255,255,255,0.08)',
+        scaleMargins:  { top: 0.12, bottom: 0.14 }
+      },
+      timeScale: {
+        borderColor:     'rgba(255,255,255,0.08)',
+        timeVisible:     days <= 7,
+        secondsVisible:  false,
+        borderVisible:   false
+      },
+      watermark: {
+        visible: true,
+        fontSize: 26,
+        horzAlign: 'center',
+        vertAlign: 'center',
+        color: 'rgba(255,255,255,0.04)',
+        text: 'NEXTRADE LIVE'
+      },
+      handleScroll:   { mouseWheel: true, pressedMouseMove: true },
+      handleScale:    { mouseWheel: true, pinch: true }
+    });
+
+    _chartSeries = _chartInstance.addCandlestickSeries({
+      upColor:          upColor,
+      downColor:        downColor,
+      borderUpColor:    upColor,
+      borderDownColor:  downColor,
+      wickUpColor:      upColor,
+      wickDownColor:    downColor,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      priceFormat: {
+        type: 'price',
+        precision: 2,
+        minMove: 0.01
+      }
+    });
+
+    // De-dupe by timestamp before setData — CoinGecko occasionally returns dupes
+    const seen = new Set();
+    const cleanOhlc = ohlc.filter(d => seen.has(d.time) ? false : (seen.add(d.time), true))
+                          .sort((a, b) => a.time - b.time);
+    _chartSeries.setData(cleanOhlc);
+    _chartInstance.timeScale().fitContent();
+    try { _chartInstance.timeScale().scrollToRealTime(); } catch (_) {}
+
+    // Store last candle so live WS updates can reference it
+    _lastOHLC = cleanOhlc[cleanOhlc.length - 1] || null;
+
+    if (_chartSeries && _lastOHLC && typeof _chartSeries.createPriceLine === 'function') {
+      try {
+        _livePriceLine = _chartSeries.createPriceLine({
+          price: _lastOHLC.close,
+          color: _lastOHLC.close >= _lastOHLC.open ? upColor : downColor,
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: 'LIVE'
+        });
+      } catch (_) {
+        _livePriceLine = null;
+      }
+    }
+
+    // Resize observer — redraws if overlay resizes, disconnected on destroy
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(() => {
+        if (_chartInstance) _chartInstance.resize(chartEl.offsetWidth, chartEl.offsetHeight);
+      });
+      ro.observe(chartEl);
+      chartEl._ro = ro; // stored for cleanup in destroyChart()
+    }
+
+    // Start live WebSocket after historical data is rendered
+    startLiveWs(coinId, _activeRange);
+  }
+
+  function showCoinDetails(coinIdOrObject) {
     let coin;
-    
     if (typeof coinIdOrObject === 'string') {
       coin = marketData.find(c => c.id === coinIdOrObject);
-      
-      if (!coin) {
-        console.error('[MARKET] Coin not found:', coinIdOrObject);
-        return;
-      }
+      if (!coin) { console.error('[MARKET] Coin not found:', coinIdOrObject); return; }
     } else {
       coin = coinIdOrObject;
     }
 
-    const content = document.createElement('div');
-    const isUp = (coin.price_change_percentage_24h || 0) >= 0;
+    // Close any existing overlay first
+    closeOverlay();
 
-    content.innerHTML = `
-      <div style="display:flex; align-items:center; gap:12px; padding-bottom:16px; border-bottom:1px solid var(--color-border); margin-bottom:16px;">
-        <div style="width:48px; height:48px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden;">
-          ${coin.image && coin.image.startsWith('https://') ? `<img src="${coin.image}" style="width:100%; height:100%;" referrerpolicy="no-referrer">` : `<span style="font-size:11px; font-weight:700;">${coin.symbol.substring(0, 2)}</span>`}
-        </div>
-        <div style="flex:1;">
-          <div style="font-size:18px; font-weight:700; color:var(--color-text-primary);">${coin.name}</div>
-          <div style="font-size:13px; color:var(--color-text-secondary);">${coin.symbol.toUpperCase()}</div>
-        </div>
-      </div>
+    const isUp       = (coin.price_change_percentage_24h || 0) >= 0;
+    const changeColor = isUp ? '#10b981' : '#ef4444';
+    const isTraded   = NEXTRADE_TRADED_COINS.has(coin.id);
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
-        <div>
-          <div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:4px; font-weight:500;">Price</div>
-          <div style="font-family:var(--font-mono); font-size:20px; font-weight:700; color:var(--color-text-primary);">
-            ${Format.currency(coin.current_price)}
-          </div>
-        </div>
-        <div>
-          <div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:4px; font-weight:500;">24h Change</div>
-          <div style="font-size:18px; font-weight:700; color:${isUp ? '#10b981' : '#ef4444'};">
-            ${coin.price_change_percentage_24h >= 0 ? '+' : ''}${(coin.price_change_percentage_24h || 0).toFixed(2)}%
-          </div>
-        </div>
-      </div>
+    // ── Full-screen overlay ──────────────────────────────────────────────
+    const overlay = document.createElement('div');
+    _overlayEl = overlay;
+    overlay.style.cssText = [
+      'position:fixed;inset:0;z-index:9000;',
+      'background:var(--color-background);',
+      'display:flex;flex-direction:column;',
+      'opacity:0;transform:translateY(20px);',
+      'transition:opacity 0.25s ease,transform 0.25s ease;'
+    ].join('');
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
-        <div style="background:var(--color-surface-elevated); padding:12px; border-radius:8px;">
-          <div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:4px;">Market Cap</div>
-          <div style="font-family:var(--font-mono); font-size:14px; font-weight:600; color:var(--color-text-primary);">
-            ${Format.compactCurrency(coin.market_cap)}
-          </div>
-        </div>
-        <div style="background:var(--color-surface-elevated); padding:12px; border-radius:8px;">
-          <div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:4px;">24h Volume</div>
-          <div style="font-family:var(--font-mono); font-size:14px; font-weight:600; color:var(--color-text-primary);">
-            ${Format.compactCurrency(coin.total_volume)}
-          </div>
-        </div>
-        <div style="background:var(--color-surface-elevated); padding:12px; border-radius:8px;">
-          <div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:4px;">24h High</div>
-          <div style="font-family:var(--font-mono); font-size:14px; font-weight:600; color:var(--color-text-primary);">
-            ${Format.currency(coin.high_24h)}
-          </div>
-        </div>
-        <div style="background:var(--color-surface-elevated); padding:12px; border-radius:8px;">
-          <div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:4px;">24h Low</div>
-          <div style="font-family:var(--font-mono); font-size:14px; font-weight:600; color:var(--color-text-primary);">
-            ${Format.currency(coin.low_24h)}
-          </div>
-        </div>
-      </div>
+    // ── Top bar ──────────────────────────────────────────────────────────
+    const topBar = document.createElement('div');
+    topBar.style.cssText = [
+      'display:flex;align-items:center;gap:12px;',
+      'padding:14px 16px;',
+      'border-bottom:1px solid var(--color-border);',
+      'flex-shrink:0;'
+    ].join('');
 
-      <button id="trade-btn-${coin.id}" class="btn btn-primary" style="width:100%; margin-top:8px;">
-        Trade ${coin.symbol.toUpperCase()}
-      </button>
-    `;
+    const backBtn = document.createElement('button');
+    backBtn.style.cssText = 'background:none;border:none;color:var(--color-text-primary);cursor:pointer;padding:4px 8px 4px 0;font-size:18px;display:flex;align-items:center;';
+    backBtn.innerHTML = '<i class="fas fa-arrow-left"></i>';
+    backBtn.addEventListener('click', closeOverlay);
 
-    const tradeBtn = content.querySelector(`#trade-btn-${coin.id}`);
-    
-    tradeBtn.onclick = () => {
-      Modal.close();
-      
-      setTimeout(() => {
-        if (window.Trade) {
-          Trade.openBuy(coin.id);
-        } else {
-          if (window.App && App.showError) {
-            App.showError('Trade module is loading...');
-          }
-        }
-      }, 300);
-    };
+    const coinIcon = document.createElement('div');
+    coinIcon.style.cssText = 'width:36px;height:36px;border-radius:50%;background:var(--color-surface-elevated);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;';
+    if (coin.image && coin.image.startsWith('https://')) {
+      const img = document.createElement('img');
+      img.src = coin.image; img.referrerPolicy = 'no-referrer';
+      img.style.cssText = 'width:100%;height:100%;';
+      img.onerror = () => { coinIcon.textContent = coin.symbol.substring(0,2); };
+      coinIcon.appendChild(img);
+    } else {
+      coinIcon.textContent = coin.symbol.substring(0,2);
+      coinIcon.style.fontSize = '11px'; coinIcon.style.fontWeight = '700';
+    }
 
-    Modal.open({
-      title: 'Coin Details',
-      content: content,
-      maxWidth: '500px',
-      showCloseButton: true
+    const titleCol = document.createElement('div');
+    titleCol.style.cssText = 'flex:1;min-width:0;';
+    const titleName = document.createElement('div');
+    titleName.style.cssText = 'font-size:16px;font-weight:700;color:var(--color-text-primary);';
+    titleName.textContent = coin.name;
+    const titleSym = document.createElement('div');
+    titleSym.style.cssText = 'font-size:12px;color:var(--color-text-tertiary);';
+    titleSym.textContent = coin.symbol.toUpperCase();
+    titleCol.appendChild(titleName); titleCol.appendChild(titleSym);
+
+    const priceCol = document.createElement('div');
+    priceCol.style.cssText = 'text-align:right;flex-shrink:0;';
+    const priceVal = document.createElement('div');
+    priceVal.style.cssText = 'font-family:var(--font-mono);font-size:20px;font-weight:800;color:var(--color-text-primary);letter-spacing:-0.5px;';
+    priceVal.textContent = window.Format ? Format.currency(coin.current_price) : '$' + coin.current_price.toLocaleString();
+    const changeBadge = document.createElement('div');
+    changeBadge.style.cssText = `font-size:12px;font-weight:700;color:${changeColor};text-align:right;margin-top:2px;`;
+    changeBadge.textContent = (coin.price_change_percentage_24h >= 0 ? '+' : '') + (coin.price_change_percentage_24h || 0).toFixed(2) + '%';
+    priceCol.appendChild(priceVal); priceCol.appendChild(changeBadge);
+
+    topBar.appendChild(backBtn); topBar.appendChild(coinIcon);
+    topBar.appendChild(titleCol); topBar.appendChild(priceCol);
+    overlay.appendChild(topBar);
+
+    // ── Scrollable body ──────────────────────────────────────────────────
+    const body = document.createElement('div');
+    body.style.cssText = 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;';
+
+    // ── Range tabs ───────────────────────────────────────────────────────
+    const rangeBar = document.createElement('div');
+    rangeBar.style.cssText = 'display:flex;align-items:center;gap:4px;padding:10px 16px 0;flex-shrink:0;';
+    const ranges = ['1D','1W','1M','3M'];
+    const rangeBtns = {};
+
+    // LIVE badge — appended after range buttons so margin-left:auto
+    // correctly pushes it to the far right of the flex row.
+    const liveBadge = document.createElement('div');
+    liveBadge.style.cssText = [
+      'margin-left:auto;padding:4px 8px;border-radius:6px;',
+      'font-size:10px;font-weight:700;letter-spacing:0.4px;',
+      'background:rgba(16,185,129,0.1);color:var(--color-text-tertiary);',
+      'opacity:0;transition:opacity 0.3s,color 0.3s;flex-shrink:0;align-self:center;'
+    ].join('');
+    liveBadge.textContent = '● LIVE';
+    _liveBadgeEl = liveBadge;
+
+    function setRange(range) {
+      _activeRange = range;
+      ranges.forEach(r => {
+        const btn = rangeBtns[r];
+        if (!btn) return;
+        const active = r === range;
+        btn.style.background   = active ? 'var(--color-primary)' : 'var(--color-surface)';
+        btn.style.color        = active ? '#fff' : 'var(--color-text-secondary)';
+        btn.style.borderColor  = active ? 'var(--color-primary)' : 'var(--color-border)';
+      });
+      renderChart(coin.id, RANGE_DAYS[range], chartEl, coin);
+      // renderChart will call startLiveWs with the new interval after loading
+    }
+
+    ranges.forEach(r => {
+      const btn = document.createElement('button');
+      btn.textContent = r;
+      btn.style.cssText = [
+        'flex:1;padding:7px 0;border-radius:8px;font-size:12px;font-weight:700;',
+        'border:1px solid var(--color-border);cursor:pointer;transition:all 0.15s;',
+        `background:${r === _activeRange ? 'var(--color-primary)' : 'var(--color-surface)'};`,
+        `color:${r === _activeRange ? '#fff' : 'var(--color-text-secondary)'};`,
+        `border-color:${r === _activeRange ? 'var(--color-primary)' : 'var(--color-border)'};`
+      ].join('');
+      btn.addEventListener('click', () => setRange(r));
+      rangeBtns[r] = btn;
+      rangeBar.appendChild(btn);
     });
+    // liveBadge appended last — margin-left:auto now correctly absorbs all
+    // space to its left (the four range buttons) and sits at the far right.
+    rangeBar.appendChild(liveBadge);
+    body.appendChild(rangeBar);
+
+    // ── Chart container ───────────────────────────────────────────────────
+    const chartEl = document.createElement('div');
+    chartEl.style.cssText = [
+      'height:300px;margin:8px 16px 16px;border-radius:16px;overflow:hidden;',
+      'background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));',
+      'border:1px solid rgba(255,255,255,0.06);',
+      'box-shadow:0 18px 40px rgba(0,0,0,0.18);',
+      'position:relative;flex-shrink:0;'
+    ].join('');
+    body.appendChild(chartEl);
+
+    const chartHint = document.createElement('div');
+    chartHint.style.cssText = [
+      'position:absolute;top:10px;left:10px;z-index:2;',
+      'padding:5px 8px;border-radius:999px;',
+      'background:rgba(0,0,0,0.18);backdrop-filter:blur(10px);',
+      'font-size:10px;font-weight:700;letter-spacing:0.5px;',
+      'color:rgba(255,255,255,0.72);border:1px solid rgba(255,255,255,0.06);'
+    ].join('');
+    chartHint.textContent = 'REAL-TIME · LIGHTWEIGHT CHART';
+    chartEl.appendChild(chartHint);
+
+    // ── NexTrade trades this card ────────────────────────────────────────────
+    if (isTraded) {
+      const yeldaCard = document.createElement('div');
+      yeldaCard.style.cssText = [
+        'margin:0 16px 16px;padding:14px 16px;border-radius:12px;',
+        'background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);',
+        'display:flex;align-items:flex-start;gap:12px;flex-shrink:0;'
+      ].join('');
+
+      const yeldaIcon = document.createElement('div');
+      yeldaIcon.style.cssText = 'width:36px;height:36px;flex-shrink:0;border-radius:10px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.25);display:flex;align-items:center;justify-content:center;font-size:16px;';
+      yeldaIcon.textContent = '⚡';
+
+      const yeldaText = document.createElement('div');
+      yeldaText.style.cssText = 'flex:1;min-width:0;';
+      const yeldaTitle = document.createElement('div');
+      yeldaTitle.style.cssText = 'font-size:13px;font-weight:700;color:var(--color-text-primary);margin-bottom:3px;';
+      yeldaTitle.textContent = 'NexTrade trades this market';
+      const yeldaSub = document.createElement('div');
+      yeldaSub.style.cssText = 'font-size:12px;color:var(--color-text-secondary);line-height:1.4;';
+      yeldaSub.textContent = `The Surge Pool deploys capital into ${coin.name} positions. Price movement in this market directly affects your pool returns.`;
+
+      const yeldaBtn = document.createElement('button');
+      yeldaBtn.style.cssText = 'margin-top:10px;padding:8px 14px;background:var(--color-primary);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;width:100%;';
+      yeldaBtn.textContent = 'Invest in Surge Pool';
+      yeldaBtn.addEventListener('click', () => {
+        closeOverlay();
+        setTimeout(() => {
+          if (window.Router) Router.navigate('vault');
+          else if (window.Navbar) Navbar.setActive('vault');
+        }, 260);
+      });
+
+      yeldaText.appendChild(yeldaTitle);
+      yeldaText.appendChild(yeldaSub);
+      yeldaText.appendChild(yeldaBtn);
+      yeldaCard.appendChild(yeldaIcon);
+      yeldaCard.appendChild(yeldaText);
+      body.appendChild(yeldaCard);
+    }
+
+    // ── Stats grid ────────────────────────────────────────────────────────
+    const stats = document.createElement('div');
+    stats.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 16px;flex-shrink:0;';
+
+    const statItems = [
+      { label: 'Market Cap',  val: window.Format ? Format.compactCurrency(coin.market_cap)    : '$' + (coin.market_cap||0).toLocaleString() },
+      { label: '24h Volume',  val: window.Format ? Format.compactCurrency(coin.total_volume)  : '$' + (coin.total_volume||0).toLocaleString() },
+      { label: '24h High',    val: window.Format ? Format.currency(coin.high_24h)              : '$' + (coin.high_24h||0).toLocaleString() },
+      { label: '24h Low',     val: window.Format ? Format.currency(coin.low_24h)               : '$' + (coin.low_24h||0).toLocaleString() },
+      { label: 'Rank',        val: coin.market_cap_rank ? '#' + coin.market_cap_rank : '—' },
+      { label: '7d Change',   val: coin.price_change_percentage_7d_in_currency != null
+          ? (coin.price_change_percentage_7d_in_currency >= 0 ? '+' : '') + coin.price_change_percentage_7d_in_currency.toFixed(2) + '%'
+          : '—' }
+    ];
+
+    statItems.forEach(({ label, val }) => {
+      const cell = document.createElement('div');
+      cell.style.cssText = 'background:var(--color-surface);border:1px solid var(--color-border);border-radius:10px;padding:12px;';
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'font-size:10px;color:var(--color-text-tertiary);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px;';
+      lbl.textContent = label;
+      const v = document.createElement('div');
+      v.style.cssText = 'font-family:var(--font-mono);font-size:14px;font-weight:700;color:var(--color-text-primary);';
+      v.textContent = val;
+      cell.appendChild(lbl); cell.appendChild(v);
+      stats.appendChild(cell);
+    });
+    body.appendChild(stats);
+
+    // ── Buy / Sell buttons ────────────────────────────────────────────────
+    const actionRow = document.createElement('div');
+    actionRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 32px;flex-shrink:0;';
+
+    const buyBtn = document.createElement('button');
+    buyBtn.className = 'btn';
+    buyBtn.style.cssText = 'background:#10b981;color:#fff;border:none;border-radius:12px;height:50px;font-size:15px;font-weight:700;cursor:pointer;';
+    buyBtn.innerHTML = '<i class="fas fa-arrow-down" style="margin-right:6px;font-size:12px;"></i>Buy';
+    buyBtn.addEventListener('click', () => {
+      closeOverlay();
+      setTimeout(() => { if (window.Trade) Trade.openBuy(coin); }, 260);
+    });
+
+    const sellBtn = document.createElement('button');
+    sellBtn.className = 'btn';
+    sellBtn.style.cssText = 'background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.25);border-radius:12px;height:50px;font-size:15px;font-weight:700;cursor:pointer;';
+    sellBtn.innerHTML = '<i class="fas fa-arrow-up" style="margin-right:6px;font-size:12px;"></i>Sell';
+    sellBtn.addEventListener('click', () => {
+      closeOverlay();
+      setTimeout(() => { if (window.Trade) Trade.openSell(coin); }, 260);
+    });
+
+    actionRow.appendChild(buyBtn); actionRow.appendChild(sellBtn);
+    body.appendChild(actionRow);
+
+    overlay.appendChild(body);
+
+    // ── Swipe-down to close (mobile) ──────────────────────────────────────
+    let touchStartY = 0;
+    overlay.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; }, { passive: true });
+    overlay.addEventListener('touchend', e => {
+      const delta = e.changedTouches[0].clientY - touchStartY;
+      if (delta > 80 && body.scrollTop === 0) closeOverlay();
+    }, { passive: true });
+
+    // ── ESC key ───────────────────────────────────────────────────────────
+    const onKeyDown = (e) => { if (e.key === 'Escape') { closeOverlay(); document.removeEventListener('keydown', onKeyDown); } };
+    document.addEventListener('keydown', onKeyDown);
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      overlay.style.transform = 'translateY(0)';
+    });
+
+    // Kick off chart after overlay is visible
+    setTimeout(() => renderChart(coin.id, RANGE_DAYS[_activeRange], chartEl, coin), 300);
   }
 
-  // ============================================
+    // ============================================
   // STATE SUBSCRIPTIONS
   // ============================================
 

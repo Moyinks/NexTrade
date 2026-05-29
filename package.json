@@ -1,0 +1,12 @@
+{
+  "name": "nextrade",
+  "version": "2.0.0",
+  "description": "NexTrade — Custody-first fintech platform",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "ethers": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
