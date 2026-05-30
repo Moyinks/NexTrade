@@ -1,11 +1,10 @@
 {
+  "buildCommand": null,
+  "outputDirectory": ".",
   "functions": {
-    "generate-address.js": {
+    "api/generate-address.js": {
       "memory": 256,
       "maxDuration": 10
     }
-  },
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" }
-  ]
+  }
 }
