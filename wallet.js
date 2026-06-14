@@ -51,7 +51,8 @@ const Wallet = (() => {
      ═══════════════════════════════════════════════════════════════════════════ */
   let container = null;
   let tickerInterval = null;
-  let unsubTx = null; // AppState 'transactions' subscription — cleaned up on re-render
+  let unsubTx = null;      // AppState 'transactions' subscription — cleaned up on re-render
+  let heroObserver = null; // IntersectionObserver for hero collapse — cleaned up on re-render
   let virtualScrollers = {};
 
   const state = {
@@ -326,6 +327,7 @@ const Wallet = (() => {
     
     const contentContainer = container.querySelector('#tab-content-container');
     if (contentContainer) {
+      if (heroObserver) { heroObserver.disconnect(); heroObserver = null; }
       Object.values(virtualScrollers).forEach(scroller => {
         if (scroller && scroller.destroy) scroller.destroy();
       });
@@ -335,6 +337,8 @@ const Wallet = (() => {
       contentContainer.innerHTML = '';
       contentContainer.appendChild(newContent);
       
+      if (tabId === 'overview') requestAnimationFrame(() => setupHeroObserver());
+
       requestAnimationFrame(() => {
         if (state.ui.scrollPositions[tabId] && virtualScrollers[tabId]) {
           requestAnimationFrame(() => {
@@ -381,6 +385,50 @@ const Wallet = (() => {
     return tab;
   }
 
+  // ── Hero scroll-snap ──────────────────────────────────────────────────────
+  // Hero scrolls naturally — no sticky, no transitions during scroll.
+  // A passive scroll listener reads overviewTab.scrollTop each frame.
+  // snapThreshold = the exact pixel where only compactH of hero remains
+  // visible. At that pixel the snap is seamless: view identical before/after.
+  // Instant class toggle = native feel. CSS layout transitions = jank.
+  //
+  // Two classes keep concerns separate:
+  //   hero--compact  visual state (grid layout, collapsed content)
+  //   hero--snapped  position: sticky; top: 0
+  //
+  // heroObserver exposes .disconnect() so all six existing teardown
+  // points work without modification.
+  function setupHeroObserver() {
+    if (heroObserver) { heroObserver.disconnect(); heroObserver = null; }
+
+    const overviewTab = container.querySelector('.overview-tab');
+    const hero        = document.getElementById('wallet-main-hero');
+    if (!overviewTab || !hero) return;
+
+    // Measure compact height from live DOM before first paint.
+    // Brief class add/remove — invisible inside RAF, no flash.
+    hero.classList.add('hero--compact');
+    const compactH = hero.getBoundingClientRect().height;
+    hero.classList.remove('hero--compact');
+
+    const snapThreshold = Math.max(0, hero.offsetHeight - compactH);
+    let isSnapped = false;
+
+    function onScroll() {
+      const st = overviewTab.scrollTop;
+      if (st >= snapThreshold && !isSnapped) {
+        isSnapped = true;
+        hero.classList.add('hero--compact', 'hero--snapped');
+      } else if (st < snapThreshold && isSnapped) {
+        isSnapped = false;
+        hero.classList.remove('hero--compact', 'hero--snapped');
+      }
+    }
+
+    overviewTab.addEventListener('scroll', onScroll, { passive: true });
+    heroObserver = { disconnect: () => overviewTab.removeEventListener('scroll', onScroll) };
+  }
+
   function createHeroCard(summary) {
     const card = document.createElement('div');
     card.id = 'wallet-main-hero';
@@ -400,15 +448,15 @@ const Wallet = (() => {
     const iconClass = state.hideBalance ? 'fa-eye-slash' : 'fa-eye';
     
     card.innerHTML = `
-      <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px;">
+      <div class="hero-top-row" style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px;">
         <div style="flex:1;">
-          <div style="font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:rgba(255,255,255,0.5); margin-bottom:6px;">
+          <div class="hero-equity-label" style="font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:rgba(255,255,255,0.5); margin-bottom:6px;">
             Total Equity
           </div>
-          <div id="total-equity-display" style="font-family:var(--font-mono); font-size:32px; font-weight:700; color:#ffffff; letter-spacing:-1px; line-height:1.15; margin-bottom:8px;">
+          <div id="total-equity-display" class="hero-equity-amount" style="font-family:var(--font-mono); font-size:32px; font-weight:700; color:#ffffff; letter-spacing:-1px; line-height:1.15; margin-bottom:8px;">
             ${formatMoney(summary.totalEquity)}
           </div>
-          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <div class="hero-breakdown" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
             <div style="font-size:10px; color:rgba(255,255,255,0.7);">
               <span style="opacity:0.6;">Liquid: </span>
               <span style="font-weight:600;">${formatMoney(summary.liquidBalance)}</span>
@@ -500,6 +548,7 @@ const Wallet = (() => {
 
   function createQuickActions() {
     const section = document.createElement('div');
+    section.id = 'wallet-quick-actions';
     section.style.cssText = 'display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:16px; padding:0;';
     
     const actions = [
@@ -1349,6 +1398,7 @@ const Wallet = (() => {
   function render(element) {
     if (tickerInterval) clearInterval(tickerInterval);
     if (unsubTx) { unsubTx(); unsubTx = null; }
+    if (heroObserver) { heroObserver.disconnect(); heroObserver = null; }
     Object.values(virtualScrollers).forEach(scroller => {
       if (scroller && scroller.destroy) scroller.destroy();
     });
@@ -1377,6 +1427,8 @@ const Wallet = (() => {
     contentContainer.style.cssText = 'flex:1; display:flex; flex-direction:column; min-height:0;';
     contentContainer.appendChild(renderTabContent(state.ui.activeTab));
     container.appendChild(contentContainer);
+
+    if (state.ui.activeTab === 'overview') requestAnimationFrame(() => setupHeroObserver());
     
     startLiveTicker();
 
@@ -1388,8 +1440,10 @@ const Wallet = (() => {
         state.transactions = txs || [];
         const contentEl = document.getElementById('tab-content-container');
         if (contentEl) {
+          if (heroObserver) { heroObserver.disconnect(); heroObserver = null; }
           contentEl.innerHTML = '';
           contentEl.appendChild(renderTabContent(state.ui.activeTab));
+          if (state.ui.activeTab === 'overview') requestAnimationFrame(() => setupHeroObserver());
         }
       });
 
@@ -1402,8 +1456,10 @@ const Wallet = (() => {
         state.holdings = AppState.get('holdings') || {};
         const contentEl = document.getElementById('tab-content-container');
         if (contentEl) {
+          if (heroObserver) { heroObserver.disconnect(); heroObserver = null; }
           contentEl.innerHTML = '';
           contentEl.appendChild(renderTabContent(state.ui.activeTab));
+          if (state.ui.activeTab === 'overview') requestAnimationFrame(() => setupHeroObserver());
         }
       });
 
@@ -1411,8 +1467,10 @@ const Wallet = (() => {
         state.holdings = holdings || {};
         const contentEl = document.getElementById('tab-content-container');
         if (contentEl) {
+          if (heroObserver) { heroObserver.disconnect(); heroObserver = null; }
           contentEl.innerHTML = '';
           contentEl.appendChild(renderTabContent(state.ui.activeTab));
+          if (state.ui.activeTab === 'overview') requestAnimationFrame(() => setupHeroObserver());
         }
       });
     }

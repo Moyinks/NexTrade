@@ -5,24 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#F0EDE4">
+<meta name="theme-color" content="#0B0E11">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="NexTrade">
 <link rel="apple-touch-icon" href="/pwa1.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="application-name" content="NexTrade">
-<meta name="msapplication-TileColor" content="#F0EDE4">
+<meta name="msapplication-TileColor" content="#0B0E11">
 <meta name="msapplication-TileImage" content="/pwa2.png">
 <meta name="description" content="A managed trading pool. You put money in, the algorithm trades, the pool grows, you collect your share. We only earn on profit.">
 <link rel="icon" type="image/png" sizes="192x192" href="/pwa1.png">
 <link rel="icon" type="image/png" sizes="512x512" href="/pwa2.png">
 <link rel="shortcut icon" href="/pwa1.png">
-<title>NexTrade — Your money, working.</title>
+<title>NexTrade — Yield on Your Terms</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Barlow:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Barlow:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
 <style>
@@ -238,22 +238,32 @@ img { display: block; max-width: 100%; }
 .pwa-android-close:hover { color: var(--paper); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   TOAST
+   TOAST — Dark obsidian to match app
 ═══════════════════════════════════════════════════════════════════════════ */
 #toast {
   position: fixed;
-  top: 20px; left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 40px); max-width: 400px;
-  padding: 13px 18px;
-  font-size: 13px; font-weight: 600;
-  font-family: var(--mono);
+  top: max(20px, env(safe-area-inset-top, 20px)); left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  width: calc(100% - 40px); max-width: 380px;
+  padding: 12px 16px;
+  font-size: 13px; font-weight: 500;
+  font-family: 'IBM Plex Mono', 'Inter', monospace;
   z-index: 9999;
   display: none;
   text-align: center;
-  border: 2px solid;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: #1E232F;
+  color: #F8FAFC;
+  letter-spacing: 0.02em;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.06) inset;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+#toast.show {
+  display: block;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -372,7 +382,8 @@ img { display: block; max-width: 100%; }
   align-items: center;
   padding: 0 14px;
   font-family: var(--mono);
-  font-size: 9px; color: var(--ink-4);
+  /* ink-3 instead of ink-4: 5:1 contrast on --paper */
+  font-size: 9px; color: var(--ink-3);
   letter-spacing: 0.5px; text-transform: uppercase;
   flex-shrink: 0; white-space: nowrap;
 }
@@ -471,9 +482,9 @@ img { display: block; max-width: 100%; }
 .hero-deck-p .fact {
   font-style: normal;
   font-family: var(--mono);
-  font-size: 12px;
-  background: var(--ink);
-  color: var(--paper);
+  font-size: 15px;
+  background: black;
+  color: white;
   padding: 1px 6px;
   display: inline-block;
   vertical-align: middle;
@@ -500,7 +511,8 @@ img { display: block; max-width: 100%; }
   font-family: var(--mono);
   font-size: 8px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 1px;
-  color: var(--ink-4);
+  /* ink-3 gives ≈5:1 on --paper — AA for bold text */
+  color: var(--ink-3);
   white-space: nowrap;
 }
 .hs-val {
@@ -513,11 +525,12 @@ img { display: block; max-width: 100%; }
 .hs-sub {
   font-family: var(--mono);
   font-size: 8px;
-  color: var(--ink-5);
+  /* ink-4 instead of ink-5: ~3:1 — better for sub-labels */
+  color: var(--ink-4);
   letter-spacing: 0.3px;
 }
 
-/* CTA block */
+/* CTA block — contained zone, hints at the dark-app transition */
 .hero-cta-block {
   padding: var(--space-6) var(--space-5);
   display: flex;
@@ -527,6 +540,8 @@ img { display: block; max-width: 100%; }
   justify-content: flex-start;
   opacity: 0;
   animation: riseIn 0.5s ease 0.42s both;
+  border-top: 1px solid var(--rule);
+  background: var(--paper);
 }
 
 /* Scroll hint */
@@ -652,6 +667,14 @@ img { display: block; max-width: 100%; }
   color: var(--ink); text-transform: uppercase;
 }
 
+.section-intro {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink-2);
+  margin: 10px 0 24px;
+  max-width: 520px;
+}
+
 .section-body { padding: var(--space-6) var(--space-5); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -687,7 +710,7 @@ img { display: block; max-width: 100%; }
 
 /* Pull quote — for emphasis */
 .pull-quote {
-  border-top: 3px solid var(--ink);
+  border-top: 1px solid var(--rule-mid);
   border-bottom: 1px solid var(--rule);
   padding: var(--space-5) var(--space-5);
   background: var(--paper-warm);
@@ -735,12 +758,12 @@ img { display: block; max-width: 100%; }
 .pf-pill {
   display: inline-block;
   margin-top: 6px;
-  border: 1px solid var(--rule-dark);
+  border: 1px solid var(--rule-mid);
   padding: 2px 7px;
   font-family: var(--mono);
   font-size: 9px; font-weight: 600;
   letter-spacing: 0.5px; text-transform: uppercase;
-  color: var(--ink-2);
+  color: var(--ink-3);
 }
 .pf-pill.green { border-color: var(--live); color: var(--live); background: var(--live-bg); }
 .pf-pill.warn  { border-color: var(--warn); color: var(--warn);  background: var(--warn-bg); }
@@ -1126,25 +1149,49 @@ img { display: block; max-width: 100%; }
 
 .footer-legal {
   font-family: var(--mono);
-  font-size: 9px; color: var(--ink-5);
+  font-size: 9px; color: var(--ink-3);
   letter-spacing: 0.2px; line-height: 1.7;
   max-width: 320px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   AUTH PANEL
+   AUTH PANEL  — Dark obsidian to match the app
+   The landing page is deliberately warm/editorial (brand contrast, trust).
+   The auth panel is the moment you step inside — it must feel like the app.
 ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Dark tokens for the auth panel only */
 #auth {
+  --auth-bg:          #0B0E11;
+  --auth-surface:     #151921;
+  --auth-elevated:    #1E232F;
+  --auth-border:      rgba(255, 255, 255, 0.08);
+  --auth-border-mid:  rgba(255, 255, 255, 0.14);
+  --auth-text:        #F8FAFC;
+  --auth-text-2:      #94A3B8;
+  --auth-text-3:      #64748B;
+  --auth-blue:        #3B82F6;
+  --auth-blue-dark:   #2563EB;
+  --auth-blue-glow:   rgba(59, 130, 246, 0.18);
+  --auth-mono:        'IBM Plex Mono', 'Roboto Mono', monospace;
+  --auth-ui:          'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --auth-success:     #10B981;
+  --auth-danger:      #EF4444;
+  --auth-danger-bg:   rgba(239, 68, 68, 0.10);
+
   position: absolute; inset: 0;
-  background: var(--paper);
+  background: var(--auth-bg);
   display: flex;
   flex-direction: column;
   opacity: 0;
-  transform: translateY(28px);
+  transform: translateY(24px);
   pointer-events: none;
-  transition: opacity 0.38s cubic-bezier(0.4, 0, 0.2, 1), transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.34s cubic-bezier(0.25, 0, 0.15, 1),
+              transform 0.34s cubic-bezier(0.25, 0, 0.15, 1);
   z-index: 20;
   overflow: hidden;
+  font-family: var(--auth-ui);
+  color: var(--auth-text);
 }
 #auth.visible {
   opacity: 1;
@@ -1152,41 +1199,45 @@ img { display: block; max-width: 100%; }
   pointer-events: all;
 }
 
-/* Auth header bar */
+/* ── Auth header bar ── */
 .auth-bar {
-  border-bottom: 2px solid var(--rule-dark);
+  border-bottom: 1px solid var(--auth-border);
   display: flex; align-items: stretch;
-  height: 50px; flex-shrink: 0;
-  background: var(--paper);
+  height: 56px; flex-shrink: 0;
+  background: var(--auth-surface);
+  box-shadow: inset 0 -1px 0 var(--auth-border);
 }
 
 .auth-back {
-  width: 50px; height: 50px;
+  width: 56px; height: 56px;
   background: none;
   border: none;
-  border-right: 1px solid var(--rule-dark);
+  border-right: 1px solid var(--auth-border);
   display: flex; align-items: center; justify-content: center;
-  font-size: 13px; color: var(--ink);
+  font-size: 14px; color: var(--auth-text-2);
   flex-shrink: 0;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
+  cursor: pointer;
 }
-.auth-back:active { background: var(--paper-warm); }
+.auth-back:active { background: var(--auth-elevated); color: var(--auth-text); }
 
 .auth-bar-name {
   flex: 1;
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--display);
-  font-size: 20px; letter-spacing: 2px;
-  color: var(--ink);
+  font-family: var(--auth-mono);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--auth-text-3);
 }
 
 .auth-bar-spacer {
-  width: 50px; height: 50px;
-  border-left: 1px solid var(--rule-dark);
+  width: 56px; height: 56px;
+  border-left: 1px solid var(--auth-border);
   flex-shrink: 0;
 }
 
-/* Auth scrollable body */
+/* ── Auth scrollable body ── */
 .auth-scroll {
   flex: 1;
   overflow-y: auto;
@@ -1194,25 +1245,242 @@ img { display: block; max-width: 100%; }
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: none;
   scrollbar-width: none;
+  background: var(--auth-bg);
 }
 .auth-scroll::-webkit-scrollbar { display: none; }
 
+/* ── Auth head: title block ── */
 .auth-head {
-  padding: var(--space-8) var(--space-5) var(--space-5);
-  border-bottom: 1px solid var(--rule);
+  padding: var(--space-8, 32px) var(--space-5, 20px) var(--space-6, 24px);
+  border-bottom: 1px solid var(--auth-border);
 }
 .auth-title {
-  font-family: var(--display);
-  font-size: 46px; letter-spacing: 1px; line-height: 0.95;
-  color: var(--ink); margin-bottom: 6px;
+  font-family: var(--auth-ui);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--auth-text);
+  margin-bottom: 8px;
 }
 .auth-subtitle {
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 14px; color: var(--ink-3);
+  font-family: var(--auth-ui);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--auth-text-2);
+  line-height: 1.5;
 }
 
-.auth-form-body { padding: var(--space-6) var(--space-5) var(--space-10); }
+/* ── Auth form body ── */
+.auth-form-body {
+  padding: var(--space-6, 24px) var(--space-5, 20px) calc(var(--space-12, 48px) + env(safe-area-inset-bottom, 0px));
+}
+
+/* ── Field labels — dark context overrides ── */
+#auth .field label {
+  font-family: var(--auth-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--auth-text-3);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+#auth .field-hint {
+  font-size: 10px;
+  color: var(--auth-text-3);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── Input fields — dark context overrides ── */
+#auth .input-field {
+  width: 100%;
+  background: #050709;
+  border: 1px solid var(--auth-border);
+  border-radius: 10px;
+  padding: 14px 14px;
+  font-size: 16px;
+  font-family: var(--auth-ui);
+  color: var(--auth-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-text-fill-color: var(--auth-text);
+}
+#auth .input-field::placeholder { color: var(--auth-text-3); }
+#auth .input-field:focus {
+  border-color: var(--auth-blue);
+  box-shadow: 0 0 0 2px var(--auth-blue-glow);
+}
+#auth .input-field.error {
+  border-color: var(--auth-danger);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+  background: var(--auth-danger-bg);
+}
+#auth .input-field:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Password toggle ── */
+#auth .input-toggle-pw {
+  position: absolute; right: 0; top: 0; bottom: 0;
+  width: 46px;
+  background: none; border: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: var(--auth-text-3);
+  cursor: pointer; transition: color 0.15s;
+}
+#auth .input-toggle-pw:active { color: var(--auth-text-2); }
+
+/* ── Checkbox — dark style ── */
+#auth .check-box {
+  border: 1.5px solid var(--auth-border-mid);
+  background: transparent;
+  border-radius: 4px;
+}
+#auth .check-box.checked {
+  border-color: var(--auth-success);
+  background: var(--auth-success);
+}
+#auth .check-label {
+  color: var(--auth-text-2);
+  font-size: 13px;
+}
+#auth .check-label a,
+#auth .check-label span {
+  color: var(--auth-text);
+  text-decoration: underline;
+  text-decoration-color: var(--auth-border-mid);
+  font-weight: 500;
+}
+
+/* ── Forgot link ── */
+#auth .forgot-link {
+  color: var(--auth-blue);
+  text-decoration: none;
+  font-family: var(--auth-ui);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── Submit button — dark context ── */
+#auth .btn-submit {
+  width: 100%;
+  height: 52px;
+  background: var(--auth-blue);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-family: var(--auth-ui);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15),
+              0 4px 16px rgba(37, 99, 235, 0.35);
+  transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+  position: relative; overflow: hidden;
+  cursor: pointer;
+}
+#auth .btn-submit:hover {
+  background: var(--auth-blue-dark);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12),
+              0 6px 20px rgba(37, 99, 235, 0.40);
+}
+#auth .btn-submit:active {
+  transform: scale(0.99);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+#auth .btn-submit:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+#auth .btn-submit.loading::after {
+  content: '';
+  position: absolute; top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent);
+  animation: shimmer 1.5s ease infinite;
+}
+
+/* ── OTP inputs — dark ── */
+#auth .otp-group input {
+  background: #050709;
+  border: 1px solid var(--auth-border-mid);
+  border-radius: 10px;
+  color: var(--auth-text);
+  font-family: var(--auth-mono);
+}
+#auth .otp-group input:focus {
+  border-color: var(--auth-blue);
+  background: rgba(59, 130, 246, 0.05);
+}
+#auth .otp-group input.filled { border-color: rgba(255,255,255,0.22); }
+
+/* ── OTP label text ── */
+#auth .otp-label {
+  font-family: var(--auth-ui);
+  font-style: normal;
+  color: var(--auth-text-2);
+  font-size: 14px;
+}
+#auth .otp-label strong { color: var(--auth-text); font-weight: 600; }
+
+/* ── Resend btn ── */
+#auth .btn-resend {
+  color: var(--auth-blue);
+  text-decoration: none;
+  font-family: var(--auth-ui);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── Auth divider ── */
+#auth .auth-rule {
+  width: 100%; height: 1px;
+  background: var(--auth-border);
+  margin: 24px 0;
+}
+
+/* ── Auth error messages ── */
+#auth .input-error-message {
+  color: var(--auth-danger);
+}
+
+/* ── Switch mode link ── */
+#auth .auth-switch {
+  text-align: center;
+  font-size: 13px;
+  color: var(--auth-text-2);
+  margin-top: 24px;
+}
+#auth .auth-switch-link {
+  color: var(--auth-blue);
+  font-weight: 500;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-family: var(--auth-ui);
+  text-decoration: none;
+}
+
+/* ── Error banner inside auth ── */
+#auth .alert,
+#auth [class*="error-banner"] {
+  background: rgba(239, 68, 68, 0.10);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 10px;
+  color: #fca5a5;
+  font-size: 13px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
 
 /* ═══════════════════════════════════════════════════════════════════════════
    FORM COMPONENTS
@@ -1226,11 +1494,12 @@ img { display: block; max-width: 100%; }
   font-family: var(--mono);
   font-size: 9px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 1.5px;
-  color: var(--ink-4);
+  /* ink-3 (#5C5850 on #F0EDE4) ≈ 5.2:1 — WCAG AA pass for bold text */
+  color: var(--ink-3);
   margin-bottom: var(--space-2);
 }
 .field-hint {
-  font-size: 9px; color: var(--ink-5);
+  font-size: 9px; color: var(--ink-4);
   letter-spacing: 0;
   text-transform: none;
   font-weight: 400;
@@ -1421,6 +1690,8 @@ img { display: block; max-width: 100%; }
   border-top: 3px solid var(--ink);
   border-left: 2px solid var(--ink);
   border-right: 2px solid var(--ink);
+  /* Bottom-sheet rounded top corners — now the single declaration */
+  border-radius: 20px 20px 0 0;
   width: 100%; max-width: 500px;
   max-height: 88dvh;
   display: flex; flex-direction: column;
@@ -1445,7 +1716,7 @@ img { display: block; max-width: 100%; }
 }
 .modal-date {
   font-family: var(--mono);
-  font-size: 9px; color: var(--ink-4);
+  font-size: 9px; color: var(--ink-3);
   text-transform: uppercase; letter-spacing: 0.8px;
 }
 
@@ -1463,7 +1734,8 @@ img { display: block; max-width: 100%; }
 
 .modal-body h4 {
   font-family: var(--mono);
-  font-size: 10px; font-weight: 600;
+  /* 11px instead of 10px — legal headings need to be legible */
+  font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 1px;
   color: var(--ink); margin: var(--space-5) 0 var(--space-2);
   border-bottom: 1px solid var(--rule);
@@ -1471,7 +1743,10 @@ img { display: block; max-width: 100%; }
 }
 .modal-body h4:first-child { margin-top: var(--space-4); }
 .modal-body p {
-  font-size: 13px; color: var(--ink-3); line-height: 1.7;
+  /* ink-2 (#2B2926) instead of ink-3 (#5C5850) — 
+     ink-3 on --paper only achieves ~5:1; ink-2 gives >9:1, 
+     ensuring the risk disclosure is readable at 13px */
+  font-size: 13px; color: var(--ink-2); line-height: 1.7;
 }
 .modal-body p + p { margin-top: var(--space-3); }
 
@@ -1643,6 +1918,117 @@ html { text-rendering: optimizeLegibility; }
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   TRUST STRIP — horizontal trust markers below hero
+═══════════════════════════════════════════════════════════════════════════ */
+.lp-trust-strip {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 2px solid var(--rule-dark);
+  background: var(--paper-warm);
+}
+.lp-trust-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 13px var(--space-3);
+  text-align: center;
+}
+.lp-trust-sep {
+  width: 1px;
+  background: var(--rule);
+  flex-shrink: 0;
+}
+.lp-trust-mark {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--live);
+  flex-shrink: 0;
+  line-height: 1;
+}
+.lp-trust-label {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--ink-3);
+  line-height: 1.45;
+}
+
+/* ── Plan note — disclaimer below strategy cards ─── */
+.plan-note {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--ink-4);
+  line-height: 1.65;
+  letter-spacing: 0.2px;
+}
+
+/* ── lp-intro-section — crisp "What Is NexTrade" block ─── */
+.lp-intro-section .section-body {
+  padding: var(--space-6) var(--space-5) var(--space-8);
+}
+.lp-intro-section .lp-intro-h2 {
+  font-family: var(--display);
+  font-size: clamp(30px, 9vw, 46px);
+  letter-spacing: 1px;
+  line-height: 0.95;
+  color: var(--ink);
+  margin-bottom: var(--space-5);
+  text-shadow:
+    0 1px 0 rgba(255,255,255,0.55),
+    0 2px 0 rgba(0,0,0,0.12),
+    0 5px 12px rgba(0,0,0,0.08);
+}
+.lp-intro-section .section-intro {
+  margin-top: 0;
+  margin-bottom: var(--space-3);
+}
+.lp-intro-section .section-intro + .section-intro {
+  margin-top: 0;
+}
+
+/* ── Risk section — uses ledger layout, check/warn marks ─── */
+.risk-mark-ok  { font-family:var(--mono); font-size:14px; color:var(--live);  line-height:1; }
+.risk-mark-warn{ font-family:var(--mono); font-size:14px; color:var(--warn);  line-height:1; }
+
+/* ── Trust section — checkmark index (replaces roman numerals) ─── */
+.trust-row .trust-idx {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--live);
+  text-align: right;
+  padding-top: 2px;
+  letter-spacing: 0;
+}
+
+/* ── Strategy section — elevated masthead so it feels like a product launch moment ─── */
+.strategies-section .section-masthead {
+  background: var(--ink);
+  border-bottom: none;
+}
+.strategies-section .section-num {
+  color: rgba(240,237,228,0.45);
+}
+.strategies-section .section-flag {
+  color: var(--paper);
+}
+
+/* ── Hero CTA block — more breathing room ─── */
+.hero-cta-block {
+  padding: var(--space-8) var(--space-5);
+}
+
+/* ── Bottom CTA flag left — remove "Ready to invest" and replace with calmer line ─── */
+.cta-flag-left {
+  letter-spacing: 0.8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    REDUCED MOTION
 ═══════════════════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
@@ -1662,7 +2048,7 @@ html { text-rendering: optimizeLegibility; }
     <i class="fa-solid fa-bolt" style="display:none;"></i>
   </div>
   <div class="pwa-ios-body">
-    <div class="pwa-ios-title">Add NexTrade to Home Screen</div>
+    <div class="pwa-ios-title">Add NexTrade — start earning</div>
     <div class="pwa-ios-msg">
       Tap <span class="pwa-ios-share">↑</span> <strong>Share</strong>,
       then <strong>"Add to Home Screen"</strong> for the full app experience.
@@ -1701,7 +2087,7 @@ html { text-rendering: optimizeLegibility; }
       <div class="masthead-brand-box">
         <img src="/pwa1.png" alt="NexTrade" class="brand-logo-img">
       </div>
-      <div class="masthead-brand-name">NEXTRADE</div>
+      <div class="masthead-brand-name">NexTrade</div>
     </div>
     <div class="masthead-ticker-track" aria-hidden="true">
       <div class="masthead-ticker-inner" id="tickerEl"></div>
@@ -1713,48 +2099,29 @@ html { text-rendering: optimizeLegibility; }
   <section class="hero">
 
     <div class="hero-strip">
-      <span class="hero-strip-left">Managed Trading Pool · Since 2024</span>
+      <span class="hero-strip-left">Managed Trading Pool · Est. 2024</span>
       <div class="hero-strip-right">
         <span class="live-dot" aria-hidden="true"></span>
-        <span id="live-count">2,341 earning now</span>
+        <span>Pool active</span>
       </div>
     </div>
 
     <div class="hero-head">
-      <span class="hero-kicker">Your money is working against you. Here's how to fix that.</span>
+      <span class="hero-kicker">Your savings account loses to inflation every year. There's a better structure.</span>
       <h1 class="hero-h1">
-        YOUR MONEY,
-        <span class="h1-line-2">WORKING.</span>
+        YIELD
+        <span class="h1-line-2">ON YOUR TERMS.</span>
       </h1>
     </div>
 
     <div class="hero-deck">
       <p class="hero-deck-p">
-        Your savings account pays <span class="fact">~4% APY</span>.
-        Inflation runs at <span class="fact">~3.5%</span>.
-        The math is brutal — you're not saving, you're <strong>losing ground slowly.</strong>
-        NexTrade pools your money with other investors, trades it algorithmically,
-        and pays you your share of whatever the pool earns.
-        We take a cut only when we actually make you money.
+        Traditional savings yield about <span class="fact">4% annually</span> — below the real inflation rate.
+        NexTrade pools your funds into an actively managed trading strategy,
+        deploys them algorithmically 24 hours a day, and distributes your proportional share of whatever the pool earns.
+        <strong>Our Surge Pool targets 67% in a 30 - day cycle.</strong>
+        We charge zero fees on your principal. We earn only when you do.
       </p>
-    </div>
-
-    <div class="hero-stats" role="list">
-      <div class="hero-stat" role="listitem">
-        <span class="hs-label">Base Pool APY</span>
-        <div class="hs-val green" id="stat-apy">22%</div>
-        <span class="hs-sub">Steady strategy</span>
-      </div>
-      <div class="hero-stat" role="listitem">
-        <span class="hs-label">Fee on Principal</span>
-        <div class="hs-val">$0.00</div>
-        <span class="hs-sub">Zero. Always.</span>
-      </div>
-      <div class="hero-stat" role="listitem">
-        <span class="hs-label">Shortest Term</span>
-        <div class="hs-val">30D</div>
-        <span class="hs-sub">Alpha strategy</span>
-      </div>
     </div>
 
     <div class="hero-cta-block">
@@ -1764,37 +2131,141 @@ html { text-rendering: optimizeLegibility; }
       <button class="btn-ghost" onclick="enterAuth('login')">
         Sign in to existing account
       </button>
+      <p style="font-family:var(--mono);font-size:9px;color:var(--ink-4);text-align:center;letter-spacing:0.8px;text-transform:uppercase;margin-top:4px;">
+        No management fee &nbsp;·&nbsp; No deposit fee &nbsp;·&nbsp; Open in 90 seconds
+      </p>
     </div>
 
     <div class="scroll-hint" aria-hidden="true">
       <div class="scroll-pill"><div class="scroll-pill-inner"></div></div>
-      <span class="scroll-hint-text">How it actually works</span>
+      <span class="scroll-hint-text">See the strategies</span>
     </div>
 
   </section>
 
-  <!-- ─── HOW THE POOL WORKS ────────────────────────────────────────────── -->
+  <!-- ─── TRUST STRIP ───────────────────────────────────────────────────── -->
+  <div class="lp-trust-strip reveal" aria-label="Trust markers">
+    <div class="lp-trust-item">
+      <span class="lp-trust-mark" aria-hidden="true">✓</span>
+      <span class="lp-trust-label">Ledger-verified balance</span>
+    </div>
+    <div class="lp-trust-sep" aria-hidden="true"></div>
+    <div class="lp-trust-item">
+      <span class="lp-trust-mark" aria-hidden="true">✓</span>
+      <span class="lp-trust-label">Performance fee on profit only</span>
+    </div>
+    <div class="lp-trust-sep" aria-hidden="true"></div>
+    <div class="lp-trust-item">
+      <span class="lp-trust-mark" aria-hidden="true">✓</span>
+      <span class="lp-trust-label">Claimable at maturity</span>
+    </div>
+  </div>
+
+  <!-- ─── STRATEGIES ────────────────────────────────────────────────────── -->
+  <section class="strategies-section reveal reveal-d1" id="section-plans">
+
+    <div class="section-masthead">
+      <span class="section-num">01 — Strategies</span>
+      <span class="section-flag">Two Strategies. One Clear Structure.</span>
+    </div>
+
+    <div class="plan-cols">
+
+      <div class="plan-col green">
+        <div class="plan-name" style="border-top:none;padding-top:0;margin-top:0;">Steady Accumulator</div>
+        <div class="plan-apy-num green">22%</div>
+        <div class="plan-apy-label">Gross target per 90-day cycle</div>
+        <div class="plan-range">Projected range: 18–26% gross per cycle</div>
+        <div class="plan-desc">
+          Conservative yield through stablecoin lending, ETH staking, and liquidity provision. No leverage. 90 days to maturity.
+        </div>
+        <div class="plan-meta">
+          <div class="plan-meta-row">
+            <span class="pm-k">Duration</span>
+            <span class="pm-v">90 days</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Minimum</span>
+            <span class="pm-v">$100</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Risk level</span>
+            <span class="pm-v">Low</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Performance fee</span>
+            <span class="pm-v">15% of profit</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Early exit</span>
+            <span class="pm-v">8% penalty</span>
+          </div>
+        </div>
+        <div class="plan-risk green">Low Risk</div>
+      </div>
+
+      <div class="plan-col amber">
+        <div class="plan-name" style="border-top:none;padding-top:0;margin-top:0;">Surge Pool</div>
+        <div class="plan-apy-num amber">67%</div>
+        <div class="plan-apy-label">Gross target per 30-day cycle</div>
+        <div class="plan-range">Projected range: 55–80% gross per cycle</div>
+        <div class="plan-desc">
+          Shorter cycles, more active positioning. Designed for larger capital at scale. Higher ceiling, higher commitment.
+        </div>
+        <div class="plan-meta">
+          <div class="plan-meta-row">
+            <span class="pm-k">Duration</span>
+            <span class="pm-v">30 days</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Minimum</span>
+            <span class="pm-v">$1,500</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Risk level</span>
+            <span class="pm-v">Medium–High</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Performance fee</span>
+            <span class="pm-v">20% of profit</span>
+          </div>
+          <div class="plan-meta-row">
+            <span class="pm-k">Early exit</span>
+            <span class="pm-v">15% penalty</span>
+          </div>
+        </div>
+        <div class="plan-risk amber">Med–High Risk</div>
+      </div>
+
+    </div>
+
+    <div class="plan-note">
+      Return figures are gross targets based on strategy design. The performance fee applies to profit only at the point of claim — never in advance, never to principal.
+    </div>
+
+  </section>
+
+  <!-- ─── HOW RETURNS WORK ──────────────────────────────────────────────── -->
   <section class="pool-explainer reveal" id="section-pool">
 
     <div class="section-masthead">
-      <span class="section-num">§ 01 — The Mechanics</span>
-      <span class="section-flag">How We Make Money</span>
+      <span class="section-num">02 — Mechanics</span>
+      <span class="section-flag">How Returns Work</span>
     </div>
 
     <div class="pool-headline">
-      <span class="pool-headline-label">No jargon. Just how it works.</span>
+      <span class="pool-headline-label">The full cycle, start to claim.</span>
       <h2 class="pool-headline-h2">
-        POOL IN.<br>GROW TOGETHER.<br>CLAIM YOUR SHARE.
+        DEPOSIT.<br>POOL RUNS.<br>CLAIM AT MATURITY.
       </h2>
       <p class="pool-headline-sub">
-        Most fintech platforms are vague about where returns come from.
-        We're not. Here's the exact mechanism — step by step.
+        Every step is traceable. Your balance is derived from the transaction ledger — every entry is permanent, every claim is verifiable.
       </p>
     </div>
 
     <div class="pull-quote">
       <div class="pull-quote-text">
-        WE EARN NOTHING<br>UNTIL <span class="pq-accent">YOU PROFIT.</span>
+        ZERO POOL PROFIT<br><span class="pq-accent">= ZERO FEE TO US.</span>
       </div>
     </div>
 
@@ -1803,62 +2274,42 @@ html { text-rendering: optimizeLegibility; }
       <div class="pool-flow-row">
         <div class="pf-arrow">1</div>
         <div class="pf-content">
-          <div class="pf-title">Deposit into your Spot Wallet</div>
+          <div class="pf-title">Fund your Spot Wallet</div>
           <div class="pf-desc">
-            Your money sits in your personal wallet first — separate from any pool.
-            Nothing is invested until you say so. You control the timing.
+            Your deposit lands in your Spot Wallet — a liquid balance held separately from any active Strategy. Nothing is invested until you choose a Strategy and confirm the allocation.
           </div>
-          <span class="pf-pill">Your balance. Your call.</span>
+          <span class="pf-pill">No Lock • Withdraw anytime you change your mind</span>
         </div>
       </div>
 
       <div class="pool-flow-row">
         <div class="pf-arrow">2</div>
         <div class="pf-content">
-          <div class="pf-title">Choose a strategy and commit</div>
+          <div class="pf-title">Choose a Strategy and commit</div>
           <div class="pf-desc">
-            Your deposit buys a proportional share of a trading pool.
-            Think of it like owning a slice of a fund —
-            the more you put in, the bigger your slice of whatever the pool earns.
+            Capital moves from your Spot Wallet into your chosen Strategy. Your position is proportional — the more capital you commit, the larger your share of what the pool earns over the cycle.
           </div>
-          <span class="pf-pill">Min. $1,500 · locked 30 or 90 days</span>
+          <span class="pf-pill">From $100 · Steady (90 days) or Surge (30 days, $1,500 min)</span>
         </div>
       </div>
 
       <div class="pool-flow-row">
         <div class="pf-arrow live">3</div>
         <div class="pf-content">
-          <div class="pf-title">The algorithm runs the pool, 24/7</div>
+          <div class="pf-title">The algorithm runs continuously</div>
           <div class="pf-desc">
-            Stablecoin lending, ETH staking, momentum signals, funding rate arbitrage.
-            No humans second-guessing it at 2am.
-            The system executes and rebalances continuously while your capital is locked.
+            The approach varies by Strategy — stablecoin lending and ETH staking for Steady; more active positioning for Surge. Positions open and close on predefined rules. The system runs around the clock while your capital is committed.
           </div>
           <span class="pf-pill green">Always on · Never sleeps</span>
         </div>
       </div>
 
       <div class="pool-flow-row">
-        <div class="pf-arrow">4</div>
+        <div class="pf-arrow live">4</div>
         <div class="pf-content">
-          <div class="pf-title">The pool grows — your share grows with it</div>
+          <div class="pf-title">Claim principal and earnings at maturity</div>
           <div class="pf-desc">
-            Returns are proportional to your position size and how the pool performs.
-            We project 22–65% annually depending on the strategy.
-            These are projections, not promises. Markets move both ways.
-          </div>
-          <span class="pf-pill warn">Returns are projections. Capital at risk.</span>
-        </div>
-      </div>
-
-      <div class="pool-flow-row">
-        <div class="pf-arrow live">5</div>
-        <div class="pf-content">
-          <div class="pf-title">Claim your principal + profit share</div>
-          <div class="pf-desc">
-            After the lock period, you claim everything back to your Spot Wallet —
-            original deposit plus your cut of the pool's gains.
-            From there: withdraw, reinvest, or sit on it. Your call.
+            At cycle end, your original deposit plus your share of pool earnings — after the performance fee — returns to your Spot Wallet. From there, withdraw or reinvest on your own schedule.
           </div>
           <span class="pf-pill green">Ledger-verified · Claimable at maturity</span>
         </div>
@@ -1866,24 +2317,35 @@ html { text-rendering: optimizeLegibility; }
 
     </div>
 
-    <!-- Fee split -->
-    <div class="fee-split">
-      <span class="fee-split-label">How we get paid</span>
+  </section>
+
+  <!-- ─── FEE STRUCTURE ─────────────────────────────────────────────────── -->
+  <section class="section reveal reveal-d1" id="section-fees">
+
+    <div class="section-masthead">
+      <span class="section-num">03 — Fees</span>
+      <span class="section-flag">How We Get Paid</span>
+    </div>
+
+    <div class="fee-split" style="border-bottom:none;">
       <p class="fee-split-eg">
-        Say you invest $5,000. The pool returns 22%. You're owed $6,100 at maturity.
-        We take 15% of the <em>profit only</em> — that's $165 on $1,100 of growth.
-        You receive $5,935. Your original $5,000 is never touched.
+        We earn a performance fee from profit only. Your principal is never charged. No deposit fee. No withdrawal fee. No monthly management fee.
       </p>
 
-      <div class="fee-bar-wrap">
+      <p class="fee-split-eg" style="border-top:1px solid var(--rule);padding-top:var(--space-4);margin-top:var(--space-4);">
+        <strong style="font-style:normal;color:var(--ink);">Example — Steady Accumulator:</strong><br>
+        You invest <span class="fact">$5,000</span>. The pool returns 22% gross: <span class="fact">$1,100 profit</span>. Performance fee (15% of profit only): <span class="fact">$165</span>. Your net return: <span class="fact">$935</span>. You receive back <span class="fact">$5,935 total</span>. Your $5,000 principal was untouched by fees at every point.
+      </p>
+
+      <div class="fee-bar-wrap" style="margin-top:var(--space-4);">
         <div class="fee-bar-track">
           <div class="fee-bar-you" style="width:0%" data-width="85%">You — $5,935</div>
           <div class="fee-bar-us">Us — $165</div>
         </div>
-        <div class="fee-bar-note" style="margin-top:5px;">Based on: $5,000 invested · 22% return · 15% performance fee</div>
+        <div class="fee-bar-note" style="margin-top:5px;">Based on: $5,000 invested · 22% gross target · 15% performance fee on profit</div>
       </div>
 
-      <div class="fee-rows">
+      <div class="fee-rows" style="margin-top:var(--space-5);">
         <div class="fee-row">
           <span class="fee-row-key"><span class="fee-row-dot green"></span>Deposit fee</span>
           <span class="fee-row-val zero">$0 — None</span>
@@ -1901,11 +2363,11 @@ html { text-rendering: optimizeLegibility; }
           <span class="fee-row-val zero">$0 — Never</span>
         </div>
         <div class="fee-row">
-          <span class="fee-row-key"><span class="fee-row-dot black"></span>Performance fee (Steady)</span>
+          <span class="fee-row-key"><span class="fee-row-dot black"></span>Performance fee (Steady Accumulator)</span>
           <span class="fee-row-val">15% of profit only</span>
         </div>
         <div class="fee-row">
-          <span class="fee-row-key"><span class="fee-row-dot warn"></span>Performance fee (Alpha)</span>
+          <span class="fee-row-key"><span class="fee-row-dot warn"></span>Performance fee (Surge Pool)</span>
           <span class="fee-row-val">20% of profit only</span>
         </div>
         <div class="fee-row">
@@ -1917,11 +2379,57 @@ html { text-rendering: optimizeLegibility; }
 
   </section>
 
-  <!-- ─── GET STARTED ───────────────────────────────────────────────────── -->
-  <section class="section reveal reveal-d1" id="section-how">
+  <!-- ─── WHY NexTrade ──────────────────────────────────────────────────────── -->
+  <section class="trust-section reveal reveal-d1" id="section-trust">
 
     <div class="section-masthead">
-      <span class="section-num">§ 02 — Onboarding</span>
+      <span class="section-num">04 — Structure</span>
+      <span class="section-flag">Why the Model Works</span>
+    </div>
+
+    <div class="section-body">
+      <div class="trust-table">
+
+        <div class="trust-row">
+          <span class="trust-idx">✓</span>
+          <div class="trust-body">
+            <div class="trust-title">Complete ledger transparency</div>
+            <div class="trust-desc">
+              Every deposit, Strategy allocation, and claim creates a permanent ledger entry. Your balance is derived from that history — every movement is visible, every figure is traceable back to a transaction.
+            </div>
+          </div>
+        </div>
+
+        <div class="trust-row">
+          <span class="trust-idx">✓</span>
+          <div class="trust-body">
+            <div class="trust-title">Our incentive is your return</div>
+            <div class="trust-desc">
+              Our only revenue is a share of pool profit. No profit, no fee. Our incentive is structurally identical to yours — the pool needs to perform. There is no scenario where we earn on a cycle that didn't work for you.
+            </div>
+          </div>
+        </div>
+
+        <div class="trust-row">
+          <span class="trust-idx">✓</span>
+          <div class="trust-body">
+            <div class="trust-title">Defined cycles. No open-ended commitments.</div>
+            <div class="trust-desc">
+              Steady Accumulator runs 90 days. Surge Pool runs 30 days. At maturity, you claim and decide — reinvest, withdraw, or switch. Nothing rolls over silently. You control every allocation.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ─── GET STARTED ───────────────────────────────────────────────────── -->
+  <section class="section reveal reveal-d2" id="section-how">
+
+    <div class="section-masthead">
+      <span class="section-num">05 — Onboarding</span>
       <span class="section-flag">Getting Started</span>
     </div>
 
@@ -1933,198 +2441,31 @@ html { text-rendering: optimizeLegibility; }
           <div class="ledger-body">
             <div class="ledger-title">Create a free account</div>
             <div class="ledger-desc">
-              Name, email, password — then a 6-digit verification code to confirm you're real.
-              No ID upload. No waiting period. You're in in 90 seconds.
+              Name, email, password — then a 6-digit verification code to confirm your address. No ID upload required. Takes about 90 seconds.
             </div>
-            <span class="ledger-tag">⚡ 90 seconds</span>
+            <span class="ledger-tag">Free · No documents required</span>
           </div>
         </div>
 
         <div class="ledger-row">
           <div class="ledger-n">2</div>
           <div class="ledger-body">
-            <div class="ledger-title">Answer two questions</div>
-            <div class="ledger-desc">
-              Risk appetite and time horizon. We use this to point you at the
-              right strategy — not to gatekeep you from anything. You choose what you invest in.
-            </div>
-            <span class="ledger-tag">📊 Takes 60 seconds</span>
-          </div>
-        </div>
-
-        <div class="ledger-row">
-          <div class="ledger-n">3</div>
-          <div class="ledger-body">
             <div class="ledger-title">Fund your Spot Wallet</div>
             <div class="ledger-desc">
-              Your Spot Wallet is your liquid balance — it lives separately from any investment.
-              Add at least $1,500 before you can invest in a pool. Move money in, move it out — no lock.
+              Your Spot Wallet holds your liquid balance — separate from any active Strategy. Nothing is allocated until you choose.
             </div>
-            <span class="ledger-tag">💳 Min. $1,500 to invest</span>
+            <span class="ledger-tag">Minimum $100 to invest</span>
           </div>
         </div>
 
         <div class="ledger-row">
           <div class="ledger-n done">✓</div>
           <div class="ledger-body">
-            <div class="ledger-title">Deploy and let it run</div>
+            <div class="ledger-title">Choose a Strategy and deploy</div>
             <div class="ledger-desc">
-              Pick Steady Accumulator (90 days, 22%) or Alpha Seeker (30 days, 65%).
-              Confirm your investment. The algorithm takes it from there — track your pool
-              position live from the portfolio tab.
+              Select Steady Accumulator or Surge Pool, confirm your amount, and your position is live. Track performance from the portfolio tab throughout the cycle.
             </div>
-            <span class="ledger-tag green">Tracking starts immediately</span>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
-  </section>
-
-  <!-- ─── STRATEGIES ────────────────────────────────────────────────────── -->
-  <section class="strategies-section reveal reveal-d2" id="section-plans">
-
-    <div class="section-masthead">
-      <span class="section-num">§ 03 — Strategies</span>
-      <span class="section-flag">Pick Your Pool</span>
-    </div>
-
-    <div class="plan-cols">
-
-      <div class="plan-col green">
-        <div class="plan-apy-num green">22%</div>
-        <div class="plan-apy-label">Target APY</div>
-        <div class="plan-range">Projected range: 18–26%</div>
-        <div class="plan-name">Steady Accumulator</div>
-        <div class="plan-desc">
-          Stablecoin lending + ETH staking + liquidity provision.
-          Zero leverage. Capital only in audited protocols.
-          Designed for people who want growth without nightmares.
-        </div>
-        <div class="plan-meta">
-          <div class="plan-meta-row">
-            <span class="pm-k">Lock period</span>
-            <span class="pm-v">90 days</span>
-          </div>
-          <div class="plan-meta-row">
-            <span class="pm-k">Minimum</span>
-            <span class="pm-v">$1,500</span>
-          </div>
-          <div class="plan-meta-row">
-            <span class="pm-k">Performance fee</span>
-            <span class="pm-v">15% of profit</span>
-          </div>
-          <div class="plan-meta-row">
-            <span class="pm-k">Early exit</span>
-            <span class="pm-v">8% penalty</span>
-          </div>
-        </div>
-        <div class="plan-risk green">Low Risk</div>
-      </div>
-
-      <div class="plan-col amber">
-        <div class="plan-apy-num amber">65%</div>
-        <div class="plan-apy-label">Target APY</div>
-        <div class="plan-range">Projected range: 45–90%</div>
-        <div class="plan-name">Alpha Seeker</div>
-        <div class="plan-desc">
-          Quant momentum signals + funding rate arbitrage + volatile-pair liquidity.
-          Higher ceiling, higher floor risk.
-          Built for investors who understand the tradeoff.
-        </div>
-        <div class="plan-meta">
-          <div class="plan-meta-row">
-            <span class="pm-k">Lock period</span>
-            <span class="pm-v">30 days</span>
-          </div>
-          <div class="plan-meta-row">
-            <span class="pm-k">Minimum</span>
-            <span class="pm-v">$1,500</span>
-          </div>
-          <div class="plan-meta-row">
-            <span class="pm-k">Performance fee</span>
-            <span class="pm-v">20% of profit</span>
-          </div>
-          <div class="plan-meta-row">
-            <span class="pm-k">Early exit</span>
-            <span class="pm-v">15% penalty</span>
-          </div>
-        </div>
-        <div class="plan-risk amber">Med–High Risk</div>
-      </div>
-
-    </div>
-
-  </section>
-
-  <!-- ─── WHY TRUST US ──────────────────────────────────────────────────── -->
-  <section class="trust-section reveal reveal-d1" id="section-trust">
-
-    <div class="section-masthead">
-      <span class="section-num">§ 04 — Infrastructure</span>
-      <span class="section-flag">Why Trust Us</span>
-    </div>
-
-    <div class="section-body">
-      <div class="trust-table">
-
-        <div class="trust-row">
-          <span class="trust-idx">i.</span>
-          <div class="trust-body">
-            <div class="trust-title">An append-only transaction ledger</div>
-            <div class="trust-desc">
-              Every deposit, investment, and claim is an immutable record.
-              Your balance is <em>derived</em> from these transactions — never stored as
-              an editable number. There's no admin panel that can silently change it.
-            </div>
-          </div>
-        </div>
-
-        <div class="trust-row">
-          <span class="trust-idx">ii.</span>
-          <div class="trust-body">
-            <div class="trust-title">We only eat when you eat</div>
-            <div class="trust-desc">
-              Our revenue is a fixed percentage of pool profit. Pool earns zero — we earn zero.
-              This isn't a tagline. It is the fee structure. Our incentive is identical to yours.
-            </div>
-          </div>
-        </div>
-
-        <div class="trust-row">
-          <span class="trust-idx">iii.</span>
-          <div class="trust-body">
-            <div class="trust-title">Cryptographic build integrity</div>
-            <div class="trust-desc">
-              SHA-256 hashes published on every deploy. Supabase Row-Level Security means
-              your data is mathematically isolated — one account cannot touch another's
-              records, not even by accident.
-            </div>
-          </div>
-        </div>
-
-        <div class="trust-row">
-          <span class="trust-idx">iv.</span>
-          <div class="trust-body">
-            <div class="trust-title">Works without internet</div>
-            <div class="trust-desc">
-              Full PWA. Portfolio, transaction history, and holdings are cached locally.
-              A bad signal doesn't mean a blind spot on your money.
-              No app store required — install straight from your browser.
-            </div>
-          </div>
-        </div>
-
-        <div class="trust-row">
-          <span class="trust-idx">v.</span>
-          <div class="trust-body">
-            <div class="trust-title">Live market data — not simulated</div>
-            <div class="trust-desc">
-              Binance WebSocket and CoinGecko feed real-time prices across the market tab.
-              Candlesticks, Fear &amp; Greed index, trending coins — all live.
-              What you see is exactly what the market is doing right now.
-            </div>
+            <span class="ledger-tag green">Position tracking starts immediately</span>
           </div>
         </div>
 
@@ -2137,7 +2478,7 @@ html { text-rendering: optimizeLegibility; }
   <section class="bottom-cta reveal" id="section-cta">
 
     <div class="cta-flag-row">
-      <span class="cta-flag-left">Ready to invest · Min. $1,500</span>
+      <span class="cta-flag-left">Steady Accumulator from $100 · Surge Pool from $1,500</span>
       <div class="cta-flag-right">
         <span class="live-dot" aria-hidden="true"></span>
         <span>Open now</span>
@@ -2147,12 +2488,10 @@ html { text-rendering: optimizeLegibility; }
     <div class="cta-inner">
       <div class="cta-rule" aria-hidden="true"></div>
       <h2 class="cta-headline">
-        STOP WAITING.<br>START EARNING.
+        READY<br>WHEN YOU ARE.
       </h2>
       <p class="cta-sub">
-        A savings account won't beat inflation.
-        The market doesn't care when you feel ready.
-        $1,500 is enough to start. Right now.
+        Both Strategies are fully disclosed above. Open a free account in 90 seconds — no ID required, no deposit until you decide. Steady Accumulator starts at $100.
       </p>
       <div class="cta-buttons">
         <button class="btn-primary" onclick="enterAuth('signup')">
@@ -2170,13 +2509,10 @@ html { text-rendering: optimizeLegibility; }
           <img src="/pwa1.png" alt="NexTrade" class="footer-seal-img">
         </div>
       </div>
-      <div class="footer-tagline">Next, trade.</div>
+      <div class="footer-tagline">Yield on your terms.</div>
       <div class="footer-divider" aria-hidden="true"></div>
       <div class="footer-legal">
-        Investment involves risk. Past performance does not guarantee future results.
-        APY figures are projections based on historical strategy performance — not guarantees.
-        Capital at risk. NexTrade is not a licensed bank or registered financial adviser.
-        Early exit fees apply. Read the Risk Disclosure before investing.
+        Return figures are gross targets based on strategy design — not guarantees. Performance fee of 15% (Steady Accumulator) or 20% (Surge Pool) applies to profit only at the point of claim. Early exit penalties apply. Read the full Terms &amp; Risk Disclosure before investing.
       </div>
     </footer>
 
@@ -2194,7 +2530,7 @@ html { text-rendering: optimizeLegibility; }
     <button class="auth-back" onclick="resetView()" aria-label="Back to landing">
       <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
     </button>
-    <div class="auth-bar-name">NEXTRADE</div>
+    <div class="auth-bar-name">NexTrade</div>
     <div class="auth-bar-spacer" aria-hidden="true"></div>
   </div>
 
@@ -2325,7 +2661,7 @@ html { text-rendering: optimizeLegibility; }
             enterkeyhint="done"
             spellcheck="false">
         </div>
-        <div class="forgot-link" onclick="showLogin()" role="button" tabindex="0"
+        <div class="forgot-link" onclick="window.showLogin()" role="button" tabindex="0"
           style="justify-content:flex-start;margin-top:var(--space-2);">
           ← Back to Sign In
         </div>
@@ -2389,7 +2725,9 @@ html { text-rendering: optimizeLegibility; }
         </div>
       </div>
 
-      <button class="btn-submit" id="submitBtn" onclick="handleAction()">CONTINUE</button>
+      <button class="btn-submit" id="submitBtn" onclick="handleAction()">CREATE ACCOUNT</button>
+
+      <div class="auth-switch" id="authSwitch">Already have an account? <button class="auth-switch-link" onclick="window.showLogin()">Sign in →</button></div>
 
     </div><!-- /auth-form-body -->
 
@@ -2411,11 +2749,16 @@ html { text-rendering: optimizeLegibility; }
     </div>
     <div class="modal-body">
       <p>
-        <strong style="color:var(--ink);">The short version:</strong>
-        NexTrade runs a managed trading pool. Returns are projected, not guaranteed.
-        You can lose money — including everything in the high-risk strategy.
-        Your principal is never charged fees. We earn only on profit we generate for you.
-      </p>
+        <strong style="color: black;">The short version:</strong>
+        NexTrade operates a managed yield pool designed to generate returns during market activity.
+
+<p>Returns are projected, not guaranteed.</p> 
+<p>The value of your balance may rise or fall based on Bitcoin market conditions and currency exchange movements.</p>
+
+<p>NexTrade does not charge fees on deposited principal. Fees are earned only from profits generated by the platform.</p>
+
+<p>NexTrade is not a savings account, bank deposit, or capital-guaranteed product.</p>
+
       <h4>1. Who Can Use NexTrade</h4>
       <p>You must be at least 18 years old and legally permitted to trade financial instruments in your jurisdiction. By creating an account, you confirm this. We reserve the right to close accounts that do not meet eligibility requirements.</p>
       <h4>2. Your Account</h4>
@@ -2423,11 +2766,11 @@ html { text-rendering: optimizeLegibility; }
       <h4>3. Deposits &amp; Withdrawals</h4>
       <p>Deposits are subject to verification (1–5 business days). Withdrawals go only to verified methods on your account. NexTrade is not a bank. Balances are not covered by any deposit insurance scheme (e.g., FDIC, FSCS). Crypto assets are not SIPC-protected.</p>
       <h4>4. Investment &amp; Pool Risk</h4>
-      <p>Pool strategies are not savings accounts. Projected APYs (22% for Steady Accumulator, 65% for Alpha Seeker) are based on historical strategy performance — they are not guarantees. Markets move against positions. You can lose part or all of your invested capital, particularly in high-risk strategies.</p>
+      <p>Pool strategies are not savings accounts. Projected returns (22% per 90-day cycle for Steady Accumulator; 67% per 30-day cycle for Surge Pool) are based on historical strategy performance — they are not guarantees. Markets move against positions. You can lose part or all of your invested capital, particularly in high-risk strategies.</p>
       <h4>5. Performance Fee</h4>
-      <p>NexTrade charges a performance fee of 15% (Steady) or 20% (Alpha) on the profit generated by the pool during your investment term. This fee is deducted at the point of claim. Your principal is never subject to fees. If the pool generates zero profit, no fee is charged.</p>
+      <p>NexTrade charges a performance fee of 15% (Steady Accumulator) or 20% (Surge Pool) on the profit generated by the pool during your investment term. This fee is deducted at the point of claim. Your principal is never subject to fees. If the pool generates zero profit, no fee is charged.</p>
       <h4>6. Early Exit</h4>
-      <p>Withdrawing before a strategy's lock period expires incurs an early exit penalty of 8% (Steady) or 15% (Alpha) of the total claimed value. This penalty is disclosed clearly before you confirm any early withdrawal.</p>
+      <p>Withdrawing before a strategy's lock period expires incurs an early exit penalty of 8% (Steady Accumulator) or 15% (Surge Pool) of the total claimed value. This penalty is disclosed clearly before you confirm any early withdrawal.</p>
       <h4>7. Prohibited Activity</h4>
       <p>Strictly prohibited: money laundering, fraud, market manipulation, account sharing, scraping, or the use of automated bots without written consent. Violations result in immediate account termination and may be referred to relevant authorities.</p>
       <h4>8. Our Liability</h4>
@@ -2437,7 +2780,7 @@ html { text-rendering: optimizeLegibility; }
       <h4>10. Disputes &amp; Governing Law</h4>
       <p>Disputes are subject to binding arbitration under AAA rules, seated in Delaware. You waive the right to a class action and jury trial. Contact support first — we will make every reasonable effort to resolve disputes informally within 30 days. Governing law: State of Delaware, USA.</p>
       <h4>11. Amendments</h4>
-      <p>We will provide at least 14 days' in-app notice before significant changes take effect. Continued use of the platform after the notice period constitutes acceptance of revised terms. Contact: <span style="color:var(--ink);text-decoration:underline;">legal@nextrade.app</span></p>
+      <p>We will provide at least 14 days' in-app notice before significant changes take effect. Continued use of the platform after the notice period constitutes acceptance of revised terms. Contact: <span style="color:var(--ink);text-decoration:underline;">legal@NexTrade.app</span></p>
     </div>
     <div class="modal-foot">
       <button class="btn-submit" onclick="confirmLegal()" style="margin-top:0;">
@@ -2453,6 +2796,7 @@ html { text-rendering: optimizeLegibility; }
 ══════════════════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
+<script src="auth.js"></script>
 
 <script>
 /* ── SERVICE WORKER ─────────────────────────────────────────────────────── */
@@ -2472,14 +2816,14 @@ if ('serviceWorker' in navigator) {
       })
       .catch(err => console.warn('[SW]', err));
   });
-  let refreshing = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!refreshing) { refreshing = true; window.location.reload(); }
-  });
+  // NOTE: intentionally no controllerchange → reload here.
+  // Triggering location.reload() from controllerchange fires while the user
+  // is already scrolling the landing, causing the visible scroll-jump.
+  // index.html handles its own SW-update reload independently.
 }
 
 /* ── PWA INSTALL ────────────────────────────────────────────────────────── */
-const PWA_DISMISSED_KEY = 'nex_pwa_dismissed';
+const PWA_DISMISSED_KEY = 'yld_pwa_dismissed';
 let androidInstallEvent = null;
 
 function shouldShowBanner() {
@@ -2630,516 +2974,6 @@ const barObserver = new IntersectionObserver(entries => {
 }, { threshold: 0.3 });
 const feeSection = document.querySelector('.fee-split');
 if (feeSection) barObserver.observe(feeSection);
-
-/* ── PASSWORD TOGGLE ────────────────────────────────────────────────────── */
-window.togglePw = (inputId, btn) => {
-  const input = document.getElementById(inputId);
-  if (!input) return;
-  const isHidden = input.type === 'password';
-  input.type = isHidden ? 'text' : 'password';
-  const icon = btn.querySelector('i');
-  if (icon) { icon.className = isHidden ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye'; }
-  btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
-};
-
-/* ── AUTH STATE ─────────────────────────────────────────────────────────── */
-let mode = 'signup';
-let termsAccepted = false;
-let pendingEmail = '';
-
-async function init() {
-  let attempts = 0;
-  while (!window.supabaseClient && attempts < 20) {
-    await new Promise(r => setTimeout(r, 100));
-    attempts++;
-  }
-  if (!window.supabaseClient) {
-    showToast('Configuration error. Check config.js.');
-    document.getElementById('landing').classList.add('ready');
-    return;
-  }
-
-  const { data } = await window.supabaseClient.auth.getSession();
-
-  // ── Valid session — go to app without ever rendering the landing ────────
-  if (data.session) {
-    sessionStorage.setItem('nextrade_fresh_login', 'true');
-    window.location.replace('index.html');
-    return;
-  }
-
-  // ── No session — reveal the landing page ──────────────────────────────
-
-  const savedMode = sessionStorage.getItem('saved_auth_mode');
-  if (savedMode === 'otp') {
-    pendingEmail = sessionStorage.getItem('saved_auth_email') || '';
-    mode = 'otp';
-    document.getElementById('landing').style.display = 'none';
-    document.getElementById('auth').classList.add('visible');
-    hideAllForms();
-    document.getElementById('otpForm').classList.remove('hidden');
-    document.getElementById('formTitle').textContent = 'Verify Email';
-    document.getElementById('formSubtitle').textContent = 'Check your inbox for the 6-digit code.';
-    document.getElementById('displayEmail').textContent = pendingEmail;
-    document.getElementById('submitBtn').textContent = 'VERIFY CODE';
-    setTimeout(() => {
-      const first = Array.from(otpInputs).find(x => !x.value) || otpInputs[0];
-      if (first) first.focus();
-    }, 350);
-  } else if (savedMode === 'forgot-otp') {
-    const email = sessionStorage.getItem('reset_email') || '';
-    mode = 'forgot-otp';
-    document.getElementById('landing').style.display = 'none';
-    document.getElementById('auth').classList.add('visible');
-    hideAllForms();
-    document.getElementById('forgotOtpForm').classList.remove('hidden');
-    document.getElementById('forgotOtpEmail').textContent = email;
-    document.getElementById('formTitle').textContent    = 'Check Your Email';
-    document.getElementById('formSubtitle').textContent = 'Enter the 6-digit reset code.';
-    const btn = document.getElementById('submitBtn');
-    btn.textContent  = 'VERIFY CODE';
-    btn.style.display = '';
-    btn.disabled     = false;
-    btn.classList.remove('loading');
-    setTimeout(() => {
-      const first = Array.from(forgotOtpInputs).find(x => !x.value) || forgotOtpInputs[0];
-      if (first) first.focus();
-    }, 350);
-  } else {
-    document.getElementById('landing').classList.add('ready');
-  }
-}
-init();
-
-/* ── PASSWORD RECOVERY UI ───────────────────────────────────────────────── */
-function showRecovery(session) {
-  mode = 'recovery';
-  const email = session?.user?.email || sessionStorage.getItem('saved_auth_email') || '';
-  document.getElementById('recoveryEmail').textContent = email;
-  // Hide landing, show auth panel in recovery mode
-  const landing = document.getElementById('landing');
-  landing.style.display = 'none';
-  document.getElementById('auth').classList.add('visible');
-  hideAllForms();
-  document.getElementById('recoveryForm').classList.remove('hidden');
-  document.getElementById('formTitle').textContent    = 'Set New Password';
-  document.getElementById('formSubtitle').textContent = 'Choose a strong password for your account.';
-  const btn = document.getElementById('submitBtn');
-  btn.textContent  = 'UPDATE PASSWORD';
-  btn.style.display = '';
-  btn.disabled     = false;
-  btn.classList.remove('loading');
-  setTimeout(() => document.getElementById('newPassword')?.focus(), 300);
-}
-
-window.enterAuth = (newMode) => {
-  mode = newMode;
-  const landing = document.getElementById('landing');
-  landing.classList.add('exit');
-  if (mode === 'login') {
-    document.getElementById('formTitle').textContent    = 'Welcome Back';
-    document.getElementById('formSubtitle').textContent = 'Enter your credentials to continue.';
-    document.getElementById('signupForm').classList.add('hidden');
-    document.getElementById('loginForm').classList.remove('hidden');
-  }
-  setTimeout(() => {
-    landing.style.display = 'none';
-    document.getElementById('auth').classList.add('visible');
-  }, 260);
-};
-
-window.resetView = () => location.reload();
-
-/* ── LEGAL ──────────────────────────────────────────────────────────────── */
-window.openLegal = () => {
-  const m = document.getElementById('legalModal');
-  if (m) { m.style.display = 'flex'; m.classList.add('open'); }
-};
-
-window.confirmLegal = () => {
-  termsAccepted = true;
-  const box = document.getElementById('customCheck');
-  if (box) {
-    box.classList.add('checked');
-    box.setAttribute('aria-checked', 'true');
-  }
-  const m = document.getElementById('legalModal');
-  if (m) { m.style.display = 'none'; m.classList.remove('open'); }
-};
-
-/* Tap outside modal to dismiss */
-document.getElementById('legalModal').addEventListener('click', function (e) {
-  if (e.target === this) {
-    this.style.display = 'none';
-    this.classList.remove('open');
-  }
-});
-
-/* ── TOAST ──────────────────────────────────────────────────────────────── */
-window.showToast = (msg, type = 'danger') => {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  if (type === 'danger') {
-    t.style.background  = 'var(--danger-bg)';
-    t.style.borderColor = 'var(--danger)';
-    t.style.color       = 'var(--danger)';
-  } else {
-    t.style.background  = 'var(--live-bg)';
-    t.style.borderColor = 'var(--live)';
-    t.style.color       = 'var(--live)';
-  }
-  t.style.display = 'block';
-  if (t._timer) clearTimeout(t._timer);
-  t._timer = setTimeout(() => { t.style.display = 'none'; }, 4500);
-};
-
-/* ── KEYBOARD NAVIGATION ────────────────────────────────────────────────── */
-document.addEventListener('keyup', e => {
-  if (e.key !== 'Enter') return;
-  const a = document.activeElement;
-  if (a.id === 'regName')          document.getElementById('regEmail').focus();
-  else if (a.id === 'regEmail')    document.getElementById('regPassword').focus();
-  else if (a.id === 'logEmail')    document.getElementById('logPassword').focus();
-  else if (a.id === 'regPassword' || a.id === 'logPassword') { a.blur(); handleAction(); }
-});
-
-/* ── OTP INPUTS ─────────────────────────────────────────────────────────── */
-const otpInputs = document.querySelectorAll('#otpInputs input');
-otpInputs.forEach((input, i) => {
-  input.addEventListener('input', e => {
-    const raw = e.target.value.replace(/[^0-9]/g, '');
-
-    // iOS autofill can bypass maxlength and fill the full code into field 0.
-    // Detect this and distribute across all fields.
-    if (raw.length > 1) {
-      raw.split('').forEach((ch, idx) => {
-        if (otpInputs[idx]) {
-          otpInputs[idx].value = ch;
-          otpInputs[idx].classList.add('filled');
-        }
-      });
-      const nextEmpty = Array.from(otpInputs).findIndex(x => !x.value);
-      if (nextEmpty !== -1) otpInputs[nextEmpty].focus();
-      else otpInputs[otpInputs.length - 1].focus();
-      if (Array.from(otpInputs).every(x => x.value.length === 1)) handleAction();
-      return;
-    }
-
-    e.target.value = raw;
-    if (raw) {
-      e.target.classList.add('filled');
-      if (i < otpInputs.length - 1) otpInputs[i + 1].focus();
-    } else {
-      e.target.classList.remove('filled');
-    }
-    if (Array.from(otpInputs).every(x => x.value.length === 1)) handleAction();
-  });
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Backspace' && !e.target.value && i > 0) {
-      otpInputs[i - 1].value = '';
-      otpInputs[i - 1].classList.remove('filled');
-      otpInputs[i - 1].focus();
-    }
-  });
-  input.addEventListener('paste', e => {
-    e.preventDefault();
-    const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
-    pasted.split('').forEach((ch, idx) => {
-      if (otpInputs[idx]) {
-        otpInputs[idx].value = ch;
-        otpInputs[idx].classList.add('filled');
-      }
-    });
-    const nextEmpty = Array.from(otpInputs).findIndex(x => !x.value);
-    if (nextEmpty !== -1) otpInputs[nextEmpty].focus();
-    else otpInputs[otpInputs.length - 1].focus();
-    if (Array.from(otpInputs).every(x => x.value.length === 1)) handleAction();
-  });
-});
-
-function getOtpValue() { return Array.from(otpInputs).map(x => x.value).join(''); }
-
-/* ── MAIN AUTH HANDLER ──────────────────────────────────────────────────── */
-window.handleAction = async () => {
-  const btn = document.getElementById('submitBtn');
-  if (btn.disabled) return;
-  btn.disabled = true;
-  btn.classList.add('loading');
-  const origText = btn.textContent;
-  btn.textContent = 'PROCESSING…';
-
-  try {
-    if (!window.supabaseClient) throw new Error('Connection error. Please refresh.');
-
-    /* ── SIGNUP ── */
-    if (mode === 'signup') {
-      if (!termsAccepted) throw new Error('Please accept the Risk Disclosure first.');
-      const name     = document.getElementById('regName').value.trim();
-      const email    = document.getElementById('regEmail').value.trim().toLowerCase();
-      const password = document.getElementById('regPassword').value;
-      if (!name)                       throw new Error('Please enter your full name.');
-      if (!email || !email.includes('@')) throw new Error('Please enter a valid email address.');
-      if (password.length < 8)         throw new Error('Password must be at least 8 characters.');
-
-      const { data, error } = await window.supabaseClient.auth.signUp({
-        email, password,
-        options: { data: { full_name: name } }
-      });
-      if (error) throw error;
-      if (data.user && data.user.identities && data.user.identities.length === 0) {
-        throw new Error('This email is already registered. Please sign in instead.');
-      }
-      if (data.session) {
-        sessionStorage.setItem('nextrade_fresh_login', 'true');
-        window.location.replace('index.html');
-        return;
-      }
-
-      pendingEmail = email;
-      mode = 'otp';
-      sessionStorage.setItem('saved_auth_mode',  'otp');
-      sessionStorage.setItem('saved_auth_email', email);
-
-      document.getElementById('displayEmail').textContent = email;
-      document.getElementById('signupForm').classList.add('hidden');
-      document.getElementById('otpForm').classList.remove('hidden');
-      document.getElementById('formTitle').textContent    = 'Verify Email';
-      document.getElementById('formSubtitle').textContent = 'Check your inbox for the 6-digit code.';
-
-      btn.textContent = 'VERIFY CODE';
-      btn.disabled = false;
-      btn.classList.remove('loading');
-      otpInputs[0].focus();
-    }
-
-    /* ── LOGIN ── */
-    else if (mode === 'login') {
-      const email    = document.getElementById('logEmail').value.trim().toLowerCase();
-      const password = document.getElementById('logPassword').value;
-      if (!email || !password) throw new Error('Please enter both email and password.');
-
-      const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-
-      sessionStorage.setItem('nextrade_fresh_login', 'true');
-      window.location.replace('index.html');
-    }
-
-    /* ── OTP ── */
-    else if (mode === 'otp') {
-      const token = getOtpValue();
-      if (token.length !== 6) throw new Error('Please enter the complete 6-digit code.');
-
-      const { error } = await window.supabaseClient.auth.verifyOtp({
-        email: pendingEmail,
-        token,
-        type: 'signup'
-      });
-      if (error) throw error;
-
-      // Poll for session
-      let sessionReady = false, attempts = 0;
-      while (!sessionReady && attempts < 12) {
-        await new Promise(r => setTimeout(r, 500));
-        const { data: sd } = await window.supabaseClient.auth.getSession();
-        if (sd.session) sessionReady = true;
-        attempts++;
-      }
-      if (!sessionReady) throw new Error('Session timeout. Please sign in manually.');
-
-      sessionStorage.removeItem('saved_auth_mode');
-      sessionStorage.removeItem('saved_auth_email');
-      sessionStorage.setItem('nextrade_fresh_login', 'true');
-      localStorage.setItem('nex_onboarded', 'false');
-      showToast('Account verified. Welcome to NexTrade.', 'success');
-      setTimeout(() => { window.location.replace('index.html'); }, 700);
-    }
-
-    /* ── FORGOT PASSWORD — send 6-digit reset code ── */
-    else if (mode === 'forgot') {
-      const email = document.getElementById('forgotEmail').value.trim().toLowerCase();
-      if (!email || !email.includes('@')) throw new Error('Please enter a valid email address.');
-      // No redirectTo — Supabase sends a 6-digit OTP, not a magic link.
-      // Verify with verifyOtp({ type: 'recovery' }) in the next step.
-      const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email);
-      if (error) throw error;
-      sessionStorage.setItem('reset_email', email);
-      sessionStorage.setItem('saved_auth_mode', 'forgot-otp');
-      showForgotOtp(email);
-    }
-
-    /* ── FORGOT OTP — verify recovery code, then show new-password form ── */
-    else if (mode === 'forgot-otp') {
-      const email = sessionStorage.getItem('reset_email') ||
-                    document.getElementById('forgotOtpEmail').textContent.trim();
-      const token = Array.from(document.querySelectorAll('#forgotOtpInputs input'))
-        .map(x => x.value).join('').trim();
-      if (token.length !== 6) throw new Error('Please enter the complete 6-digit code.');
-      const { data: vData, error: vErr } = await window.supabaseClient.auth.verifyOtp({
-        email, token, type: 'recovery'
-      });
-      if (vErr) throw vErr;
-      sessionStorage.setItem('saved_auth_email', email); // fallback for showRecovery if session.user is null
-      sessionStorage.removeItem('saved_auth_mode');
-      sessionStorage.removeItem('reset_email');
-      // Code verified — session is now active. Show new-password form.
-      showRecovery(vData.session);
-    }
-
-    /* ── PASSWORD RECOVERY — set new password ── */
-    else if (mode === 'recovery') {
-      const newPw  = document.getElementById('newPassword').value;
-      const confPw = document.getElementById('confirmPassword').value;
-      if (newPw.length < 8) throw new Error('Password must be at least 8 characters.');
-      if (newPw !== confPw)  throw new Error('Passwords do not match.');
-      const { error } = await window.supabaseClient.auth.updateUser({ password: newPw });
-      if (error) throw error;
-      showToast('Password updated. Signing you in…', 'success');
-      sessionStorage.setItem('nextrade_fresh_login', 'true');
-      setTimeout(() => { window.location.replace('index.html'); }, 700);
-    }
-
-  } catch (err) {
-    showToast(err.message || 'Something went wrong. Please try again.');
-    btn.disabled = false;
-    btn.classList.remove('loading');
-    btn.textContent = origText;
-  }
-};
-
-/* ── RESEND RESET OTP ────────────────────────────────────────────────────── */
-window.handleResendResetOtp = async () => {
-  const email = sessionStorage.getItem('reset_email') || '';
-  if (!email) { showToast('Session expired. Please start again.'); showForgotForm(''); return; }
-  try {
-    const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email);
-    if (error) throw error;
-    showToast('New code sent. Check your inbox.', 'success');
-    const inputs = document.querySelectorAll('#forgotOtpInputs input');
-    inputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
-    inputs[0]?.focus();
-  } catch (err) {
-    showToast(err.message || 'Could not resend code. Please try again.');
-  }
-};
-
-/* ── FORGOT OTP INPUT WIRING ─────────────────────────────────────────────── */
-// Same pattern as #otpInputs — separate node set, same behaviour.
-const forgotOtpInputs = document.querySelectorAll('#forgotOtpInputs input');
-forgotOtpInputs.forEach((input, i) => {
-  input.addEventListener('input', e => {
-    const raw = e.target.value.replace(/[^0-9]/g, '');
-    if (raw.length > 1) {
-      raw.split('').forEach((ch, idx) => {
-        if (forgotOtpInputs[idx]) { forgotOtpInputs[idx].value = ch; forgotOtpInputs[idx].classList.add('filled'); }
-      });
-      const nextEmpty = Array.from(forgotOtpInputs).findIndex(x => !x.value);
-      if (nextEmpty !== -1) forgotOtpInputs[nextEmpty].focus();
-      else forgotOtpInputs[forgotOtpInputs.length - 1].focus();
-      if (Array.from(forgotOtpInputs).every(x => x.value.length === 1)) handleAction();
-      return;
-    }
-    e.target.value = raw;
-    if (raw) { e.target.classList.add('filled'); if (i < forgotOtpInputs.length - 1) forgotOtpInputs[i + 1].focus(); }
-    else { e.target.classList.remove('filled'); }
-    if (Array.from(forgotOtpInputs).every(x => x.value.length === 1)) handleAction();
-  });
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Backspace' && !e.target.value && i > 0) { forgotOtpInputs[i - 1].focus(); }
-  });
-  input.addEventListener('paste', e => {
-    e.preventDefault();
-    const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
-    pasted.split('').forEach((ch, idx) => {
-      if (forgotOtpInputs[idx]) { forgotOtpInputs[idx].value = ch; forgotOtpInputs[idx].classList.add('filled'); }
-    });
-    const next = Math.min(pasted.length, forgotOtpInputs.length - 1);
-    forgotOtpInputs[next]?.focus();
-    if (Array.from(forgotOtpInputs).every(x => x.value.length === 1)) handleAction();
-  });
-});
-
-
-window.handleResendOtp = async () => {
-  try {
-    const { error } = await window.supabaseClient.auth.resend({
-      type: 'signup',
-      email: pendingEmail
-    });
-    if (error) throw error;
-    showToast('New code sent. Check your inbox.', 'success');
-    otpInputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
-    otpInputs[0].focus();
-  } catch (err) {
-    showToast(err.message || 'Could not resend code. Please try again.');
-  }
-};
-
-/* ── FORGOT PASSWORD — helpers ───────────────────────────────────────────── */
-
-const ALL_FORMS = ['signupForm','loginForm','otpForm','forgotForm','forgotOtpForm','recoveryForm'];
-
-function hideAllForms() {
-  ALL_FORMS.forEach(id => document.getElementById(id)?.classList.add('hidden'));
-}
-
-window.showForgotForm = function(prefillEmail) {
-  mode = 'forgot';
-  hideAllForms();
-  document.getElementById('forgotForm').classList.remove('hidden');
-  document.getElementById('formTitle').textContent    = 'Reset Password';
-  document.getElementById('formSubtitle').textContent = 'We\'ll send a 6-digit code to your email.';
-  const btn = document.getElementById('submitBtn');
-  btn.textContent  = 'SEND CODE';
-  btn.style.display = '';
-  btn.disabled     = false;
-  btn.classList.remove('loading');
-  const emailInput = document.getElementById('forgotEmail');
-  if (prefillEmail) emailInput.value = prefillEmail;
-  setTimeout(() => emailInput.focus(), 300);
-};
-
-function showForgotOtp(email) {
-  mode = 'forgot-otp';
-  hideAllForms();
-  document.getElementById('forgotOtpForm').classList.remove('hidden');
-  document.getElementById('forgotOtpEmail').textContent = email;
-  document.getElementById('formTitle').textContent    = 'Check Your Email';
-  document.getElementById('formSubtitle').textContent = 'Enter the 6-digit reset code.';
-  const btn = document.getElementById('submitBtn');
-  btn.textContent  = 'VERIFY CODE';
-  btn.style.display = '';
-  btn.disabled     = false;
-  btn.classList.remove('loading');
-  // Wire OTP inputs — same pattern as signup OTP
-  const inputs = document.querySelectorAll('#forgotOtpInputs input');
-  inputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
-  // Re-attach input handlers (these inputs are static DOM, handlers persist)
-  setTimeout(() => inputs[0]?.focus(), 300);
-}
-
-window.showLogin = function() {
-  mode = 'login';
-  sessionStorage.removeItem('saved_auth_mode');
-  sessionStorage.removeItem('reset_email');
-  hideAllForms();
-  document.getElementById('loginForm').classList.remove('hidden');
-  document.getElementById('formTitle').textContent    = 'Welcome Back';
-  document.getElementById('formSubtitle').textContent = 'Enter your credentials to continue.';
-  const btn = document.getElementById('submitBtn');
-  btn.textContent  = 'SIGN IN';
-  btn.style.display = '';
-  btn.disabled     = false;
-  btn.classList.remove('loading');
-  setTimeout(() => document.getElementById('logEmail')?.focus(), 200);
-};
-
-/* ── FORGOT PASSWORD — trigger ───────────────────────────────────────────── */
-window.handleForgotPassword = function() {
-  // Pre-populate with whatever the user may have typed in the login email field
-  const prefill = document.getElementById('logEmail')?.value?.trim() || '';
-  window.showForgotForm(prefill);
-};
 
 
 </script>
