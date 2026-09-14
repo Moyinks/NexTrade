@@ -87,7 +87,7 @@
 
   function createHomeSkeleton() {
     const div = document.createElement('div');
-    div.style.cssText = 'display:flex;flex-direction:column;gap:14px;padding-bottom:110px;';
+    div.style.cssText = 'display:flex;flex-direction:column;gap:14px;padding-bottom:var(--scroll-bottom-clearance, 116px);';
     div.innerHTML = `
       <div class="skeleton-pulse" style="height: 168px; border-radius: 18px;"></div>
       <div class="skeleton-pulse" style="height: 170px; border-radius: 16px;"></div>
@@ -101,7 +101,7 @@
 
   function createMarketSkeleton() {
     const div = document.createElement('div');
-    div.style.cssText = 'padding: 16px; padding-bottom: 100px;';
+    div.style.cssText = 'padding: 16px; padding-bottom: var(--scroll-bottom-clearance, 116px);';
     div.innerHTML = `
       <div class="skeleton-pulse" style="height: 120px; border-radius: 12px; margin-bottom: 16px;"></div>
       <div class="skeleton-pulse" style="height: 48px; border-radius: 12px; margin-bottom: 12px;"></div>
@@ -114,7 +114,7 @@
 
   function createVaultSkeleton() {
     const div = document.createElement('div');
-    div.style.cssText = 'padding: 16px; padding-bottom: 100px;';
+    div.style.cssText = 'padding: 16px; padding-bottom: var(--scroll-bottom-clearance, 116px);';
     div.innerHTML = `
       <div class="skeleton-pulse" style="height: 180px; border-radius: 16px; margin-bottom: 24px;"></div>
       ${Array(3).fill(0).map(() => `
@@ -126,7 +126,7 @@
 
   function createWalletSkeleton() {
     const div = document.createElement('div');
-    div.style.cssText = 'padding: 16px; padding-bottom: 100px;';
+    div.style.cssText = 'padding: 16px; padding-bottom: var(--scroll-bottom-clearance, 116px);';
     div.innerHTML = `
       <div class="skeleton-pulse" style="height: 200px; border-radius: 16px; margin-bottom: 24px;"></div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 32px;">
@@ -170,10 +170,10 @@
         Failed to Load Page
       </div>
       <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 20px; max-width: 300px;">
-        ${error || 'Something went wrong loading this page.'}
+        <span id="router-error-message"></span>
       </div>
       <button 
-        onclick="Router.navigate('home')" 
+        data-app-action="router-home" 
         class="btn btn-primary" 
         style="padding: 10px 24px; border-radius: 8px;"
       >
@@ -181,6 +181,8 @@
       </button>
     `;
 
+    const messageEl = errorDiv.querySelector('#router-error-message');
+    if (messageEl) messageEl.textContent = String(error || 'Something went wrong loading this page.');
     container.appendChild(errorDiv);
   }
 

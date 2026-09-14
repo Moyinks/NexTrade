@@ -95,6 +95,7 @@ const Navbar = (() => {
     injectStyles();
     buildPill();
     injectDropdownStyles();
+    publishNavFootprint();
 
     // Close profile dropdown on outside click
     document.addEventListener('click', e => {
@@ -118,9 +119,43 @@ const Navbar = (() => {
         // the full window height.  0.75 threshold is reliable across iOS/Android.
         const keyboardOpen = window.visualViewport.height < window.innerHeight * 0.75;
         if (footerEl) footerEl.style.display = keyboardOpen ? 'none' : '';
+        publishNavFootprint();
       };
       window.visualViewport.addEventListener('resize', _onViewportResize);
     }
+  }
+
+  // ── NAV FOOTPRINT — measured, not estimated ─────────────────────────────
+  // Every scrollable page needs to know how much room the floating pill
+  // occupies so its last item can clear it. Rather than hand-calculating
+  // that from padding/font-size/line-height on paper (an estimate that can
+  // only ever be as accurate as the guess, and drifts the moment the pill's
+  // design changes, or a font metric renders slightly differently on a given
+  // device), this reads the pill's REAL on-screen box with
+  // getBoundingClientRect() and publishes it as a CSS variable every other
+  // page already consumes. getBoundingClientRect() returns fully-resolved
+  // device pixels — the browser has already done the safe-area-inset-bottom
+  // math, the font-metric math, everything — so this is exact by
+  // construction, not an approximation of one. It re-measures on resize,
+  // orientation change, and webfont load (icon glyphs can resize the pill
+  // slightly the moment Font Awesome finishes loading, after first paint),
+  // so it self-corrects instead of needing to be re-guessed for every phone.
+  let _navFootprintRaf = null;
+  function publishNavFootprint() {
+    if (_navFootprintRaf) cancelAnimationFrame(_navFootprintRaf);
+    _navFootprintRaf = requestAnimationFrame(() => {
+      if (!footerEl || footerEl.style.display === 'none') return;
+      const rect = footerEl.getBoundingClientRect();
+      if (rect.height === 0) return; // not laid out yet — a later event will re-measure
+      const footprintPx = Math.ceil(window.innerHeight - rect.top);
+      document.documentElement.style.setProperty('--nav-footprint-live', `${footprintPx}px`);
+    });
+  }
+
+  window.addEventListener('resize', publishNavFootprint);
+  window.addEventListener('orientationchange', () => setTimeout(publishNavFootprint, 60));
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(publishNavFootprint);
   }
 
   // ── PILL STYLES ────────────────────────────────────────────────────────
@@ -291,6 +326,10 @@ const Navbar = (() => {
     const userEmail   = resolveEmail();
     const isVerified  = resolveVerified();
     const initials    = buildInitials(displayName);
+    const esc = window.SafeDOM && SafeDOM.text ? SafeDOM.text : (v => String(v == null ? '' : v));
+    const safeDisplayName = esc(displayName);
+    const safeEmail = esc(userEmail);
+    const safeInitials = esc(initials);
 
     const titleHTML = pageId === 'home'
       ? `<span style="font-size:17px;font-weight:800;letter-spacing:-0.5px;font-family:'Inter',system-ui,sans-serif;color:#F8FAFC;">NexTrade</span>`
@@ -298,21 +337,20 @@ const Navbar = (() => {
 
     headerEl.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;font-family:'Inter',system-ui,sans-serif;">
-        <img src="pwa2.png" alt="NexTrade"
-             style="width:28px;height:28px;border-radius:8px;object-fit:cover;flex-shrink:0;display:block;"
-             onerror="this.style.display='none'">
+        <img class="navbar-brand-image" src="pwa2.png" alt="NexTrade"
+             style="width:28px;height:28px;border-radius:8px;object-fit:cover;flex-shrink:0;display:block;">
         ${titleHTML}
       </div>
       <div style="position:relative;">
         <button id="profile-menu-btn" style="width:36px;height:36px;border-radius:10px;background:${SURFACE};border:1px solid rgba(255,255,255,0.10);display:flex;align-items:center;justify-content:center;color:#F8FAFC;cursor:pointer;transition:all 0.2s;font-family:'Inter',system-ui,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.3px;box-shadow:${TOP_EDGE};">
-          ${initials}
+          ${safeInitials}
         </button>
         <div id="profile-dropdown" class="profile-dropdown">
           <div class="profile-header">
-            <div class="profile-avatar">${initials}</div>
+            <div class="profile-avatar">${safeInitials}</div>
             <div class="profile-info">
-              <div class="profile-name">${displayName}</div>
-              <div class="profile-email">${userEmail}</div>
+              <div class="profile-name">${safeDisplayName}</div>
+              <div class="profile-email">${safeEmail}</div>
             </div>
           </div>
           <div class="profile-verification ${isVerified ? 'verified' : 'unverified'}">
@@ -320,14 +358,14 @@ const Navbar = (() => {
             <span>${isVerified ? 'Verified Account' : 'Action Required: Verify Identity'}</span>
           </div>
           <div class="profile-menu">
-            <button class="profile-menu-item" onclick="Navbar.handleSettings()">
+            <button class="profile-menu-item" data-app-action="navbar-settings">
               <div class="menu-icon"><i class="fa-solid fa-gear"></i></div><span>Settings</span>
             </button>
-            <button class="profile-menu-item" onclick="Navbar.handleHelp()">
+            <button class="profile-menu-item" data-app-action="navbar-help">
               <div class="menu-icon"><i class="fa-solid fa-headset"></i></div><span>Support</span>
             </button>
             <div class="profile-menu-divider"></div>
-            <button class="profile-menu-item danger" onclick="Navbar.handleSignOut()">
+            <button class="profile-menu-item danger" data-app-action="navbar-signout">
               <div class="menu-icon"><i class="fa-solid fa-arrow-right-from-bracket"></i></div><span>Sign Out</span>
             </button>
           </div>
@@ -339,6 +377,8 @@ const Navbar = (() => {
       e.stopPropagation();
       toggleProfileDropdown();
     };
+    const brandImage = headerEl.querySelector('.navbar-brand-image');
+    if (brandImage) brandImage.addEventListener('error', () => { brandImage.style.display = 'none'; });
   }
 
   // ── PROFILE DROPDOWN ──────────────────────────────────────────────────

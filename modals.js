@@ -40,8 +40,10 @@ const Modal = (() => {
       .ntm-backdrop {
         position: absolute; inset: 0; z-index: 1;
         background: rgba(0, 0, 0, 0);
+        backdrop-filter: blur(0px);
+        -webkit-backdrop-filter: blur(0px);
         pointer-events: none;
-        transition: background 0.28s ease;
+        transition: background 0.28s ease, backdrop-filter 0.28s ease, -webkit-backdrop-filter 0.28s ease;
       }
       .ntm-overlay.ntm-open .ntm-backdrop {
         background: rgba(0, 0, 0, 0.62);
@@ -66,7 +68,7 @@ const Modal = (() => {
         overflow: hidden;
         pointer-events: all;
         transform: translateY(100%);
-        transition: transform 0.38s cubic-bezier(0.32, 1.18, 0.58, 1), opacity 0.22s ease;
+        transition: transform 0.34s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
       }
       .ntm-overlay.ntm-open .ntm-card {
         transform: translateY(0);
@@ -105,10 +107,10 @@ const Modal = (() => {
       .ntm-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0; }
       .ntm-title { font-family: var(--font-ui); font-size: 16px; font-weight: 700; color: #F8FAFC; letter-spacing: -0.2px; }
       .ntm-close-btn {
-        width: 28px; height: 28px; border-radius: 8px;
+        width: 40px; height: 40px; border-radius: 10px;
         background: rgba(255,255,255,0.07); border: none; color: #94A3B8;
         display: flex; align-items: center; justify-content: center;
-        cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s; font-size: 12px;
+        cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s; font-size: 13px;
       }
       .ntm-close-btn:hover { background: rgba(255,255,255,0.12); color: #F8FAFC; }
 

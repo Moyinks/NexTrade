@@ -17,7 +17,14 @@
  *
  * SUPABASE:
  *   Table:   kyc_documents    (see SCHEMA.sql)
- *   Storage: kyc-docs bucket  (private, RLS: service role only)
+ *   Storage: kyc-docs bucket  (private — NOT service-role-only, since
+ *            uploadImage() below uploads directly from the authenticated
+ *            client. Bucket must have an INSERT policy scoped to the
+ *            user's own folder, e.g.:
+ *              (bucket_id = 'kyc-docs' AND (storage.foldername(name))[1] = auth.uid()::text)
+ *            See kyc-storage-policy.sql for the exact policy to apply in
+ *            the Supabase SQL editor. Read/list should remain service-role
+ *            only — users only ever need to write, never read back.)
  *   Column:  profiles.kyc_status  'none'|'pending'|'approved'|'rejected'
  *
  * ADMIN APPROVAL:
@@ -101,6 +108,9 @@ const KYC = (() => {
   }
 
   // ── Upload a single compressed image to Supabase Storage ─────────────────
+  // Path is prefixed with the caller's own userId — required by the
+  // folder-scoped RLS policy (see kyc-storage-policy.sql) so a user can
+  // only ever write into their own folder.
   async function uploadImage(userId, blob, label) {
     const ext  = 'jpg';
     const path = userId + '/' + label + '_' + Date.now() + '.' + ext;
@@ -111,12 +121,26 @@ const KYC = (() => {
         cacheControl: '3600',
         upsert:       false
       });
-    if (error) throw error;
+    if (error) {
+      // Row-level security rejections surface as generic/opaque messages
+      // from Supabase Storage — translate to something a user can act on
+      // and keep the raw detail in the console for whoever's debugging.
+      const raw = String(error.message || '');
+      if (/row-level security|permission|policy|unauthorized|403/i.test(raw)) {
+        console.error('[KYC] Storage upload blocked by policy:', raw);
+        throw new Error('Upload was blocked by a permissions issue on our end. Please try again or contact support.');
+      }
+      throw error;
+    }
     return path;
   }
 
   // ── File input with preview ───────────────────────────────────────────────
-  function buildFileInput(id, labelText, icon) {
+  // `cache` is a plain object shared across all three file inputs on one
+  // screen: cache[id] holds a Promise<Blob> for that field's compressed
+  // image, kicked off immediately on selection (see below) rather than at
+  // submit time.
+  function buildFileInput(id, labelText, icon, cache) {
     const wrap = document.createElement('div');
     wrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
 
@@ -174,13 +198,36 @@ const KYC = (() => {
     input.style.display = 'none';
     input.addEventListener('change', () => {
       const file = input.files[0];
-      if (!file) return;
+      if (!file) { delete cache[id]; return; }
       const nameEl  = document.getElementById(id + '_label');
       const badgeEl = document.getElementById(id + '_badge');
-      if (nameEl)  nameEl.textContent  = file.name.length > 32 ? file.name.slice(0, 29) + '…' : file.name;
-      if (badgeEl) badgeEl.textContent = '✅';
-      zone.style.borderColor = '#10b981';
+
+      // Compress right now, while the File handle from the picker is
+      // still fresh — not later at submit time. On mobile the original
+      // File reference can go stale (especially after a couple more
+      // sequential file-picker round trips), which is what surfaces as
+      // "Could not read file" if compression is deferred to submit.
+      if (nameEl)  nameEl.textContent  = 'Processing…';
+      if (badgeEl) badgeEl.textContent = '⏳';
+      zone.style.borderColor = 'var(--color-primary)';
       zone.style.borderStyle = 'solid';
+
+      const job = compress(file);
+      cache[id] = job;
+
+      job.then(() => {
+        if (cache[id] !== job) return; // superseded by a newer selection
+        if (nameEl)  nameEl.textContent  = file.name.length > 32 ? file.name.slice(0, 29) + '…' : file.name;
+        if (badgeEl) badgeEl.textContent = '✅';
+        zone.style.borderColor = '#10b981';
+      }).catch((err) => {
+        if (cache[id] !== job) return; // superseded by a newer selection
+        console.error('[KYC] Compression failed for', id, ':', err.message);
+        if (nameEl)  nameEl.textContent  = 'Could not read this photo — tap to retry';
+        if (badgeEl) badgeEl.textContent = '⚠️';
+        zone.style.borderColor = '#ef4444';
+        delete cache[id];
+      });
     });
 
     wrap.appendChild(zone);
@@ -215,7 +262,7 @@ const KYC = (() => {
     const body = document.createElement('div');
     body.style.cssText = 'font-size:14px;color:var(--color-text-secondary);line-height:1.6;max-width:320px;';
     body.textContent   = isPending
-      ? 'Your documents are being reviewed. This usually takes 1–24 hours. You\'ll be notified when approved. Your investment keeps growing in the meantime.'
+      ? 'Your documents have been submitted for review. You\'ll be notified when the review is complete. Existing positions continue to follow their strategy lifecycle while verification is pending.'
       : 'Your verification was not approved. Please resubmit with a clearer photo of your ID and selfie. Contact support if you need help.';
     content.appendChild(body);
 
@@ -257,7 +304,7 @@ const KYC = (() => {
     heroTitle.textContent   = 'One-time identity check';
     const heroBody = document.createElement('div');
     heroBody.style.cssText = 'font-size:12px;color:var(--color-text-secondary);line-height:1.5;';
-    heroBody.textContent   = 'Required by financial regulations before your first withdrawal. Takes about 3 minutes. Your funds keep growing while we review.';
+    heroBody.textContent   = "Required by NexTrade's compliance flow before your first withdrawal. Submission takes about 3 minutes. Identity requirements and review procedures are applied according to the operating jurisdiction.";
     heroText.appendChild(heroTitle); heroText.appendChild(heroBody);
     hero.appendChild(heroIcon); hero.appendChild(heroText);
     content.appendChild(hero);
@@ -316,6 +363,36 @@ const KYC = (() => {
       return grp;
     }
 
+    // ── Country → valid document types ───────────────────────────────────
+    // Passport and driver's licence are treated as universally acceptable
+    // photo ID. NIN and voter's card are only actually issued in the
+    // countries listed — showing them to, say, a US resident is what was
+    // reported as the bug. Deliberately reuses the same 5 doc_type values
+    // the backend already expects (submit_kyc RPC / kyc_documents table) —
+    // this only changes which are *offered*, not the schema.
+    const DOC_TYPE_LABELS = {
+      passport:           'International Passport',
+      nin:                'NIN Slip / National ID Card',
+      drivers_license:    'Driver\'s Licence',
+      voters_card:        'Voter\'s Card',
+      residence_permit:   'Residence Permit'
+    };
+    const DOC_TYPES_BY_COUNTRY = {
+      NG:    ['passport', 'nin', 'drivers_license', 'voters_card', 'residence_permit'],
+      GH:    ['passport', 'drivers_license', 'voters_card', 'residence_permit'],
+      KE:    ['passport', 'drivers_license', 'residence_permit'],
+      ZA:    ['passport', 'drivers_license', 'residence_permit'],
+      US:    ['passport', 'drivers_license', 'residence_permit'],
+      GB:    ['passport', 'drivers_license', 'residence_permit'],
+      CA:    ['passport', 'drivers_license', 'residence_permit'],
+      AU:    ['passport', 'drivers_license', 'residence_permit'],
+      DE:    ['passport', 'drivers_license', 'residence_permit'],
+      FR:    ['passport', 'drivers_license', 'residence_permit'],
+      AE:    ['passport', 'drivers_license', 'residence_permit'],
+      SG:    ['passport', 'drivers_license', 'residence_permit'],
+      OTHER: ['passport', 'drivers_license', 'residence_permit']
+    };
+
     infoSection.appendChild(buildInput('kyc_fullname',  'Full Legal Name',       'text', 'As it appears on your ID'));
     infoSection.appendChild(buildInput('kyc_dob',       'Date of Birth',         'date', ''));
     infoSection.appendChild(buildSelect('kyc_country',  'Country of Residence', [
@@ -325,15 +402,32 @@ const KYC = (() => {
       ['AU', 'Australia'], ['DE', 'Germany'], ['FR', 'France'],
       ['AE', 'United Arab Emirates'], ['SG', 'Singapore'], ['OTHER', 'Other']
     ]));
+    // Starts empty/disabled — populated once a country is chosen, below.
     infoSection.appendChild(buildSelect('kyc_doc_type', 'ID Document Type', [
-      ['', '— Select type —'],
-      ['passport',      'International Passport'],
-      ['nin',           'NIN Slip / National ID Card'],
-      ['drivers_license','Driver\'s Licence'],
-      ['voters_card',   'Voter\'s Card'],
-      ['residence_permit','Residence Permit']
+      ['', 'Select country first']
     ]));
     content.appendChild(infoSection);
+
+    // Repopulate the doc-type dropdown whenever country changes, restricted
+    // to what's actually valid there. Resets the current selection since a
+    // previously-chosen type (e.g. NIN) may no longer be valid.
+    const countrySel = document.getElementById('kyc_country');
+    const docTypeSel = document.getElementById('kyc_doc_type');
+    countrySel.addEventListener('change', () => {
+      const allowed = DOC_TYPES_BY_COUNTRY[countrySel.value] || [];
+      docTypeSel.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = allowed.length ? '— Select type —' : 'Select country first';
+      docTypeSel.appendChild(placeholder);
+      allowed.forEach(val => {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = DOC_TYPE_LABELS[val];
+        docTypeSel.appendChild(opt);
+      });
+      docTypeSel.disabled = allowed.length === 0;
+    });
 
     // ── Divider ────────────────────────────────────────────────────────────
     const div2 = document.createElement('div');
@@ -341,6 +435,10 @@ const KYC = (() => {
     content.appendChild(div2);
 
     // ── Document uploads ───────────────────────────────────────────────────
+    // Each file is compressed immediately on selection, not at submit time —
+    // see buildFileInput. This object holds the in-flight/completed
+    // compression Promise per field.
+    const uploadCache = {};
     const docsSection = document.createElement('div');
     docsSection.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
     docsSection.appendChild(sectionLabel('Identity Documents'));
@@ -350,9 +448,9 @@ const KYC = (() => {
     uploadNote.innerHTML = 'Photos are <strong style="color:var(--color-text-secondary);">automatically compressed</strong> before sending. Ensure ID text is clearly legible.';
     docsSection.appendChild(uploadNote);
 
-    docsSection.appendChild(buildFileInput('kyc_id_front',  'ID — Front Side',              '🪪'));
-    docsSection.appendChild(buildFileInput('kyc_id_back',   'ID — Back Side (if applicable)','🪪'));
-    docsSection.appendChild(buildFileInput('kyc_selfie',    'Selfie Holding Your ID',        '🤳'));
+    docsSection.appendChild(buildFileInput('kyc_id_front',  'ID — Front Side',              '🪪', uploadCache));
+    docsSection.appendChild(buildFileInput('kyc_id_back',   'ID — Back Side (if applicable)','🪪', uploadCache));
+    docsSection.appendChild(buildFileInput('kyc_selfie',    'Selfie Holding Your ID',        '🤳', uploadCache));
     content.appendChild(docsSection);
 
     // ── Tips ───────────────────────────────────────────────────────────────
@@ -405,6 +503,10 @@ const KYC = (() => {
       if (!dob)       { App.showError('Enter your date of birth');           return; }
       if (!country)   { App.showError('Select your country of residence');   return; }
       if (!docType)   { App.showError('Select your ID document type');       return; }
+      if (!(DOC_TYPES_BY_COUNTRY[country] || []).includes(docType)) {
+        App.showError('That document type isn\'t valid for the selected country. Please reselect.');
+        return;
+      }
 
       const frontFile  = (document.getElementById('kyc_id_front')  || {}).files;
       const backFile   = (document.getElementById('kyc_id_back')   || {}).files;
@@ -412,6 +514,12 @@ const KYC = (() => {
 
       if (!frontFile  || !frontFile[0])  { App.showError('Upload front of your ID');    return; }
       if (!selfieFile || !selfieFile[0]) { App.showError('Upload a selfie with your ID'); return; }
+      // A file can be selected but have failed to compress (see buildFileInput's
+      // catch handler, which deletes the cache entry on failure) — that must
+      // block submit here too, not just be caught later re-reading the file.
+      if (!uploadCache.kyc_id_front) { App.showError('Your ID front photo could not be processed. Please re-select it.'); return; }
+      if (!uploadCache.kyc_selfie)   { App.showError('Your selfie could not be processed. Please re-select it.'); return; }
+      if (backFile && backFile[0] && !uploadCache.kyc_id_back) { App.showError('Your ID back photo could not be processed. Please re-select it or remove it.'); return; }
 
       const { user } = window.AppState
         ? { user: AppState.get('user') }
@@ -434,16 +542,16 @@ const KYC = (() => {
       };
 
       try {
-        setProgress(10, 'Compressing ID front…');
-        const frontBlob  = await compress(frontFile[0]);
+        setProgress(10, 'Finishing ID front…');
+        const frontBlob  = await uploadCache.kyc_id_front;
 
-        setProgress(30, 'Compressing selfie…');
-        const selfieBlob = await compress(selfieFile[0]);
+        setProgress(30, 'Finishing selfie…');
+        const selfieBlob = await uploadCache.kyc_selfie;
 
         let backPath = null;
-        if (backFile && backFile[0]) {
-          setProgress(45, 'Compressing ID back…');
-          const backBlob = await compress(backFile[0]);
+        if (backFile && backFile[0] && uploadCache.kyc_id_back) {
+          setProgress(45, 'Finishing ID back…');
+          const backBlob = await uploadCache.kyc_id_back;
           setProgress(55, 'Uploading ID back…');
           backPath = await uploadImage(user.id, backBlob, 'id_back');
         }
@@ -480,7 +588,7 @@ const KYC = (() => {
 
         if (window.Modal) Modal.close();
         setTimeout(() => {
-          if (window.App) App.showSuccess('Documents submitted. Review takes 1–24 hours.');
+          if (window.App) App.showSuccess('Documents submitted for review.');
         }, 300);
 
       } catch (err) {

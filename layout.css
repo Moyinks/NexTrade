@@ -98,8 +98,8 @@ body {
   -webkit-overflow-scrolling: touch;
 
   padding: var(--space-4);
-  /* Enough room for floating orb (58px) + bottom gap (28px) + safe area + breathing */
-  padding-bottom: calc(110px + env(safe-area-inset-bottom, 0px));
+  /* See --scroll-bottom-clearance in core.css for what this covers. */
+  padding-bottom: var(--scroll-bottom-clearance, 116px);
 
   position: relative;
   z-index: 1;

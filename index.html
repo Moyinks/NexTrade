@@ -4,26 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="color-scheme" content="dark" />
-  <!--
-  ════════════════════════════════════════════════════════════════
-  NEXTRADE PWA SNIPPET  — paste into BOTH login.html and index.html
-  ════════════════════════════════════════════════════════════════
-
-  WHERE TO PUT THE <meta> AND <link> TAGS:
-    Inside <head>, right after your existing <meta viewport> tag.
-
-  WHERE TO PUT THE <style> BLOCK:
-    Inside <head>, anywhere after the tags above.
-
-  WHERE TO PUT THE <script> BLOCK:
-    At the very bottom of <body>, LAST script tag on the page.
-    (after config.js and your other scripts)
-
-  ════════════════════════════════════════════════════════════════
--->
 
 
-<!-- ── STEP 1: PASTE THESE INTO <head> ──────────────────────────────────── -->
+
+
 
   <!-- Manifest -->
   <link rel="manifest" href="/manifest.json">
@@ -39,23 +23,23 @@
   <!-- App name on the home screen -->
   <meta name="apple-mobile-web-app-title" content="NexTrade">
 
-  <!-- iOS home screen icon (NexTrade-192.png = 192x192, iOS scales it down to 180x180) -->
-  <link rel="apple-touch-icon" href="/NexTrade-192.png">
+  <!-- iOS home screen icon (pwa1.png = 192x192, iOS scales it down to 180x180) -->
+  <link rel="apple-touch-icon" href="/pwa1.png">
 
   <!-- ─── General / Android fallback ───────────────────────────────────── -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="application-name" content="NexTrade">
   <meta name="msapplication-TileColor" content="#0B0E11">
-  <meta name="msapplication-TileImage" content="/NexTrade-512.png">
-  <meta name="description" content="Institutional-grade yield strategies. Performance fee only on profit.">
+  <meta name="msapplication-TileImage" content="/pwa2.png">
+  <meta name="description" content="Managed yield strategies. Performance fee only on profit.">
 
   <!-- Favicon fallback -->
-  <link rel="icon" type="image/png" sizes="192x192" href="/NexTrade-192.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="/NexTrade-512.png">
-  <link rel="shortcut icon" href="/NexTrade-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/pwa1.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/pwa2.png">
+  <link rel="shortcut icon" href="/pwa1.png">
 
 
-<!-- ── STEP 2: PASTE THIS <style> INTO <head> ───────────────────────────── -->
+
 <style>
   /* ── iOS Install Banner ───────────────────────────────────────────────── */
   #pwa-ios-banner {
@@ -245,7 +229,7 @@
 
     /* ── SPLASH / LOADING SCREEN ──────────────────────────────────────────
        Designed to be a seamless continuation of Chrome's auto-generated
-       PWA splash. Chrome shows NexTrade-512.png centered on #0B0E11 background.
+       PWA splash. Chrome shows pwa2.png centered on #0B0E11 background.
        We match that exactly, then grow the logo slightly and fade in the
        spinner — making Chrome splash → HTML splash feel like one screen. */
 
@@ -322,7 +306,7 @@
       font-family: 'Inter', sans-serif;
     }
 
-    /* Backup spinner — shown only if NexTrade-512.png fails to load */
+    /* Backup spinner — shown only if pwa2.png fails to load */
     .loader-spinner-fallback {
       display: none;
       width: 40px; height: 40px;
@@ -346,7 +330,7 @@
 <!-- iOS Install Banner -->
 <div id="pwa-ios-banner" role="dialog" aria-label="Install NexTrade">
   <div class="pwa-ios-icon">
-    <img src="/NexTrade-192.png" alt="NexTrade" onerror="this.style.display='none'">
+    <img id="pwa-ios-icon-img" src="/pwa1.png" alt="NexTrade">
   </div>
   <div class="pwa-ios-body">
     <div class="pwa-ios-title">Add NexTrade — start earning</div>
@@ -355,30 +339,30 @@
       then <strong>"Add to Home Screen"</strong> for the full app experience.
     </div>
   </div>
-  <button class="pwa-ios-close" onclick="dismissPWABanner()" aria-label="Dismiss">&#x2715;</button>
+  <button id="pwa-ios-close" class="pwa-ios-close" aria-label="Dismiss">&#x2715;</button>
 </div>
 
 <!-- Android / Chrome Install Banner -->
 <div id="pwa-android-banner" role="dialog" aria-label="Install NexTrade">
   <div class="pwa-android-icon">
-    <img src="/NexTrade-192.png" alt="NexTrade">
+    <img src="/pwa1.png" alt="NexTrade">
   </div>
   <div class="pwa-android-body">
     <div class="pwa-android-title">NexTrade</div>
     <div class="pwa-android-sub">Add to home screen</div>
   </div>
-  <button class="pwa-android-btn" onclick="triggerAndroidInstall()">Install</button>
-  <button class="pwa-android-close" onclick="dismissPWABanner()" aria-label="Dismiss">&#x2715;</button>
+  <button id="pwa-android-install" class="pwa-android-btn">Install</button>
+  <button id="pwa-android-close" class="pwa-android-close" aria-label="Dismiss">&#x2715;</button>
 </div>
 
   <div id="loading-screen">
     <div class="loader-content">
       <!-- Use actual brand image so HTML splash matches Chrome auto-splash visually -->
       <img
+        id="loader-brand-img"
         class="loader-brand-img"
-        src="/NexTrade-512.png"
+        src="/pwa2.png"
         alt="NexTrade"
-        onerror="this.classList.add('errored'); this.style.display='none';"
       >
       <!-- Fallback icon if image 404s -->
       <div class="loader-spinner-fallback"></div>
@@ -398,16 +382,20 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0"></script>
 <script src="session-manager.js" defer></script>
   <script src="config.js" defer></script>
   <script src="format.js" defer></script>
   <script src="validation.js" defer></script>
+  <script src="safe-dom.js" defer></script>
   <script src="storage.js" defer></script>
+  <script src="finance.js" defer></script>
+  <script src="request-id.js" defer></script>
   <script src="state.js" defer></script>
   <script src="supabase.js" defer></script>
   <script src="api.js" defer></script>
   <script src="kyc.js" defer></script>
+  <script src="withdrawal-auth.js" defer></script>
  <script src="trade.js" defer></script>
   <script src="card.js" defer></script>
   <script src="modals.js" defer></script>
@@ -425,179 +413,13 @@
 
   <script src="bootstraps.js" defer></script>
   <script src="router.js" defer></script>
+  <script src="app-actions.js" defer></script>
   <script src="app.js" defer></script>
-<!-- ── STEP 4: PASTE THIS <script> AT THE VERY BOTTOM OF <body> ─────────── -->
-<!--           (last script tag, after everything else)                        -->
-<script>
-
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' })
-        .then((reg) => {
-          console.log('[PWA] Service worker registered. Scope:', reg.scope);
-
-          // When a new SW is found, activate it immediately
-          reg.addEventListener('updatefound', () => {
-            const newWorker = reg.installing;
-            if (!newWorker) return;
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // New content available — reload silently so user always has latest
-                console.log('[PWA] New version available — activating.');
-                newWorker.postMessage({ type: 'SKIP_WAITING' });
-              }
-            });
-          });
-        })
-        .catch((err) => console.warn('[PWA] Service worker registration failed:', err));
-    });
-
-    // When a new SW takes over, reload the page once
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
-      }
-    });
-  }
-  
-
-  const PWA_DISMISSED_KEY = 'nex_pwa_dismissed';
-  let androidInstallEvent = null;
-
-  // Don't show banners if already installed or dismissed in last 7 days
-  function shouldShowBanner() {
-    if (window.matchMedia('(display-mode: standalone)').matches) return false;
-    if (window.navigator.standalone === true) return false; // iOS standalone
-    const dismissed = localStorage.getItem(PWA_DISMISSED_KEY);
-    if (dismissed) {
-      const daysSince = (Date.now() - Number(dismissed)) / 86400000;
-      if (daysSince < 7) return false; // Re-ask after 7 days
-    }
-    return true;
-  }
-
-  function dismissPWABanner() {
-    localStorage.setItem(PWA_DISMISSED_KEY, String(Date.now()));
-    const ios     = document.getElementById('pwa-ios-banner');
-    const android = document.getElementById('pwa-android-banner');
-    if (ios)     { ios.classList.remove('show'); }
-    if (android) { android.style.display = 'none'; }
-  }
-
-  // Expose globally so the HTML onclick attributes above can reach it
-  window.dismissPWABanner = dismissPWABanner;
-
-  // ── ANDROID / CHROME ────────────────────────────────────────────────────
-  // beforeinstallprompt fires when Chrome decides the app is installable.
-  // We capture it so we can trigger it on our own button instead of the browser mini-bar.
-
-  window.addEventListener('beforeinstallprompt', (e) => {
-    // Prevent the default mini-infobar from Chrome (we show our own)
-    e.preventDefault();
-    androidInstallEvent = e;
-
-    if (!shouldShowBanner()) return;
-
-    // Show our custom Android banner after a short delay (user has had a moment to see the page)
-    setTimeout(() => {
-      const banner = document.getElementById('pwa-android-banner');
-      if (banner) banner.style.display = 'flex';
-    }, 2500);
-  });
-
-  window.triggerAndroidInstall = async () => {
-    if (!androidInstallEvent) return;
-    dismissPWABanner();
-    androidInstallEvent.prompt();
-    const { outcome } = await androidInstallEvent.userChoice;
-    console.log('[PWA] Install outcome:', outcome);
-    androidInstallEvent = null;
-  };
-
-  // Clean up after install — hide banner if they installed from elsewhere
-  window.addEventListener('appinstalled', () => {
-    console.log('[PWA] App installed.');
-    dismissPWABanner();
-    androidInstallEvent = null;
-  });
 
 
-  // ── iOS / SAFARI ────────────────────────────────────────────────────────
-  // Safari never fires beforeinstallprompt.
-  // We detect iOS Safari explicitly and show our custom instruction banner.
+<script src="index-pwa.js" defer></script>
 
-  function isIosSafari() {
-    const ua  = window.navigator.userAgent;
-    const ios = /iphone|ipad|ipod/i.test(ua);
-    // Check it's Safari and NOT a webview (Chrome on iOS, Firefox on iOS etc.)
-    const safari = /safari/i.test(ua) && !/crios|fxios|opios|mercury/i.test(ua);
-    return ios && safari;
-  }
-
-  if (isIosSafari() && shouldShowBanner()) {
-    // Wait 2.5 seconds so user can see the page first
-    setTimeout(() => {
-      const banner = document.getElementById('pwa-ios-banner');
-      if (banner) banner.classList.add('show');
-    }, 2500);
-  }
-</script>
-
-  <script defer>
-    (async () => {
-      // 1. Wait for Dependencies
-      const waitFor = async (cond, t = 6000) => {
-        const s = Date.now();
-        while (!cond()) {
-          if (Date.now() - s > t) return false;
-          await new Promise(r => setTimeout(r, 50));
-        }
-        return true;
-      };
-
-      const ok = await waitFor(() =>
-        window.supabaseClient &&
-        window.Bootstraps &&
-        window.App &&
-        typeof App.init === 'function'
-      );
-
-      if (!ok) {
-        console.error('❌ App failed to initialize in time');
-        const errText = document.getElementById('loaderText');
-        if (errText) { errText.textContent = 'Connection error'; errText.style.color = '#ef4444'; }
-        return;
-      }
-
-      // 2. Initialize App (calls Bootstraps.init() internally at step 1)
-      try {
-        await App.init();
-
-        // 3. Complete progress bar then dismiss
-        const bar = document.getElementById('loaderBar');
-        if (bar) { bar.style.transition = 'width 0.25s ease'; bar.style.width = '100%'; }
-
-        setTimeout(() => {
-          const screen = document.getElementById('loading-screen');
-          if (screen) {
-            screen.classList.add('hidden');
-            setTimeout(() => screen.remove(), 500);
-          }
-        }, 350);
-
-        console.log('NexTrade Ready');
-      } catch (err) {
-        console.error('Init Error:', err);
-        // Auth errors handled internally — app redirects to login
-      }
-    })();
-    window.addEventListener('beforeunload', () => {
-  if (window.API) API.unsubscribeTicker();
-  if (window.CacheManager) CacheManager.stopBackgroundChecker();
-});
-  </script>
+  <script src="index-entry.js" defer></script>
 
 </body>
 </html>

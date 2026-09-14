@@ -1,49 +1,13 @@
 /**
- * NexTrade — Vault Module v6.3
- * ══════════════════════════════════════════════════════════════════════════════
- * FIXES (v6.2 → v6.3):
- * 1. deriveSpotBalanceFromLedger — completed transactions query now uses
- *    .in('status', ['completed', 'approved']) instead of .eq('status', 'completed').
- *    'approved' is the terminal status the admin portal writes when confirming a
- *    deposit. Without it, admin-approved deposits were invisible to the vault's
- *    derivation function. Any invest or claim operation that calls
- *    deriveSpotBalanceFromLedger would re-derive spot without counting the
- *    approved deposit, writing a lower (or zero) spot balance back to profiles
- *    and AppState. Matches the identical fix already present in trade.js v2.1.
+ * NexTrade — Vault
  *
- * FIXES (v6.1 → v6.2, carried forward):
- * 1. Transfer types registered in CREDIT_TYPES / DEBIT_TYPES — 'transfer_in'
- *    and 'transfer_out' are now recognised by deriveSpotBalanceFromLedger().
- *    wallets.js (v5.1) writes these types when recording internal spot↔vault
- *    transfers. Without registration here, any vault operation (invest or claim)
- *    that calls deriveSpotBalanceFromLedger() after a transfer would silently
- *    ignore the transfer entries, re-inflating or deflating spot incorrectly.
- *
- * 2. Pending withdrawals included in derivation — deriveSpotBalanceFromLedger()
- *    now executes a second query for pending withdrawals (status='pending',
- *    type='withdraw') and merges them with completed transactions before
- *    reduction. Previously, filtering to status='completed' only caused pending
- *    withdrawals to be invisible to derivation. On next vault operation the
- *    pre-withdrawal balance was restored, allowing the withdrawn funds to
- *    reappear. This mirrors the identical fix applied in trade.js.
- *
- * 3. Ledger entry failure is now fatal in handleInvestment and handleClaim —
- *    previously a failed transactions.insert() was swallowed with console.warn
- *    and execution continued. An investment or claim with no audit trail would
- *    leave the balance in a state that could not be correctly re-derived. Now
- *    both throw, aborting the operation.
- *
- * FIXES (v6.1, carried forward):
- * 1. strategy_id duplicate key — JS silently took the last value (the name string),
- *    so every lookup by id failed. Fixed: one key, correct value.
- * 2. strategy_name — removed as a stored field; display labels are derived from strategy_id.
- * 3. handleClaim zeroed investment.amount — destroyed the audit trail.
- *    Fixed: only update status to 'completed'. Amount is immutable (append-only).
- * 4. Ledger-first writes — investment and claim operations insert a transaction
- *    entry as the primary record. Balance on profiles is recomputed from ledger.
- * 5. Removed vault_balance direct write — vault_balance is derived in AppState
- *    from active investments (syncVaultData in states.js). We do not write it
- *    from the client; it's a computed view, not stored state.
+ * Product rules:
+ * - Strategy return figures are gross per-cycle targets, not APY and not guarantees.
+ * - FinanceMath mirrors the server claim formula for all monetary previews.
+ * - Postgres RPCs are the only authority for investment creation and claims.
+ * - The modeled pool index/activity feed is presentation context only; it never
+ *   determines a user's claimable balance or mutates financial state.
+ * - Completed investment principal remains immutable for auditability.
  */
 
 (function () {
@@ -70,14 +34,14 @@
       penaltyRate: 0.08,
       perfFee:     15,
       mechanics: [
-        { icon: '\u{1F3E6}', title: 'Stablecoin Lending',  pct: 55, desc: 'USDC/USDT loaned to institutional borrowers via audited protocols. Pool earns a continuous yield from real borrower demand \u2014 no speculation.' },
-        { icon: '\u27A0',    title: 'ETH Staking',          pct: 30, desc: 'Native ETH staking through validator nodes we operate. Protocol rewards are deposited into the pool every epoch.' },
-        { icon: '\u{1F4A7}', title: 'Liquidity Provision',  pct: 15, desc: 'Pool capital deployed into the highest-fee stable pairs. Every swap generates a fee credited to the pool continuously.' }
+        { icon: '\u{1F3E6}', title: 'Stablecoin Lending',  pct: 55, desc: 'Target allocation to USDC/USDT lending through vetted institutional-grade protocols, with yield intended to come from borrower demand rather than directional speculation.' },
+        { icon: '\u27A0',    title: 'ETH Staking',          pct: 30, desc: 'Designed allocation to native ETH staking infrastructure, with protocol rewards accruing to the strategy pool.' },
+        { icon: '\u{1F4A7}', title: 'Liquidity Provision',  pct: 15, desc: 'Designed allocation to selected stable-pair liquidity venues, where swap fees contribute to pool performance.' }
       ],
       highlights: [
         'Your return = your pool share \u00D7 pool performance',
         'We earn 15% only on the profit the pool generates',
-        'No leverage. Capital only in audited protocols',
+        'No leverage in the Steady strategy design · protocol due diligence required',
         'Early exit: up to 8% fee on claimed value'
       ]
     },
@@ -97,14 +61,14 @@
       penaltyRate: 0.15,
       perfFee:     20,
       mechanics: [
-        { icon: '\u{1F4CA}', title: 'Quant Momentum Signals',    pct: 50, desc: 'RSI-divergence and volume-anomaly signals across the top 20 pairs. Positions open and close within hours. Pool captures the spread.' },
-        { icon: '\u2696\uFE0F', title: 'Funding Rate Arbitrage', pct: 30, desc: 'When perp futures lean heavily long, shorts collect a payment every 8 hours. We sit on the right side and collect \u2014 market-neutral income.' },
-        { icon: '\u{1F525}', title: 'Volatile-Pair Liquidity',   pct: 20, desc: 'Providing liquidity on high-volatility pairs earns 10\u00D7 the fees of stable pairs. Rebalanced dynamically to capture fee income.' }
+        { icon: '\u{1F4CA}', title: 'Quant Momentum Signals',    pct: 50, desc: 'Strategy design uses RSI-divergence and volume-anomaly signals across a defined liquid-asset universe, with short-duration positions intended to capture momentum and spread opportunities.' },
+        { icon: '\u2696\uFE0F', title: 'Funding Rate Arbitrage', pct: 30, desc: 'Strategy design monitors perpetual-futures funding imbalances and targets hedged positions intended to capture funding payments while limiting directional exposure.' },
+        { icon: '\u{1F525}', title: 'Volatile-Pair Liquidity',   pct: 20, desc: 'Target allocation to selected volatile-pair liquidity venues, dynamically rebalanced with the goal of capturing higher fee income while controlling inventory risk.' }
       ],
       highlights: [
         'Target: $1,500 \u2192 $2,505 in 30 days at current pool rate',
         'Algo-driven entries \u2014 no emotional decisions, 24/7',
-        'Funding rate arbitrage + momentum signals running every second',
+        'Funding-rate arbitrage + momentum signals designed for continuous monitoring',
         'We earn 20% only on the profit. Zero fees on your principal.',
         'Early exit: up to 15% fee on claimed value'
       ]
@@ -119,11 +83,41 @@
   let _activeTab        = 'explore';
   let _destroyed        = false;
   let _isProcessing     = false;
-  let _milestoneChecked = new Set();
+  let _milestoneChecked = new Set();   // in-card "smart context" render dedupe ONLY — unrelated to toasts, unchanged, still cleared in destroy()
   let _lastInvestHash   = '';             // flicker guard — skip re-render if data unchanged
   let _liveTimers       = new Set();   // interval/timeout IDs — cleared on destroy
+  let _toastShown       = new Set();   // toast dedupe — persisted, NOT cleared on destroy (see below)
+  let _milestoneTimers  = new Set();   // pending setTimeout ids for scheduled toasts — cleared on destroy so a toast can never fire on a panel the user has already left
   let _unsubInvestments = null;
   let _portfolioTabBtn  = null;
+
+  // ============================================
+  // TOAST MILESTONE PERSISTENCE
+  // ── Toasts must fire at most once per investment, forever — not once per
+  // Vault visit. Previously the toast dedupe shared the same in-memory Set
+  // as the in-card render check, which was wiped on every destroy() (i.e.
+  // every time the user left the Vault panel) — so re-entering Vault
+  // replayed every milestone toast the investment had already passed.
+  // Toasts now use their own store, backed by Storage, so it survives
+  // navigation and reloads. The in-card render dedupe (_milestoneChecked)
+  // is untouched and keeps its original per-session behavior.
+  // ============================================
+
+  const TOAST_STORE_KEY = 'vault_milestone_toasts_shown';
+
+  function _loadMilestoneStore() {
+    if (_toastShown.size > 0) return; // already hydrated this session
+    try {
+      const saved = window.Storage ? Storage.get(TOAST_STORE_KEY, []) : [];
+      (saved || []).forEach(k => _toastShown.add(k));
+    } catch (_) { /* non-fatal — worst case a milestone toast repeats once */ }
+  }
+
+  function _persistMilestoneStore() {
+    try {
+      if (window.Storage) Storage.set(TOAST_STORE_KEY, Array.from(_toastShown));
+    } catch (_) { /* non-fatal */ }
+  }
 
   // ============================================
   // HELPERS
@@ -146,7 +140,7 @@
   }
 
   function showError(msg)   { if (window.App && App.showError)   App.showError(String(msg));   else console.error('[VAULT] Error:', msg); }
-  function showSuccess(msg) { if (window.App && App.showSuccess) App.showSuccess(String(msg)); else console.log('[VAULT] Success:', msg); }
+  function showSuccess(msg, title) { if (window.App && App.showSuccess) App.showSuccess(String(msg), title); else console.log('[VAULT] Success:', msg); }
 
   function el(tag, css, txt) {
     const e = document.createElement(tag);
@@ -223,115 +217,17 @@
   }
 
   // ============================================
-  // GBM + ORNSTEIN-UHLENBECK LIVE TICKER ENGINE
+  // MODELED STRATEGY CONTEXT
   // ============================================
-  // Uses Geometric Brownian Motion for realistic price paths:
-  //   S(t+dt) = S(t) * exp((μ_eff - σ²/2)*dt + σ*√dt*Z)
-  // where μ_eff blends:
-  //   • base drift toward the strategy target
-  //   • an OU (mean-reversion) term pulling toward the expected path
-  //     so the value tracks ~50% of the total return at the midpoint
-  // Z is drawn via Box-Muller (proper Gaussian, not cheap uniform hack).
-  //
-  // Each investment gets an independent GBM state stored in _gbmStates.
-  // Canonical tick: 60s — moves the state forward one step.
-  // Display tick: 4s — linearly interpolates toward the canonical target
-  //               so the number never jumps and feels authentically live.
-
-  // _gbmStates: Map<investmentId, { base, target, interpProgress, totalReturn, elapsedSec, durationSec }>
-  const _gbmStates = new Map();
-
-  // Box-Muller transform: two independent uniforms → standard normal variate.
-  // Far better than the sum-of-uniforms approximation for financial sims.
-  function _boxMuller() {
-    let u, v, s;
-    do {
-      u = Math.random() * 2 - 1;
-      v = Math.random() * 2 - 1;
-      s = u * u + v * v;
-    } while (s >= 1 || s === 0);
-    return u * Math.sqrt(-2 * Math.log(s) / s);
-  }
-
-  // Compute the GBM volatility and drift for a given strategy.
-  // alpha-seeker targets 67% over 30 days, steady targets 22% APY over 90 days.
-  function _gbmParams(strategyId) {
+  // This helper is used only for explanatory projections/milestones. Monetary
+  // position values always come from FinanceMath/_estimatedValue so the UI and
+  // claim RPC share one deterministic formula.
+  function _strategyCycleParams(strategyId) {
+    const strategy = STRATEGIES.find(s => s.id === strategyId) || {};
     const isAlpha = strategyId === 'alpha-seeker';
-    const totalReturn   = isAlpha ? 0.67  : 0.22 * (90 / 365);  // target fractional return
-    const durationDays  = isAlpha ? 30    : 90;
-    const durationSec   = durationDays * 86400;
-    // Daily vol: alpha needs more perceived movement, steady is calmer
-    const dailyVol      = isAlpha ? 0.0155 : 0.0055;
-    const sigmaPerSec   = dailyVol / Math.sqrt(86400);
-    // Base drift per second derived from CAGR formula
-    const baseDrift     = Math.log(1 + totalReturn) / durationSec;
-    // OU mean-reversion speed (per second): pulls back if we stray too far
-    const kappa         = isAlpha ? 0.00008 : 0.00004;
-    return { totalReturn, durationSec, sigmaPerSec, baseDrift, kappa };
-  }
-
-  // Initialise or retrieve GBM state for an investment.
-  function _ensureGbmState(investment) {
-    if (_gbmStates.has(investment.id)) return _gbmStates.get(investment.id);
-    const { totalReturn, durationSec, sigmaPerSec, baseDrift, kappa } = _gbmParams(investment.strategy_id);
-    const principal = parseFloat(investment.amount || 0);
-    const createdAt = new Date(investment.created_at || Date.now()).getTime();
-    const elapsedSec = Math.max(0, (Date.now() - createdAt) / 1000);
-    // Expected value at this moment along the linear path
-    const fraction    = Math.min(1, elapsedSec / durationSec);
-    const expectedNow = principal * (1 + totalReturn * fraction);
-    // Seed base with a tiny random offset so two users opened at same time don't match
-    const initNudge   = 1 + (Math.random() - 0.5) * 0.003;
-    const state = {
-      base:        expectedNow * initNudge,  // current canonical value
-      target:      expectedNow * initNudge,  // interpolation target (updated each 60s tick)
-      interpFrac:  1,                         // 0→1 over the 4s display interval
-      totalReturn, durationSec, sigmaPerSec, baseDrift, kappa,
-      principal,   createdAt,
-      elapsedSec
-    };
-    _gbmStates.set(investment.id, state);
-    return state;
-  }
-
-  // Advance the GBM state by dt seconds (called on each 60s canonical tick).
-  function _gbmAdvance(state, dt) {
-    const { durationSec, sigmaPerSec, baseDrift, kappa, totalReturn, principal, createdAt } = state;
-    state.elapsedSec += dt;
-
-    const fraction    = Math.min(1, state.elapsedSec / durationSec);
-    const expectedNow = principal * (1 + totalReturn * fraction);
-
-    // OU reversion: log-space distance from expected path
-    const logDev      = Math.log(state.base / expectedNow);   // +ve = above path, -ve = below
-    const ouTerm      = -kappa * logDev;                       // pulls back toward 0 deviation
-
-    const mu_eff      = baseDrift + ouTerm;
-    const sigma       = sigmaPerSec;
-    const Z           = _boxMuller();
-
-    // GBM step in log space (Itô's lemma)
-    const logReturn   = (mu_eff - 0.5 * sigma * sigma) * dt + sigma * Math.sqrt(dt) * Z;
-    const newBase     = state.base * Math.exp(logReturn);
-
-    // Hard floor at 98% of principal (not a simulation of losses, just a backstop)
-    state.base        = Math.max(newBase, principal * 0.98);
-    state.target      = state.base;
-    state.interpFrac  = 0;   // reset interpolation to sweep toward new target over display ticks
-  }
-
-  // Display tick: interpolate toward the GBM target smoothly.
-  // Called every 4s. interpFrac goes 0→1 over 15 steps (60s / 4s).
-  function _gbmDisplayValue(state) {
-    const INTERP_STEPS = 15;
-    const prev  = state.base / Math.exp(
-      (state.interpFrac < 1 ? (1 - state.interpFrac) : 0)
-    ); // approximate previous position
-    // Simple: display target blended toward base with a tiny live jitter
-    const microJitter = 1 + _boxMuller() * state.sigmaPerSec * 4 * 0.3; // ¼ of a 4s step
-    state.interpFrac  = Math.min(1, state.interpFrac + 1 / INTERP_STEPS);
-    // Blend: show a value that slides toward state.base with micro noise
-    return state.target * microJitter;
+    const totalReturn = (strategy.apy || (isAlpha ? 67 : 22)) / 100;
+    const durationDays = strategy.duration || (isAlpha ? 30 : 90);
+    return { totalReturn, durationSec: durationDays * 86400 };
   }
 
   // Index value at any date, walking day-by-day from the epoch.
@@ -343,9 +239,19 @@
     if (days <= 0) return 1.0;
 
     const isAlpha  = strategyId === 'alpha-seeker';
-    // Alpha: daily rate 1.62% targets ~67% in 30 days (accounting for noise bias)
-    // Steady: derived from 22% APY as before
-    const daily    = isAlpha ? 0.01620 : (Math.pow(1 + 0.22, 1 / 365) - 1);
+    const strategy = STRATEGIES.find(s => s.id === strategyId) || {};
+    // Daily rate derived from the strategy's own cycle target/length —
+    // compounding this rate for `strategy.duration` days lands exactly on
+    // `strategy.apy`%. Previously Steady's daily rate was derived from
+    // (1+0.22)^(1/365)-1 — treating apy=22 as an ANNUAL rate and
+    // re-deriving a 365-day compounding rate from it — which compounds to
+    // only ~5% over the real 90-day cycle instead of the intended ~22%
+    // (apy and duration are both per-cycle values in STRATEGIES, not
+    // annual/prorated). Alpha's old rate (0.01620) was a separate
+    // hand-tuned constant rather than derived from its own apy/duration.
+    const cycleDays = strategy.duration || (isAlpha ? 30 : 90);
+    const cycleApy  = (strategy.apy || (isAlpha ? 67 : 22)) / 100;
+    const daily    = Math.pow(1 + cycleApy, 1 / cycleDays) - 1;
     const vol      = isAlpha ? 0.018 : 0.007;   // daily volatility
     const seed     = isAlpha ? 0xDEADBEEF : 0xC0FFEE42;
     const rand     = _rng(seed);
@@ -371,14 +277,26 @@
   }
 
   // Estimated current value based on pool performance since entry date.
+  // Capped at entryDate + strategy.duration — matches claim_investment's
+  // server-side cap (least(now(), matures_at)) so the displayed estimate
+  // never outpaces what the RPC will actually pay out at claim time.
   function _estimatedValue(investment) {
-    const principal  = parseFloat(investment.amount || 0);
-    const entryDate  = investment.created_at || new Date().toISOString();
-    const sid        = investment.strategy_id;
-    const entryIdx   = _poolIndex(sid, entryDate);
-    const todayIdx   = _poolIndex(sid, new Date());
-    if (entryIdx <= 0) return principal;
-    return principal * (todayIdx / entryIdx);
+    const strategy = getStrategyForInvestment(investment);
+    const snapshot = {
+      ...investment,
+      apy: investment.apy ?? strategy.apy,
+      perf_fee: investment.perf_fee ?? strategy.perfFee,
+      penalty_rate: investment.penalty_rate ?? strategy.penaltyRate,
+      duration_days: investment.duration_days ?? investment.duration ?? strategy.duration
+    };
+    if (window.FinanceMath) return FinanceMath.investmentEstimate(snapshot).value;
+    return Math.max(0, Number(investment.current_value || investment.amount || 0));
+  }
+
+  function _positionValue(investment) {
+    if (!investment) return 0;
+    if (investment.status === 'active') return _estimatedValue(investment);
+    return Math.max(0, Number(investment.current_value || investment.amount || 0));
   }
 
   // Pool share percentage (their principal vs simulated total strategy AUM).
@@ -447,7 +365,7 @@
     const header = el('div', 'display:flex;align-items:center;gap:6px;margin-bottom:7px;');
     const dot    = el('span', 'width:6px;height:6px;border-radius:50%;background:#10b981;display:inline-block;animation:pulse 1.5s ease-in-out infinite;flex-shrink:0;');
     header.appendChild(dot);
-    header.appendChild(el('span', 'font-size:10px;font-weight:700;color:var(--color-text-tertiary);letter-spacing:0.7px;text-transform:uppercase;', 'Live Activity'));
+    header.appendChild(el('span', 'font-size:10px;font-weight:700;color:var(--color-text-tertiary);letter-spacing:0.7px;text-transform:uppercase;', 'Illustrative Activity'));
     wrap.appendChild(header);
 
     const list = el('div', 'display:flex;flex-direction:column;gap:4px;');
@@ -455,7 +373,7 @@
     const offset = Math.floor(Date.now() / 30000) % trades.length;
     for (let i = 0; i < 3; i++) {
       const t   = trades[(offset + i) % trades.length];
-      // Fake timestamps: 3m, 9m, 17m ago (vary with offset)
+      // Illustrative timestamps used only for the modeled activity feed.
       const ago = [3, 9, 17][i] + ((offset + i) % 4) + 'm ago';
       const row = el('div', 'display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-radius:7px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.05);');
       const left = el('div', 'display:flex;align-items:center;gap:6px;');
@@ -478,28 +396,39 @@
 
   function getRecommendedId() {
     try {
-      const p = localStorage.getItem('nex_investor_profile');
+      const p = localStorage.getItem('nextrade_investor_profile');
       return p === 'alpha-seeker' ? 'alpha-seeker' : 'steady-accumulator';
     } catch (_) { return 'steady-accumulator'; }
   }
 
   function calcEarlyPenalty(investment) {
-    const strategy  = STRATEGIES.find(s => s.id === investment.strategy_id) || {};
-    const baseRate  = strategy.penaltyRate || 0.10;
-    const totalDays = strategy.duration    || 30;
-    const claimAmt  = parseFloat(investment.current_value || investment.amount || 0);
-    if (!investment.matures_at) return { penalty: 0, receive: claimAmt, isEarly: false, daysRemaining: 0 };
-    const matureMs = new Date(investment.matures_at).getTime();
-    const isEarly  = matureMs > Date.now();
-    if (!isEarly) return { penalty: 0, receive: claimAmt, isEarly: false, daysRemaining: 0 };
-    const daysLeft = (matureMs - Date.now()) / 86400000;
-    const fraction = Math.max(0, Math.min(1, daysLeft / totalDays));
-    const penalty  = Math.round(baseRate * fraction * claimAmt * 100) / 100;
-    return { penalty, receive: Math.max(0, claimAmt - penalty), isEarly: true, daysRemaining: Math.ceil(daysLeft) };
+    const strategy = getStrategyForInvestment(investment);
+    const snapshot = {
+      ...investment,
+      apy: investment.apy ?? strategy.apy,
+      perf_fee: investment.perf_fee ?? strategy.perfFee,
+      penalty_rate: investment.penalty_rate ?? strategy.penaltyRate,
+      duration_days: investment.duration_days ?? investment.duration ?? strategy.duration
+    };
+    if (window.FinanceMath) {
+      const result = FinanceMath.earlyExit(snapshot, snapshot.penalty_rate);
+      const matureMs = investment.matures_at ? Date.parse(investment.matures_at) : NaN;
+      const daysRemaining = Number.isFinite(matureMs) ? Math.max(0, Math.ceil((matureMs - Date.now()) / 86400000)) : 0;
+      return { value: result.value, penalty: result.penalty, receive: result.received, isEarly: result.isEarly, daysRemaining };
+    }
+    const claimAmt = Math.max(0, Number(investment.current_value || investment.amount || 0));
+    return { value: claimAmt, penalty: 0, receive: claimAmt, isEarly: false, daysRemaining: 0 };
   }
 
   function checkMilestones(investments) {
     if (!Array.isArray(investments)) return;
+    _loadMilestoneStore();
+
+    // Collect everything newly-qualified in this pass first, then decide how
+    // to present it as a single scheduled toast batch — never one setTimeout
+    // per milestone, which is what let toasts stack up and cover the screen.
+    const pending = [];
+
     investments.forEach(inv => {
       if (!inv || inv.status !== 'active') return;
       const principal  = parseFloat(inv.amount || 0);
@@ -510,9 +439,9 @@
       // Standard gain milestones
       [10, 25, 50, 100].forEach(m => {
         const key = inv.id + '_gain' + m;
-        if (pct >= m && !_milestoneChecked.has(key)) {
-          _milestoneChecked.add(key);
-          setTimeout(() => showSuccess('🎉 ' + name + ' is up ' + m + '% — great work!'), 600);
+        if (pct >= m && !_toastShown.has(key)) {
+          _toastShown.add(key);
+          pending.push({ message: '🎉 ' + name + ' is up ' + m + '% — great work!' });
         }
       });
 
@@ -521,20 +450,38 @@
       if (inv.created_at && inv.matures_at) {
         const elapsedDays = (Date.now() - new Date(inv.created_at).getTime()) / 86400000;
         const toastKey    = inv.id + '_d15toast';
-        if (elapsedDays >= 13.5 && elapsedDays <= 16.5 && !_milestoneChecked.has(toastKey)) {
-          _milestoneChecked.add(toastKey);
-          const { totalReturn } = _gbmParams(inv.strategy_id);
-          const projFinal = principal * (1 + totalReturn);
+        if (elapsedDays >= 13.5 && elapsedDays <= 16.5 && !_toastShown.has(toastKey)) {
+          _toastShown.add(toastKey);
+          const { totalReturn } = _strategyCycleParams(inv.strategy_id);
+          const invStrategy = getStrategyForInvestment(inv);
+          const feeRate = Number(inv.perf_fee ?? invStrategy.perfFee ?? 0) / 100;
+          const projFinal = principal + (principal * totalReturn * (1 - feeRate));
           const remaining = Math.max(0, Math.ceil(
             (new Date(inv.matures_at).getTime() - Date.now()) / 86400000
           ));
-          setTimeout(() => showSuccess(
+          pending.push({ message:
             '📈 Halfway milestone — ' + name + ' is on track. ' +
             fmt(projFinal) + ' projected at maturity. ' + remaining + 'd remaining.'
-          ), 1200);
+          });
         }
       }
     });
+
+    if (pending.length === 0) return;
+    _persistMilestoneStore();
+
+    // One toast if there's only one thing to say; a single grouped toast
+    // (not N stacked cards) if several milestones landed in the same pass.
+    const fire = () => {
+      if (_destroyed) return; // panel was left before this had a chance to show — don't leak onto whatever the user navigated to
+      if (pending.length === 1) {
+        showSuccess(pending[0].message);
+      } else {
+        showSuccess(pending.length + ' portfolio milestones reached — tap Portfolio to see them.', 'Milestones');
+      }
+    };
+    const timerId = setTimeout(fire, 600);
+    _milestoneTimers.add(timerId);
   }
 
   // ============================================
@@ -596,7 +543,7 @@
     [
       { label: 'Min. Investment', value: fmt(strategy.minAmount),    color: 'var(--color-text-primary)' },
       { label: 'Your Balance',    value: fmt(spotBalance),           color: spotBalance >= strategy.minAmount ? '#10b981' : '#ef4444' },
-      { label: 'Pool 30d Return', value: pool30str,                  color: pool30d >= 0 ? '#10b981' : '#ef4444' },
+      { label: 'Illustrative 30d', value: pool30str,                  color: pool30d >= 0 ? '#10b981' : '#ef4444' },
       { label: 'Lock Period',     value: strategy.duration + ' days', color: 'var(--color-text-primary)' }
     ].forEach(item => {
       const cell = el('div', 'background:rgba(255,255,255,0.03);border-radius:10px;padding:12px;border:1px solid rgba(255,255,255,0.07);');
@@ -620,21 +567,19 @@
     content.appendChild(inputWrap);
 
     const preview = el('div', 'border-radius:12px;padding:14px 16px;margin-bottom:16px;display:none;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);');
-    const prevLbl  = el('div', 'font-size:11px;color:var(--color-text-tertiary);margin-bottom:6px;', 'Est. value after ' + strategy.duration + ' days at current pool rate');
+    const prevLbl  = el('div', 'font-size:11px;color:var(--color-text-tertiary);margin-bottom:6px;', 'Illustrative net value at full target after ' + strategy.duration + ' days');
     const prevAmt  = el('div', 'font-size:22px;font-weight:800;color:var(--color-text-primary);', '');
-    const prevNote = el('div', 'font-size:10px;color:var(--color-text-tertiary);margin-top:4px;', 'Based on pool performance over the last 30 days. Actual payout set at claim time.');
+    const prevNote = el('div', 'font-size:10px;color:var(--color-text-tertiary);margin-top:4px;', 'Illustrative estimate using the strategy target less the stated performance fee. Not a guaranteed return.');
     preview.appendChild(prevLbl); preview.appendChild(prevAmt); preview.appendChild(prevNote);
     content.appendChild(preview);
 
     amountInput.addEventListener('input', () => {
       const v = parseFloat(amountInput.value);
       if (!isNaN(v) && v >= strategy.minAmount) {
-        const share      = _poolShare(v, strategy.id);
-        const idx30ago   = _poolIndex(strategy.id, new Date(Date.now() - 30 * 86400000));
-        const idxToday   = _poolIndex(strategy.id, new Date());
-        const pool30d    = ((idxToday / idx30ago) - 1);
-        const projected  = v * (1 + pool30d * (strategy.duration / 30));
-        prevAmt.textContent = fmt(projected) + ' (pool-tracked est.)';
+        const targetRate = Number(strategy.apy || 0) / 100;
+        const feeRate = Number(strategy.perfFee || 0) / 100;
+        const projected = v + (v * targetRate * (1 - feeRate));
+        prevAmt.textContent = fmt(projected) + ' net target estimate';
         preview.style.display = 'block';
       } else { preview.style.display = 'none'; }
     });
@@ -683,19 +628,25 @@
       if (!window.supabaseClient) throw new Error('Secure investment service unavailable');
       let rpcRow = null;
       {
+        if (!window.RequestId) throw new Error('Secure request identifier unavailable');
+        const investmentFingerprint = `${strategy.id}|${Number(amount).toFixed(8)}`;
+        const investmentKey = RequestId.get('investment', investmentFingerprint);
         const { data, error } = await window.supabaseClient.rpc('create_investment', {
           p_strategy_id: strategy.id,
-          p_amount: amount
+          p_amount: amount,
+          p_idempotency_key: investmentKey
         });
         if (error) throw error;
         rpcRow = Array.isArray(data) ? data[0] : data;
+        if (!rpcRow || !rpcRow.investment_id || !rpcRow.tx_id) throw new Error('Investment authority returned an invalid response');
+        RequestId.clear('investment', investmentKey);
       }
 
       if (window.AppState && rpcRow) {
-        if (typeof rpcRow.spot_balance !== 'undefined' || typeof rpcRow.vault_balance !== 'undefined') {
+        if (typeof rpcRow.spot_balance !== 'undefined' || typeof rpcRow.vault_cash !== 'undefined') {
           AppState.updateBalances({
-            spot:  parseFloat(rpcRow.spot_balance)  || 0,
-            vault: parseFloat(rpcRow.vault_balance) || 0
+            spot: Number(rpcRow.spot_balance),
+            vaultCash: Number(rpcRow.vault_cash)
           });
         }
         if (rpcRow.tx_id) {
@@ -726,14 +677,14 @@
     const { user } = getState();
     if (!user || !user.id) return showError('Session expired. Please refresh.');
 
-    const { penalty, receive, isEarly, daysRemaining } = calcEarlyPenalty(investment);
+    const { value: claimValue, penalty, receive, isEarly, daysRemaining } = calcEarlyPenalty(investment);
 
     if (isEarly && !penaltyConfirmed) {
       if (!window.Modal) return;
       const content = document.createElement('div');
       content.appendChild(el('div', 'text-align:center;font-size:44px;margin-bottom:12px;', '⏰'));
       content.appendChild(el('div', 'font-size:16px;font-weight:800;color:var(--color-text-primary);text-align:center;margin-bottom:16px;', 'Early Exit Penalty'));
-      const claimAmt = parseFloat(investment.current_value || investment.amount || 0);
+      const claimAmt = claimValue;
       const rows = [
         { label: 'Days remaining',   value: daysRemaining + ' day' + (daysRemaining !== 1 ? 's' : ''), color: '#f59e0b' },
         { label: 'Investment value', value: fmt(claimAmt),      color: 'var(--color-text-primary)' },
@@ -765,19 +716,25 @@
       if (!window.supabaseClient) throw new Error('Secure claim service unavailable');
       let rpcRow = null;
       {
+        if (!window.RequestId) throw new Error('Secure request identifier unavailable');
+        const claimFingerprint = `${investment.id}|${penaltyConfirmed ? 'early-ok' : 'mature'}`;
+        const claimKey = RequestId.get('claim', claimFingerprint);
         const { data, error } = await window.supabaseClient.rpc('claim_investment', {
           p_investment_id: investment.id,
-          p_penalty_confirmed: !!penaltyConfirmed
+          p_penalty_confirmed: !!penaltyConfirmed,
+          p_idempotency_key: claimKey
         });
         if (error) throw error;
         rpcRow = Array.isArray(data) ? data[0] : data;
+        if (!rpcRow || !rpcRow.tx_id) throw new Error('Claim authority returned an invalid response');
+        RequestId.clear('claim', claimKey);
       }
 
       if (window.AppState && rpcRow) {
-        if (typeof rpcRow.spot_balance !== 'undefined' || typeof rpcRow.vault_balance !== 'undefined') {
+        if (typeof rpcRow.spot_balance !== 'undefined' || typeof rpcRow.vault_cash !== 'undefined') {
           AppState.updateBalances({
-            spot:  parseFloat(rpcRow.spot_balance)  || 0,
-            vault: parseFloat(rpcRow.vault_balance) || 0
+            spot: Number(rpcRow.spot_balance),
+            vaultCash: Number(rpcRow.vault_cash)
           });
         }
         if (rpcRow.tx_id) {
@@ -806,36 +763,16 @@
   }
 
   // ============================================
-  // LEDGER BALANCE DERIVATION
+  // AUTHORITATIVE SPOT DERIVATION
   // ============================================
+  // Client-side callers delegate to App, which calls the Postgres
+  // derive_spot_balance RPC. Cached profile balances are never authority.
 
-  // Local copy of the derivation logic — same as trade.js.
-  // ============================================
-  // LEDGER DERIVATION — delegate to canonical copy in app.js
-  // ============================================
-  // CREDIT_TYPES, DEBIT_TYPES, and the full derivation logic live in app.js.
-  // app.js exposes App.deriveSpotBalance(userId, storedBalance) on window.App.
-  // All fixes (approved deposits, pending withdrawals, deposit-only gate) are
-  // maintained in one place. App is initialized before any user interaction
-  // can trigger invest/claim, so the delegation is safe at runtime.
-  //
-  // If accounts were admin-seeded without a deposit transaction, run this
-  // migration once in Supabase so the no-deposit fallback path is unreachable:
-  //   INSERT INTO transactions (user_id, type, amount, status, description, created_at)
-  //   SELECT p.id, 'deposit', p.spot_balance, 'completed',
-  //          'Account funding (migration)', NOW() - interval '1 year'
-  //   FROM profiles p
-  //   WHERE NOT EXISTS (
-  //     SELECT 1 FROM transactions t WHERE t.user_id = p.id AND t.type = 'deposit'
-  //   ) AND p.spot_balance > 0;
-
-  async function deriveSpotBalanceFromLedger(userId, storedBalance) {
+  async function deriveSpotBalanceFromLedger(userId) {
     if (window.App && typeof App.deriveSpotBalance === 'function') {
-      return App.deriveSpotBalance(userId, storedBalance);
+      return App.deriveSpotBalance(userId);
     }
-    // Fallback: should never be reached in normal operation.
-    console.error('[VAULT] App.deriveSpotBalance unavailable — returning stored balance');
-    return Math.max(0, parseFloat(storedBalance) || 0);
+    throw new Error('Balance authority unavailable');
   }
 
   // ============================================
@@ -846,7 +783,7 @@
     const { investments } = getState();
     const claimable = (investments || []).filter(i => i.status === 'active' && (!i.matures_at || new Date(i.matures_at) <= Date.now()));
     if (claimable.length === 0) return showError('No matured positions available to claim.');
-    const totalClaims = claimable.reduce((s, i) => s + parseFloat(i.current_value || i.amount || 0), 0);
+    const totalClaims = claimable.reduce((s, i) => s + _estimatedValue(i), 0);
     if (!window.Modal) return;
     const content = document.createElement('div');
     content.innerHTML = '<div style="text-align:center;padding:10px 0;"><div style="font-size:24px;font-weight:800;color:#10b981;margin-bottom:10px;">' + fmt(totalClaims) + '</div><p style="font-size:13px;color:var(--color-text-secondary);margin:0;">Claim ' + claimable.length + ' matured position' + (claimable.length > 1 ? 's' : '') + ' to your Spot Wallet.</p></div>';
@@ -1020,7 +957,7 @@
     content.appendChild(divider);
     const disclosures = [
       'You are joining a shared trading pool. Returns depend on how the pool performs over the cycle — not a guaranteed rate.',
-      'The return figure shown — ' + strategy.apyRange + ' — is what you receive. Our ' + strategy.perfFee + '% performance fee is applied to how the pool is managed, not deducted from your quoted return on top.',
+      'The return figure shown — ' + strategy.apyRange + ' — is a gross strategy target, not a guaranteed payout. A ' + strategy.perfFee + '% performance fee is deducted from positive profit at claim.',
       'Your principal is locked for ' + strategy.duration + ' days. Early exit incurs a penalty of up to ' + Math.round(strategy.penaltyRate * 100) + '% of claimed value. This is disclosed again before any early withdrawal is confirmed.',
       'If the pool generates zero profit in your cycle, our performance fee is zero. We charge nothing on your original deposit, ever.'
     ];
@@ -1056,9 +993,9 @@
     const isMatured  = !isCompleted && investment.matures_at && new Date(investment.matures_at) <= new Date();
     const matureDate = investment.matures_at ? new Date(investment.matures_at) : null;
 
-    // Use pool-index-derived estimate (display only — admin sets real payout)
+    // Display estimate mirrors the deterministic server claim formula.
     const estVal  = isCompleted
-      ? parseFloat(investment.current_value || amount)
+      ? _positionValue(investment)
       : _estimatedValue(investment);
     const gain    = estVal - amount;
     const gainPct = amount > 0 ? (gain / amount) * 100 : 0;
@@ -1092,7 +1029,7 @@
     nameWrap.appendChild(el('div', 'font-size:14px;font-weight:800;color:var(--color-text-primary);', strategy.name));
 
     const statusColor = isCompleted ? 'var(--color-text-tertiary)' : (isMatured ? '#10b981' : '#3b82f6');
-    const statusTxt   = isCompleted ? 'Completed' : (isMatured ? '✓ Ready to Claim' : '● Active · Live');
+    const statusTxt   = isCompleted ? 'Completed' : (isMatured ? '✓ Ready to Claim' : '● Active · Estimated');
     const statusEl    = el('div', 'font-size:10px;font-weight:700;margin-top:2px;letter-spacing:0.3px;', statusTxt);
     statusEl.style.color = statusColor;
     nameWrap.appendChild(statusEl);
@@ -1135,23 +1072,21 @@
     const todayEndIdx    = _poolIndex(investment.strategy_id, new Date());
     const todayGainPct   = todayEndIdx > 0 ? ((todayEndIdx / todayStartIdx) - 1) * 100 : 0;
     const todayGainAmt   = amount * (todayGainPct / 100);
-    const todayGainStr   = (todayGainPct >= 0 ? '+' : '') + todayGainPct.toFixed(2) + '% today (' + (todayGainAmt >= 0 ? '+' : '') + fmt(todayGainAmt) + ')';
+    const todayGainStr   = 'Modeled pool move: ' + (todayGainPct >= 0 ? '+' : '') + todayGainPct.toFixed(2) + '% (' + (todayGainAmt >= 0 ? '+' : '') + fmt(todayGainAmt) + ')';
     const todayEl = el('div', 'font-size:10px;font-weight:700;margin-bottom:5px;', todayGainStr);
     todayEl.style.color = todayGainPct >= 0 ? '#10b981' : '#ef4444';
     valLeft.appendChild(todayEl);
-    valLeft.appendChild(el('div', 'font-size:10px;font-weight:700;color:var(--color-text-tertiary);letter-spacing:0.7px;text-transform:uppercase;margin-bottom:4px;', 'Est. Current Value'));
+    valLeft.appendChild(el('div', 'font-size:10px;font-weight:700;color:var(--color-text-tertiary);letter-spacing:0.7px;text-transform:uppercase;margin-bottom:4px;', 'Estimated Claim Value'));
 
-    // Live-ticking value display.
-    // Seed from GBM state so the displayed value is continuous with the engine
-    // (no visible snap when the first 4s display tick fires).
-    const _gbmInit   = _ensureGbmState(investment);
-    const valDisplay = el('div', 'font-size:26px;font-weight:900;letter-spacing:-0.8px;color:var(--color-text-primary);', fmt(_gbmInit.base));
-    valDisplay.id = 'vault-live-' + investment.id;
+    // Monetary estimate mirrors the server claim formula. The modeled pool
+    // index below is explanatory context only and cannot change this value.
+    const valDisplay = el('div', 'font-size:26px;font-weight:900;letter-spacing:-0.8px;color:var(--color-text-primary);', fmt(estVal));
+    valDisplay.id = 'vault-live-full-' + investment.id;
     valLeft.appendChild(valDisplay);
 
     // Pool share
     const share     = _poolShare(amount, strategy.id);
-    const shareSpan = el('div', 'font-size:10px;color:var(--color-text-tertiary);margin-top:3px;', 'Pool share: ' + share.toFixed(3) + '%');
+    const shareSpan = el('div', 'font-size:10px;color:var(--color-text-tertiary);margin-top:3px;', 'Illustrative pool share: ' + share.toFixed(3) + '%');
     valLeft.appendChild(shareSpan);
     valRow.appendChild(valLeft);
 
@@ -1159,7 +1094,7 @@
     const series     = _indexSeries(strategy.id, 7);
     const weekChange = series.length >= 2 ? ((series[series.length - 1] / series[0]) - 1) * 100 : 0;
     const wkBadge    = el('div', 'text-align:right;');
-    wkBadge.appendChild(el('div', 'font-size:9px;color:var(--color-text-tertiary);margin-bottom:2px;', '7d pool'));
+    wkBadge.appendChild(el('div', 'font-size:9px;color:var(--color-text-tertiary);margin-bottom:2px;', '7d sim.'));
     const wkVal = el('div', 'font-size:12px;font-weight:800;', (weekChange >= 0 ? '+' : '') + weekChange.toFixed(2) + '%');
     wkVal.style.color = weekChange >= 0 ? '#10b981' : '#ef4444';
     wkBadge.appendChild(wkVal);
@@ -1422,26 +1357,27 @@
 
     itemEl.appendChild(body);
 
-    // ── GBM Live Ticker + Day-15 Smart Context ───────────────────────────
+    // ── Canonical value refresh + Day-15 strategy context ───────────────
     if (!isCompleted && !isMatured) {
-      const gbmState  = _ensureGbmState(investment);
-      const elapsedDays = gbmState.elapsedSec / 86400;
+      const createdMs = Date.parse(investment.created_at || '');
+      const elapsedDays = Number.isFinite(createdMs) ? Math.max(0, (Date.now() - createdMs) / 86400000) : 0;
 
       // ── Day-15 Smart Context Card ──────────────────────────────────────
       // Fires once when elapsed time is between 13.5 and 16.5 days.
       // Shows mid-cycle progress, projects final value, and invites the
-      // user to compound — without breaking the "real returns" narrative.
+      // user to compound while keeping modeled activity separate from authoritative claim math.
       const midWindowKey = investment.id + '_day15ctx';
       if (elapsedDays >= 13.5 && elapsedDays <= 16.5 && !_milestoneChecked.has(midWindowKey)) {
         _milestoneChecked.add(midWindowKey);
-        const { totalReturn, durationSec } = _gbmParams(investment.strategy_id);
+        const { totalReturn, durationSec } = _strategyCycleParams(investment.strategy_id);
         const midGain      = estVal - amount;
         const midGainPct   = amount > 0 ? (midGain / amount) * 100 : 0;
         const daysLeft     = Math.max(0, Math.ceil(
           (new Date(investment.matures_at).getTime() - Date.now()) / 86400000
         ));
-        const projectedFinal = amount * (1 + totalReturn);
-        const projectedRemain = projectedFinal - estVal;
+        const feeRate = Number(strategy.perfFee || 0) / 100;
+        const projectedFinal = amount + (amount * totalReturn * (1 - feeRate));
+        const projectedRemain = Math.max(0, projectedFinal - estVal);
 
         const ctx = el('div');
         ctx.style.cssText = [
@@ -1503,25 +1439,13 @@
         body.insertBefore(ctx, body.querySelector('[data-vault-feed]') || body.lastChild);
       }
 
-      // ── GBM canonical tick: every 60s, advance the simulation ────────────
-      // Ensures the value moves decisively each minute in the direction the
-      // GBM+OU model dictates — not a random jitter every few seconds.
-      const canonTimer = setInterval(() => {
-        if (_destroyed) { clearInterval(canonTimer); return; }
-        if (!document.getElementById('vault-live-' + investment.id)) {
-          clearInterval(canonTimer); _liveTimers.delete(canonTimer); return;
-        }
-        _gbmAdvance(gbmState, 60);
-      }, 60000);
-      _liveTimers.add(canonTimer);
-
-      // ── Display tick: every 4s, interpolate toward the canonical target ──
-      // Creates smooth intra-minute movement — realistic, not mechanical.
+      // Refresh the monetary estimate from the same deterministic formula the
+      // claim modal uses. No cosmetic random walk is allowed to change money.
       const displayTimer = setInterval(() => {
         if (_destroyed) { clearInterval(displayTimer); return; }
-        const displayEl = document.getElementById('vault-live-' + investment.id);
+        const displayEl = document.getElementById('vault-live-full-' + investment.id);
         if (!displayEl) { clearInterval(displayTimer); _liveTimers.delete(displayTimer); return; }
-        displayEl.textContent = fmt(_gbmDisplayValue(gbmState));
+        displayEl.textContent = fmt(_estimatedValue(investment));
       }, 4000);
       _liveTimers.add(displayTimer);
     }
@@ -1536,7 +1460,7 @@
   function renderExploreTab(container) {
     container.innerHTML = '';
     const recommendedId = getRecommendedId();
-    const profile       = (() => { try { return localStorage.getItem('nex_investor_profile'); } catch (_) { return null; } })();
+    const profile       = (() => { try { return localStorage.getItem('nextrade_investor_profile'); } catch (_) { return null; } })();
 
     if (profile) {
       const isPlanA = profile === 'steady-accumulator';
@@ -1590,8 +1514,7 @@
     if (active.length > 0) {
       const totalInvested = active.reduce((s, i) => s + parseFloat(i.amount || 0), 0);
       const totalEst      = active.reduce((s, i) => {
-        const cv = parseFloat(i.current_value || 0);
-        return s + (cv > 0 ? cv : parseFloat(i.amount || 0));
+        return s + _estimatedValue(i);
       }, 0);
       const totalGain    = totalEst - totalInvested;
       const totalGainPct = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
@@ -1615,7 +1538,7 @@
 
       // Claim bar
       if (matured.length > 0) {
-        const maturedVal  = matured.reduce((s, i) => s + parseFloat(i.current_value || i.amount || 0), 0);
+        const maturedVal  = matured.reduce((s, i) => s + _estimatedValue(i), 0);
         const claimBar    = el('div', 'display:flex;align-items:center;justify-content:space-between;background:rgba(16,185,129,0.10);border:1px solid rgba(16,185,129,0.22);border-radius:10px;padding:10px 12px;');
         claimBar.appendChild(el('span', 'font-size:13px;font-weight:700;color:#10b981;', '\u2713 ' + matured.length + ' ready to claim \u2014 ' + fmt(maturedVal)));
         const claimAllBtn = el('button', 'font-size:12px;font-weight:700;color:#10b981;background:rgba(16,185,129,0.14);border:1px solid rgba(16,185,129,0.28);border-radius:7px;padding:6px 12px;cursor:pointer;transition:opacity 0.15s;', 'Claim All');
@@ -1664,10 +1587,7 @@
     };
 
     const totalInvested = positions.reduce((s, i) => s + parseFloat(i.amount || 0), 0);
-    const totalEst      = positions.reduce((s, i) => {
-      const cv = parseFloat(i.current_value || 0);
-      return s + (cv > 0 ? cv : parseFloat(i.amount || 0));
-    }, 0);
+    const totalEst      = positions.reduce((s, i) => s + _estimatedValue(i), 0);
     const totalGain    = totalEst - totalInvested;
     const gainPct      = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
     const maturedCount = positions.filter(i => i.matures_at && new Date(i.matures_at) <= new Date()).length;
@@ -1790,10 +1710,9 @@
 
     const mRight = el('div', 'text-align:right;');
 
-    // Live-ticking current value (uses same GBM engine, same element ID convention)
-    const _gbmInit   = _ensureGbmState(investment);
-    const liveEl     = el('div', 'font-size:15px;font-weight:800;color:var(--color-text-primary);', fmt(_gbmInit.base));
-    liveEl.id        = 'vault-live-' + investment.id;
+    // Current value — deterministic preview of the server claim formula.
+    const liveEl     = el('div', 'font-size:15px;font-weight:800;color:var(--color-text-primary);', fmt(estVal));
+    liveEl.id        = 'vault-live-mini-' + investment.id;
     const gainLabel  = el('div', 'font-size:10px;font-weight:700;margin-top:2px;', (gain >= 0 ? '+' : '') + gainPct.toFixed(2) + '%');
     gainLabel.style.color = gain >= 0 ? '#10b981' : '#ef4444';
     mRight.appendChild(liveEl); mRight.appendChild(gainLabel);
@@ -1827,13 +1746,12 @@
       card.appendChild(foot);
     }
 
-    // Start live GBM display ticker for this mini card
+    // Keep the mini-card estimate synchronized with the canonical claim math.
     const displayTimer = setInterval(() => {
       if (_destroyed) { clearInterval(displayTimer); return; }
-      const el_ = document.getElementById('vault-live-' + investment.id);
+      const el_ = document.getElementById('vault-live-mini-' + investment.id);
       if (!el_) { clearInterval(displayTimer); _liveTimers.delete(displayTimer); return; }
-      const state_ = _ensureGbmState(investment);
-      el_.textContent = fmt(state_.base);
+      el_.textContent = fmt(_estimatedValue(investment));
     }, 4000);
     _liveTimers.add(displayTimer);
 
@@ -1900,7 +1818,7 @@
 
     const vaultWrapper = document.createElement('div');
     // Must clear the floating nav orb (58px) + gap (28px) + safe area
-    vaultWrapper.style.paddingBottom = 'calc(110px + env(safe-area-inset-bottom, 0px))';
+    vaultWrapper.style.paddingBottom = 'var(--scroll-bottom-clearance, 116px)';
 
     const pageHeader = el('div', 'padding:16px 16px 4px;');
     pageHeader.appendChild(el('p', 'font-size:13px;color:var(--color-text-tertiary);margin:0;line-height:1.4;', 'Two strategies. Transparent mechanics. Cycle returns set by pool performance, not promises.'));
@@ -1971,10 +1889,19 @@
     _portfolioTabBtn = null;
     _liveTimers.forEach(id => clearInterval(id));
     _liveTimers.clear();
-    _gbmStates.clear();   // free GBM per-investment state
+    // Cancel any milestone toast that hasn't fired yet — otherwise a toast
+    // scheduled while Vault was open can still pop up 600ms later on
+    // whatever panel the user has since navigated to.
+    _milestoneTimers.forEach(id => clearTimeout(id));
+    _milestoneTimers.clear();
     if (_container) _container.style.overflowY = '';
     _container = null;
-    _milestoneChecked.clear();
+    _milestoneChecked.clear();   // in-card render dedupe only — original per-session behavior, unchanged
+    // NOTE: _toastShown is intentionally NOT cleared here. It's the
+    // permanent "already shown" record (persisted via Storage), so a
+    // milestone toast fires once per investment for the life of the
+    // account — not once per Vault visit. See _loadMilestoneStore/
+    // _persistMilestoneStore above.
   }
 
   function cleanup() { destroy(); }
@@ -2070,7 +1997,7 @@
       const alphaVotes = votes.filter(v => v === 'alpha').length;
       const result     = alphaVotes > votes.length / 2 ? 'alpha-seeker' : 'steady-accumulator';
       const strategy   = STRATEGIES.find(s => s.id === result);
-      try { localStorage.setItem('nex_investor_profile', result); } catch (_) {}
+      try { localStorage.setItem('nextrade_investor_profile', result); } catch (_) {}
 
       content.innerHTML = '';
       content.appendChild(el('div', 'text-align:center;font-size:48px;margin-bottom:16px;', strategy.icon));

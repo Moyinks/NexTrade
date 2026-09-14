@@ -37,14 +37,14 @@
   /* ── 2. CONTRAST: deep navy panel, clearly not the background ─────────── */
   /*    App bg = #0B0E11. Card must read as "floating above" not "part of".  */
   background:
-    radial-gradient(ellipse 100% 80% at 0% 120%,  rgba(23, 74, 189, 0.50) 0%, transparent 58%),
-    radial-gradient(ellipse 60%  50% at 100%  -5%, rgba(88,  95, 220, 0.20) 0%, transparent 55%),
-    linear-gradient(162deg, #0d2050 0%, #08173c 55%, #040d24 100%) !important;
+    radial-gradient(ellipse 100% 80% at 0% 120%,  rgba(23, 74, 189, 0.28) 0%, transparent 58%),
+    radial-gradient(ellipse 60%  50% at 100%  -5%, rgba(88,  95, 220, 0.10) 0%, transparent 55%),
+    linear-gradient(162deg, #091840 0%, #060e26 55%, #02090f 100%) !important;
 
   /* Sides + top border — makes the card edge crisp against the dark page    */
   border-top:   none !important;
-  border-left:  1px solid rgba(59,130,246,0.22) !important;
-  border-right: 1px solid rgba(59,130,246,0.22) !important;
+  border-left:  1px solid rgba(59,130,246,0.12) !important;
+  border-right: 1px solid rgba(59,130,246,0.12) !important;
 
   /* ── 3. BOWL / CRADLE SHAPE ───────────────────────────────────────────── */
   /*    Only the BOTTOM corners are rounded — the top bleeds to screen edges. */
@@ -216,9 +216,33 @@ div[style*="background:var(--color-surface,#151921);border:1px solid var(--color
 
 #wallet-main-hero[style] {
   background:
-    radial-gradient(ellipse 100% 80% at 0% 120%,  rgba(23,74,189,0.50) 0%, transparent 58%),
-    radial-gradient(ellipse 60%  50% at 100%  -5%, rgba(88,95,220,0.20) 0%, transparent 55%),
-    linear-gradient(162deg, #0d2050 0%, #08173c 55%, #040d24 100%) !important;
+    radial-gradient(ellipse 100% 80% at 0% 120%,  rgba(23,74,189,0.28) 0%, transparent 58%),
+    radial-gradient(ellipse 60%  50% at 100%  -5%, rgba(88,95,220,0.10) 0%, transparent 55%),
+    linear-gradient(162deg, #091840 0%, #060e26 55%, #02090f 100%) !important;
+}
+
+/* ── 11b. WALLET HERO SHELL — solid backdrop, no corner peek-through ─────
+   #wallet-main-hero rounds its BOTTOM corners only (the bowl/cradle shape,
+   rule 3 above). A rounded corner on an opaque box simply doesn't paint
+   in that corner — so as the page scrolls underneath a sticky element,
+   whatever is passing directly behind those two corners becomes visible
+   through them for a frame or two. That's the "fixed space that
+   interferes" artifact: balance cards / activity rows flashing through
+   the hero's bottom-left and bottom-right corners while scrolling.
+
+   Fix: wrap the hero in its own sticky shell, painted with the exact same
+   solid app background. The shell tracks scroll in lockstep with the hero
+   (both position:sticky; top:0) and always sits between the hero and
+   whatever is scrolling beneath, so the corners — and the 16px gap before
+   the balance cards — only ever reveal flat matching background, never
+   live content. */
+.wallet-hero-shell {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 19 !important;
+  background: var(--color-background, #0B0E11) !important;
+  padding-bottom: 16px;
+  flex-shrink: 0;
 }
 
 /* ── 11. REDUCED MOTION — honour the OS accessibility setting ───────────── */

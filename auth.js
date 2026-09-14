@@ -33,8 +33,8 @@
   function updateAuthSwitch(m) {
     const sw = document.getElementById('authSwitch');
     if (!sw) return;
-    if (m === 'login')  sw.innerHTML = 'No account? <button class="auth-switch-link" onclick="window.showSignup()">Create one \u2192</button>';
-    else if (m === 'signup') sw.innerHTML = 'Already have an account? <button class="auth-switch-link" onclick="window.showLogin()">Sign in \u2192</button>';
+    if (m === 'login')  sw.innerHTML = 'No account? <button class="auth-switch-link" data-login-action="show-signup">Create one \u2192</button>';
+    else if (m === 'signup') sw.innerHTML = 'Already have an account? <button class="auth-switch-link" data-login-action="show-login">Sign in \u2192</button>';
     else sw.innerHTML = '';
   }
 
@@ -288,7 +288,7 @@
         if (error) throw error;
         if (data.user && data.user.identities && data.user.identities.length === 0)
           throw new Error('This email is already registered. Please sign in instead.');
-        if (data.session) { sessionStorage.setItem('yelda_fresh_login','true'); window.location.replace('index.html'); return; }
+        if (data.session) { sessionStorage.setItem('nextrade_fresh_login','true'); window.location.replace('index.html'); return; }
         pendingEmail = email; mode = 'otp';
         sessionStorage.setItem('saved_auth_mode','otp'); sessionStorage.setItem('saved_auth_email', email);
         document.getElementById('displayEmail').textContent = email;
@@ -307,7 +307,7 @@
         if (!email || !password) throw new Error('Please enter both email and password.');
         const { error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        sessionStorage.setItem('yelda_fresh_login','true');
+        sessionStorage.setItem('nextrade_fresh_login','true');
         setBtn('\u2713 SIGNED IN', false, false);
         window.location.replace('index.html');
         return;
@@ -327,7 +327,7 @@
         }
         if (!ready) throw new Error('Session timeout. Please sign in manually.');
         sessionStorage.removeItem('saved_auth_mode'); sessionStorage.removeItem('saved_auth_email');
-        sessionStorage.setItem('yelda_fresh_login','true'); localStorage.setItem('nex_onboarded','false');
+        sessionStorage.setItem('nextrade_fresh_login','true'); localStorage.setItem('nextrade_onboarded','false');
         showToast('Account verified. Welcome to NexTrade.', 'success');
         setBtn('\u2713 VERIFIED', false, false);
         setTimeout(function(){window.location.replace('index.html');}, 700);
@@ -369,7 +369,7 @@
         if (error) throw error;
         showToast('Password updated. Signing you in\u2026', 'success');
         setBtn('\u2713 UPDATED', false, false);
-        sessionStorage.setItem('yelda_fresh_login','true');
+        sessionStorage.setItem('nextrade_fresh_login','true');
         setTimeout(function(){window.location.replace('index.html');}, 700);
         return;
       }
@@ -401,7 +401,7 @@
       if (!window.supabaseClient) { showToast('Configuration error. Check config.js.'); document.getElementById('landing').classList.add('ready'); return; }
 
       const { data } = await window.supabaseClient.auth.getSession();
-      if (data && data.session) { sessionStorage.setItem('yelda_fresh_login','true'); window.location.replace('index.html'); return; }
+      if (data && data.session) { sessionStorage.setItem('nextrade_fresh_login','true'); window.location.replace('index.html'); return; }
 
       const savedMode = sessionStorage.getItem('saved_auth_mode');
 

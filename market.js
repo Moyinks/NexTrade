@@ -21,6 +21,9 @@
 const Market = (() => {
   'use strict';
 
+  const safeText = (value) => window.SafeDOM && SafeDOM.text ? SafeDOM.text(value) : String(value == null ? '' : value);
+  const safeHttpsUrl = (value) => window.SafeDOM && SafeDOM.httpsUrl ? SafeDOM.httpsUrl(value) : '';
+
   // ============================================
   // STATE
   // ============================================
@@ -195,7 +198,7 @@ const Market = (() => {
       <div style="font-size:13px; color:var(--color-text-secondary); margin-bottom:20px; max-width:300px;">
         <div id="error-message-text"></div>
       </div>
-      <button onclick="Market.refresh()" class="btn btn-primary" style="padding:10px 24px;">
+      <button data-app-action="market-refresh" class="btn btn-primary" style="padding:10px 24px;">
         <i class="fas fa-sync-alt" style="margin-right:8px;"></i>
         Retry
       </button>
@@ -291,7 +294,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
           <i class="fas fa-fire" style="color:#f59e0b; margin-right:6px; font-size:14px;"></i>
           Trending Now
         </h3>
-        <button class="trending-refresh-btn" onclick="Market.refreshTrending()" style="background:none; border:none; color:var(--color-text-tertiary); cursor:pointer; padding:4px;">
+        <button class="trending-refresh-btn" data-app-action="market-refresh-trending" style="background:none; border:none; color:var(--color-text-tertiary); cursor:pointer; padding:4px;">
           <i class="fas fa-sync-alt" style="font-size:12px;"></i>
         </button>
       </div>
@@ -397,14 +400,14 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
             <div style="width:28px; height:28px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden;">
-              ${coin.thumb && coin.thumb.startsWith('https://') ? `<img src="${coin.thumb}" style="width:100%; height:100%;" referrerpolicy="no-referrer">` : `<span style="font-size:11px; font-weight:700;">${coin.symbol.substring(0, 2)}</span>`}
+              ${safeHttpsUrl(coin.thumb) ? `<img src="${safeHttpsUrl(coin.thumb)}" style="width:100%; height:100%;" referrerpolicy="no-referrer" alt="">` : `<span style="font-size:11px; font-weight:700;">${safeText(String(coin.symbol || '').substring(0, 2))}</span>`}
             </div>
             <div style="flex:1; min-width:0;">
               <div style="font-size:12px; font-weight:700; color:var(--color-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                ${coin.symbol}
+                ${safeText(coin.symbol)}
               </div>
               <div style="font-size:10px; color:var(--color-text-tertiary);">
-                ${coin.name.length > 12 ? coin.name.substring(0, 12) + '...' : coin.name}
+                ${safeText(String(coin.name || '').length > 12 ? String(coin.name).substring(0, 12) + '...' : coin.name)}
               </div>
             </div>
           </div>
@@ -499,7 +502,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     header.style.cssText = 'padding:0 0 16px 0; position:sticky; top:0; background:var(--color-background); z-index:10; width:100%; box-sizing:border-box;';
 
     const searchWrapper = document.createElement('div');
-    searchWrapper.style.cssText = 'position:relative; margin-bottom:12px; padding:0 16px;';
+    searchWrapper.style.cssText = 'position:relative; margin:0 16px 12px;';
 
     searchWrapper.innerHTML = `
       <i class="fas fa-search" style="position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--color-text-tertiary); font-size:13px; pointer-events:none;"></i>
@@ -602,7 +605,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
   function createMarketList() {
     const list = document.createElement('div');
     list.className = 'market-list';
-    list.style.cssText = 'padding:0 0 100px 0; width:100%; box-sizing:border-box;';
+    list.style.cssText = 'padding:0 0 var(--scroll-bottom-clearance, 116px) 0; width:100%; box-sizing:border-box;';
     list.id = 'market-list';
 
     return list;
@@ -647,15 +650,15 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     card.innerHTML = `
       <div style="display:flex; align-items:center; gap:12px;">
         <div style="width:40px; height:40px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
-          ${coin.image && coin.image.startsWith('https://') ? `<img src="${coin.image}" style="width:100%; height:100%;" referrerpolicy="no-referrer">` : `<span style="font-size:11px; font-weight:700;">${coin.symbol.substring(0, 2)}</span>`}
+          ${safeHttpsUrl(coin.image) ? `<img src="${safeHttpsUrl(coin.image)}" style="width:100%; height:100%;" referrerpolicy="no-referrer" alt="">` : `<span style="font-size:11px; font-weight:700;">${safeText(String(coin.symbol || '').substring(0, 2))}</span>`}
         </div>
 
         <div style="flex:1; min-width:0;">
           <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
-            <span style="font-size:15px; font-weight:700; color:var(--color-text-primary);">${coin.symbol}</span>
+            <span style="font-size:15px; font-weight:700; color:var(--color-text-primary);">${safeText(coin.symbol)}</span>
             ${coin.market_cap_rank ? `<span style="font-size:10px; color:var(--color-text-tertiary); background:var(--color-surface-elevated); padding:2px 6px; border-radius:4px;">#${coin.market_cap_rank}</span>` : ''}
           </div>
-          <div style="font-size:12px; color:var(--color-text-secondary);">${coin.name}</div>
+          <div style="font-size:12px; color:var(--color-text-secondary);">${safeText(coin.name)}</div>
         </div>
 
         <div style="text-align:right; flex-shrink:0;">
@@ -1455,30 +1458,30 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
     // ── NexTrade trades this card ────────────────────────────────────────────
     if (isTraded) {
-      const yeldaCard = document.createElement('div');
-      yeldaCard.style.cssText = [
+      const nextradeCard = document.createElement('div');
+      nextradeCard.style.cssText = [
         'margin:0 16px 16px;padding:14px 16px;border-radius:12px;',
         'background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);',
         'display:flex;align-items:flex-start;gap:12px;flex-shrink:0;'
       ].join('');
 
-      const yeldaIcon = document.createElement('div');
-      yeldaIcon.style.cssText = 'width:36px;height:36px;flex-shrink:0;border-radius:10px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.25);display:flex;align-items:center;justify-content:center;font-size:16px;';
-      yeldaIcon.textContent = '⚡';
+      const nextradeIcon = document.createElement('div');
+      nextradeIcon.style.cssText = 'width:36px;height:36px;flex-shrink:0;border-radius:10px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.25);display:flex;align-items:center;justify-content:center;font-size:16px;';
+      nextradeIcon.textContent = '⚡';
 
-      const yeldaText = document.createElement('div');
-      yeldaText.style.cssText = 'flex:1;min-width:0;';
-      const yeldaTitle = document.createElement('div');
-      yeldaTitle.style.cssText = 'font-size:13px;font-weight:700;color:var(--color-text-primary);margin-bottom:3px;';
-      yeldaTitle.textContent = 'NexTrade trades this market';
-      const yeldaSub = document.createElement('div');
-      yeldaSub.style.cssText = 'font-size:12px;color:var(--color-text-secondary);line-height:1.4;';
-      yeldaSub.textContent = `The Surge Pool deploys capital into ${coin.name} positions. Price movement in this market directly affects your pool returns.`;
+      const nextradeText = document.createElement('div');
+      nextradeText.style.cssText = 'flex:1;min-width:0;';
+      const nextradeTitle = document.createElement('div');
+      nextradeTitle.style.cssText = 'font-size:13px;font-weight:700;color:var(--color-text-primary);margin-bottom:3px;';
+      nextradeTitle.textContent = 'NexTrade trades this market';
+      const nextradeSub = document.createElement('div');
+      nextradeSub.style.cssText = 'font-size:12px;color:var(--color-text-secondary);line-height:1.4;';
+      nextradeSub.textContent = `The Surge Pool deploys capital into ${coin.name} positions. Price movement in this market directly affects your pool returns.`;
 
-      const yeldaBtn = document.createElement('button');
-      yeldaBtn.style.cssText = 'margin-top:10px;padding:8px 14px;background:var(--color-primary);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;width:100%;';
-      yeldaBtn.textContent = 'Invest in Surge Pool';
-      yeldaBtn.addEventListener('click', () => {
+      const nextradeBtn = document.createElement('button');
+      nextradeBtn.style.cssText = 'margin-top:10px;padding:8px 14px;background:var(--color-primary);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;width:100%;';
+      nextradeBtn.textContent = 'Invest in Surge Pool';
+      nextradeBtn.addEventListener('click', () => {
         closeOverlay();
         setTimeout(() => {
           if (window.Router) Router.navigate('vault');
@@ -1486,12 +1489,12 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
         }, 260);
       });
 
-      yeldaText.appendChild(yeldaTitle);
-      yeldaText.appendChild(yeldaSub);
-      yeldaText.appendChild(yeldaBtn);
-      yeldaCard.appendChild(yeldaIcon);
-      yeldaCard.appendChild(yeldaText);
-      body.appendChild(yeldaCard);
+      nextradeText.appendChild(nextradeTitle);
+      nextradeText.appendChild(nextradeSub);
+      nextradeText.appendChild(nextradeBtn);
+      nextradeCard.appendChild(nextradeIcon);
+      nextradeCard.appendChild(nextradeText);
+      body.appendChild(nextradeCard);
     }
 
     // ── Stats grid ────────────────────────────────────────────────────────

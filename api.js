@@ -555,61 +555,50 @@ const API = (() => {
   // ============================================
 
   async function loadUserData(userId) {
-    if (!window.supabaseClient) {
-      console.warn('[API] Supabase client not initialized');
-      return { success: false, error: 'No client' };
-    }
-
+    if (!window.supabaseClient) return { success: false, error: 'No client' };
     try {
-      console.log('[API] 🔄 Starting database sync for user:', userId);
-
-      const [profileRes, txsRes, invsRes] = await Promise.all([
+      const [profileRes, txsRes, invsRes, spotRes, vaultRes] = await Promise.all([
         window.supabaseClient
           .from('profiles')
-          .select('spot_balance, vault_balance, holdings, kyc_status, role, full_name, avatar_url')
+          .select('holdings, kyc_status, role, full_name, avatar_url')
           .eq('id', userId)
           .single(),
         window.supabaseClient
           .from('transactions')
-          .select('*')
+          .select('id, user_id, type, amount, status, description, metadata, created_at, updated_at')
           .eq('user_id', userId)
           .order('created_at', { ascending: false }),
         window.supabaseClient
           .from('investments')
           .select('*')
           .eq('user_id', userId)
-          .order('created_at', { ascending: false })
+          .order('created_at', { ascending: false }),
+        window.supabaseClient.rpc('derive_spot_balance', { p_user_id: userId }),
+        window.supabaseClient.rpc('derive_vault_cash', { p_user_id: userId })
       ]);
+      for (const response of [profileRes, txsRes, invsRes, spotRes, vaultRes]) {
+        if (response.error) throw response.error;
+      }
 
-      if (profileRes.error) throw profileRes.error;
-      if (txsRes.error) throw txsRes.error;
-      if (invsRes.error) throw invsRes.error;
-
-      const profileData = profileRes.data || null;
-      const txsData = txsRes.data || [];
-      const invsData = invsRes.data || [];
-
-      if (profileData) {
-        if (window.AppState && typeof AppState.updateBalances === 'function') {
-          AppState.updateBalances({
-            spot:  parseFloat(profileData.spot_balance)  || 0,
-            vault: parseFloat(profileData.vault_balance) || 0
-          });
-        }
-        if (window.AppState && profileData.holdings) AppState.set('holdings', profileData.holdings);
+      const spot = Number(spotRes.data);
+      const vaultCash = Number(vaultRes.data);
+      if (!Number.isFinite(spot) || spot < 0 || !Number.isFinite(vaultCash) || vaultCash < 0) {
+        throw new Error('Invalid authoritative balance response');
       }
 
       if (window.AppState) {
-        AppState.set('transactions', txsData);
-        AppState.set('investments', invsData);
+        await AppState.batch(async () => {
+          AppState.set('profile', profileRes.data || null);
+          AppState.set('holdings', (profileRes.data && profileRes.data.holdings) || {});
+          AppState.set('transactions', txsRes.data || []);
+          AppState.set('investments', invsRes.data || []);
+          AppState.updateBalances({ spot, vaultCash });
+        });
       }
-
-      console.log('[API] ✅ Database sync complete');
       return { success: true };
-
-    } catch (err) {
-      console.error('[API] ❌ Database sync failed:', err);
-      return { success: false, error: err.message };
+    } catch (error) {
+      console.error('[API] Database sync failed:', error);
+      return { success: false, error: error.message };
     }
   }
 

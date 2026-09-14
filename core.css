@@ -11,6 +11,19 @@
 
 :root {
   /* ----------------------------------
+     NAVIGATION CLEARANCE — measured, not estimated
+     ----------------------------------
+     --nav-footprint-live is published by navbar.js from the pill's actual
+     getBoundingClientRect() — real, already-resolved device pixels,
+     safe-area-inset-bottom and font metrics included. It updates on
+     resize/orientation/webfont-load, so it's correct on any phone without
+     hand-tuning. The 96px fallback only covers the first frame before
+     navbar.js's first measurement lands; once that runs, every page reads
+     the real number. The +20px on top is an explicit, intentional
+     breathing gap — a design choice, not compensation for an unknown. */
+  --scroll-bottom-clearance: calc(var(--nav-footprint-live, 96px) + 20px);
+
+  /* ----------------------------------
      COLOR PALETTE: "The Obsidian Theme"
      ---------------------------------- */
   

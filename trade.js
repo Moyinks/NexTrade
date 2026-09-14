@@ -59,12 +59,11 @@ const Trade = (() => {
   // ============================================
   // LEDGER DERIVATION — delegate to app.js
   // ============================================
-  async function deriveSpotBalance(userId, storedBalance) {
+  async function deriveSpotBalance(userId) {
     if (window.App && typeof App.deriveSpotBalance === 'function') {
-      return App.deriveSpotBalance(userId, storedBalance);
+      return App.deriveSpotBalance(userId);
     }
-    console.error('[TRADE] App.deriveSpotBalance unavailable — returning stored balance');
-    return Math.max(0, parseFloat(storedBalance) || 0);
+    throw new Error('Balance authority unavailable');
   }
 
   // ============================================
@@ -80,16 +79,22 @@ const Trade = (() => {
   }
 
   function validateAmount(val, max) {
-    const num = parseFloat(val);
-    if (isNaN(num) || num <= 0) return { valid: false, msg: 'Enter a valid amount' };
-    if (max !== undefined && num > max) return { valid: false, msg: 'Insufficient balance' };
+    const num = Number(val);
+    const cap = Number((window.APP_CONFIG && APP_CONFIG.defaults && APP_CONFIG.defaults.maxTransaction) || 1e9);
+    if (!Number.isFinite(num) || num <= 0 || num > cap) return { valid: false, msg: 'Enter a valid amount' };
+    if (max !== undefined && num > Number(max)) return { valid: false, msg: 'Insufficient balance' };
     return { valid: true, num };
+  }
+
+  function getIdempotencyKey(kind, fingerprint) {
+    if (!window.RequestId) throw new Error('Secure request identifier unavailable');
+    return RequestId.get(kind, fingerprint);
   }
 
   function generateDepositReference(userId) {
     const prefix = userId ? userId.slice(0, 8).toUpperCase() : 'ANON';
     const ts     = Date.now().toString(36).toUpperCase();
-    return 'YLD-' + prefix + '-' + ts;
+    return 'NXT-' + prefix + '-' + ts;
   }
 
   // ============================================
@@ -372,13 +377,18 @@ const Trade = (() => {
           };
           const coinLabel = COIN_LABELS[selectedCoin] || selectedCoin;
 
+          const depositFingerprint = `${selectedCoin}|${num.toFixed(8)}|${depositRef}`;
+          const depositKey = getIdempotencyKey('deposit', depositFingerprint);
           const { data, error } = await window.supabaseClient
             .rpc('request_deposit', {
               p_amount: num,
-              p_description: 'Deposit (' + coinLabel + ') — Ref: ' + depositRef
+              p_description: 'Deposit (' + coinLabel + ') — Ref: ' + depositRef,
+              p_idempotency_key: depositKey
             });
           if (error) throw error;
-          if (window.AppState && data && data[0] && data[0].tx_id) {
+          if (!data || !data[0] || !data[0].tx_id) throw new Error('Deposit authority returned an invalid response');
+          RequestId.clear('deposit', depositKey);
+          if (window.AppState) {
             AppState.addTransaction({
               id:          data[0].tx_id,
               type:        'deposit',
@@ -388,17 +398,6 @@ const Trade = (() => {
               created_at:  new Date().toISOString()
             });
           }
-        }
-
-        if (window.AppState && (!window.supabaseClient)) {
-          AppState.addTransaction({
-            id:          'temp_' + Date.now(),
-            type:        'deposit',
-            amount:      num,
-            status:      'pending',
-            description: 'Deposit — Ref: ' + depositRef,
-            created_at:  new Date().toISOString()
-          });
         }
 
         if (window.Modal) Modal.close();
@@ -424,11 +423,18 @@ const Trade = (() => {
         tabBtns[k].style.color      = isActive ? '#fff' : 'var(--color-text-secondary)';
       });
 
-      // Option C: all coins use static address
+      // ERC-20 can use a per-user server-derived address when the private
+      // deployment explicitly enables the HD-wallet adapter. Other networks use
+      // deployment-supplied adapters/addresses and fail closed when absent.
+      if (key === 'ETH_ERC20' && APP_CONFIG.features && APP_CONFIG.features.hdWallet) {
+        await fetchHDAddress(addressPanel);
+        return;
+      }
+
       const coinCfg = (APP_CONFIG.depositAddresses || {})[key];
       if (!coinCfg || isPlaceholder(coinCfg.address)) {
         addressPanel.innerHTML = '';
-        addressPanel.appendChild(buildErrorBlock('Deposit address not configured for ' + key + '. Contact admin.'));
+        addressPanel.appendChild(buildErrorBlock('Deposit infrastructure is not configured for ' + key + '.'));
       } else {
         currentAddress = coinCfg.address;
         addressPanel.innerHTML = '';
@@ -443,7 +449,7 @@ const Trade = (() => {
 
     // Open modal then trigger initial ETH tab load
     if (window.Modal) Modal.open({ title: 'Deposit Funds', content, maxWidth: '480px' });
-    switchCoin('ETH_ERC20'); // shows static ETH address immediately
+    switchCoin('ETH_ERC20');
   }
 
   // ============================================
@@ -521,46 +527,58 @@ const Trade = (() => {
         if (!addrValidation.isValid) { if (window.App) App.showError(addrValidation.error); return; }
       }
 
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>Processing...';
+      // ── Withdrawal passphrase gate — final confirmation before submit ────
+      // Runs after KYC (already passed to reach this modal) and after
+      // amount/address are validated, before the request actually goes out.
+      if (window.WithdrawalAuth) {
+        const { user: gateUser } = getUserState();
+        const authOk = await WithdrawalAuth.confirm(gateUser && gateUser.id);
+        if (!authOk) return; // user cancelled — nothing submitted
+        // WithdrawalAuth's own modal has just closed itself on success, which
+        // (single-modal system) already replaced this withdraw form — so the
+        // "Processing..." state below would otherwise update a detached
+        // button no one can see. Show a lightweight processing modal instead.
+        if (window.Modal) {
+          const processing = document.createElement('div');
+          processing.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px 0;';
+          processing.innerHTML = '<i class="fas fa-spinner fa-spin" style="font-size:24px;color:var(--color-primary);"></i>' +
+            '<span style="font-size:13px;color:var(--color-text-secondary);">Processing withdrawal…</span>';
+          Modal.open({ title: '', content: processing, maxWidth: '320px', hideTitle: true, dismissible: false });
+        }
+      } else {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>Processing...';
+      }
 
       try {
         const { user: freshUser } = getUserState();
         if (!freshUser || !freshUser.id) throw new Error('User session lost');
         if (!window.supabaseClient) throw new Error('Secure withdrawal service unavailable');
 
-        {
-          const { data, error } = await window.supabaseClient
-            .rpc('request_withdrawal', {
-              p_amount: num,
-              p_destination_address: addr
-            });
-          if (error) throw error;
+        const freshSpot = await deriveSpotBalance(freshUser.id);
+        if (num > freshSpot) throw new Error('Insufficient balance. Your balance changed before submission.');
 
-          const returnedSpot = data && data[0] ? parseFloat(data[0].spot_balance) || 0 : null;
-          if (window.AppState && returnedSpot !== null) {
-            AppState.updateBalances({ spot: returnedSpot });
-          }
+        const withdrawFingerprint = `${num.toFixed(8)}|${addr.toLowerCase()}`;
+        const withdrawKey = getIdempotencyKey('withdraw', withdrawFingerprint);
+        const { data, error } = await window.supabaseClient.rpc('request_withdrawal', {
+          p_amount: num,
+          p_destination_address: addr,
+          p_idempotency_key: withdrawKey
+        });
+        if (error) throw error;
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row || !row.tx_id) throw new Error('Withdrawal authority returned an invalid response');
+        RequestId.clear('withdraw', withdrawKey);
 
-          if (window.AppState && data && data[0] && data[0].tx_id) {
-            AppState.addTransaction({
-              id:         data[0].tx_id,
-              type:       'withdraw',
-              amount:     num,
-              status:     'pending',
-              description: 'Withdraw to ' + addr.substring(0, 6) + '...',
-              created_at: new Date().toISOString()
-            });
-          }
-        }
-
-        if (window.AppState && !window.supabaseClient) {
+        if (window.AppState) {
+          AppState.updateBalances({ spot: Number(row.spot_balance) });
           AppState.addTransaction({
-            id:         'tx_' + Date.now(),
-            type:       'withdraw',
-            amount:     num,
-            status:     'pending',
-            created_at: new Date().toISOString()
+            id: row.tx_id,
+            type: 'withdraw',
+            amount: num,
+            status: 'pending',
+            description: 'Withdraw to ' + addr.substring(0, 6) + '…',
+            created_at: row.created_at || new Date().toISOString()
           });
         }
 
@@ -569,6 +587,7 @@ const Trade = (() => {
 
       } catch (err) {
         console.error('[TRADE] Withdrawal failed:', err);
+        if (window.Modal) Modal.close(); // closes the processing modal if the passphrase branch opened one; harmless no-op otherwise
         if (window.App) App.showError(err.message || 'Error processing withdrawal');
         btn.disabled  = false;
         btn.textContent = 'Request Withdrawal';
@@ -712,90 +731,87 @@ const Trade = (() => {
 
     // ── TRADE EXECUTION (extracted so both the review confirm and direct path use it) ──
     async function executeTrade(val) {
-      confirmBtn.disabled  = true;
+      confirmBtn.disabled = true;
       confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>Executing...';
-      _isTradingLocked     = true;
+      _isTradingLocked = true;
 
       try {
         const { user: freshUser } = getUserState();
         if (!freshUser || !freshUser.id) throw new Error('User session lost');
+        if (!window.supabaseClient) throw new Error('Secure trade service unavailable');
 
-        // Double-spend guard — use derive_spot_balance RPC (reads ledger, not
-        // the cached profiles.spot_balance which can be stale after a failed tx).
-        let freshSpot     = 0;
-        let freshHoldings = {};
-        if (window.supabaseClient) {
-          const [deriveRes, holdingsRes] = await Promise.all([
-            window.supabaseClient.rpc('derive_spot_balance', { p_user_id: freshUser.id }),
-            window.supabaseClient.from('profiles').select('holdings').eq('id', freshUser.id).single()
-          ]);
-          if (deriveRes.error)   throw deriveRes.error;
-          if (holdingsRes.error) throw holdingsRes.error;
-          freshSpot     = parseFloat(deriveRes.data) || 0;
-          freshHoldings = holdingsRes.data.holdings || {};
-        } else {
-          const st = getUserState();
-          freshSpot     = parseFloat((st.balances || {}).spot || 0);
-          freshHoldings = st.holdings || {};
+        const { data: sessionData, error: sessionError } = await window.supabaseClient.auth.getSession();
+        if (sessionError) throw sessionError;
+        const session = sessionData && sessionData.session;
+        if (!session || !session.access_token) throw new Error('Session expired. Sign in again.');
+
+        // Fresh server-derived balances are pre-flight UX only. The Postgres RPC
+        // repeats validation under a row lock, so this cannot be the authority.
+        const [freshSpot, holdingsResult] = await Promise.all([
+          deriveSpotBalance(freshUser.id),
+          window.supabaseClient.from('profiles').select('holdings').eq('id', freshUser.id).single()
+        ]);
+        if (holdingsResult.error) throw holdingsResult.error;
+        const freshHoldings = holdingsResult.data && holdingsResult.data.holdings || {};
+        const freshAvailable = isBuy ? freshSpot : Number(freshHoldings[assetKey] || 0);
+        if (val > freshAvailable) throw new Error('Insufficient available balance');
+
+        const tradeFingerprint = `${type}|${assetKey}|${coin.id}|${val.toFixed(8)}`;
+        const tradeKey = getIdempotencyKey('trade', tradeFingerprint);
+        const response = await fetch((APP_CONFIG.apis && APP_CONFIG.apis.executeTrade) || '/api/execute-trade', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + session.access_token
+          },
+          body: JSON.stringify({
+            side: type,
+            asset: assetKey,
+            coinId: coin.id,
+            amount: val,
+            idempotencyKey: tradeKey
+          })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Trade execution failed');
+        if (!payload.tx_id || !Number.isFinite(Number(payload.spot_balance))) {
+          throw new Error('Trade authority returned an invalid response');
         }
 
-        const freshAvailable = isBuy ? freshSpot : (freshHoldings[assetKey] || 0);
-        if (val > freshAvailable) {
-          throw new Error('Insufficient funds. Available: $' + freshAvailable.toFixed(2) + '.');
+        const executedPrice = Number(payload.executed_price);
+        const executedUsd = Number(payload.executed_usd_amount);
+        const quantity = Number(payload.asset_quantity);
+        if (!Number.isFinite(executedPrice) || executedPrice <= 0 || !Number.isFinite(executedUsd) || executedUsd <= 0 || !Number.isFinite(quantity) || quantity <= 0) {
+          throw new Error('Invalid execution response');
         }
-        const { data, error } = await window.supabaseClient
-          .rpc('execute_trade', {
-            p_side:  type,
-            p_asset: assetKey,
-            p_amount: val,
-            p_price:  coin.current_price
-          });
-        if (error) throw error;
-
-        const rpcRow = Array.isArray(data) ? data[0] : data;
-        const serverHoldings = rpcRow && rpcRow.holdings ? rpcRow.holdings : freshHoldings;
-
-        // Re-derive the authoritative spot balance from the ledger rather than
-        // trusting rpcRow.spot_balance directly. The RPC return column shares
-        // the name "spot_balance" with the profiles table column; if the live DB
-        // hasn't been updated with the aliased function yet, Postgres may resolve
-        // it to the wrong value, causing phantom balance increases on the client.
-        let serverSpot = freshSpot - (isBuy ? val : 0) + (isBuy ? 0 : val * coin.current_price);
-        try {
-          const recheck = await window.supabaseClient.rpc('derive_spot_balance', { p_user_id: freshUser.id });
-          if (!recheck.error && recheck.data !== null) serverSpot = parseFloat(recheck.data) || serverSpot;
-        } catch (_) { /* use computed fallback */ }
+        RequestId.clear('trade', tradeKey);
 
         if (window.AppState) {
-          AppState.set('holdings', serverHoldings);
-          AppState.updateBalances({ spot: serverSpot });
-          if (rpcRow && rpcRow.tx_id) {
-            AppState.addTransaction({
-              id:         rpcRow.tx_id,
-              type:       type,
-              amount:     isBuy ? val : (val * coin.current_price),
-              status:     'completed',
-              description: type.toUpperCase() + ' ' + coin.symbol,
-              created_at: new Date().toISOString()
-            });
-          }
+          AppState.set('holdings', payload.holdings || freshHoldings);
+          AppState.updateBalances({ spot: Number(payload.spot_balance) });
+          AppState.addTransaction({
+            id: payload.tx_id,
+            type,
+            amount: executedUsd,
+            status: 'completed',
+            description: type.toUpperCase() + ' ' + coin.symbol.toUpperCase() + ' @ $' + executedPrice.toLocaleString(),
+            metadata: { asset: assetKey, quantity, executed_price: executedPrice },
+            created_at: new Date().toISOString()
+          });
         }
 
-        // Toast: descriptive title + confirmation message
-        const toastTitle = type.toUpperCase() + ' $' + val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + coin.symbol.toUpperCase();
-        if (window.App) App.showSuccess('Trade executed successfully.', toastTitle);
-
-        // Close the modal and reset button state on success.
+        const action = isBuy ? 'Bought' : 'Sold';
+        if (window.App) App.showSuccess(
+          action + ' at server-verified market price $' + executedPrice.toLocaleString(undefined, { maximumFractionDigits: 8 }) + '.',
+          type.toUpperCase() + ' ' + coin.symbol.toUpperCase()
+        );
         if (window.Modal) Modal.close();
-        confirmBtn.disabled    = false;
-        confirmBtn.textContent = type.toUpperCase() + ' NOW';
-
       } catch (err) {
         console.error('[TRADE] Trade execution failed:', err);
-        if (window.App) App.showError(err.message || 'Trade Execution Failed');
-        confirmBtn.disabled    = false;
-        confirmBtn.textContent = type.toUpperCase() + ' NOW';
+        if (window.App) App.showError(err.message || 'Trade execution failed');
       } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = type.toUpperCase() + ' NOW';
         _isTradingLocked = false;
       }
     }
@@ -803,9 +819,9 @@ const Trade = (() => {
     confirmBtn.addEventListener('click', async () => {
       if (confirmBtn.disabled || _isTradingLocked) return;
 
-      const val = parseFloat(tradeAmt.value);
-      if (!val || val <= 0) { if (window.App) App.showError('Enter a valid amount'); return; }
-      if (val > available)  { if (window.App) App.showError('Insufficient funds'); return; }
+      const checked = validateAmount(tradeAmt.value, available);
+      if (!checked.valid) { if (window.App) App.showError(checked.msg); return; }
+      const val = checked.num;
 
       // ── REVIEW STEP: show confirmation card before executing ─────────────
       const estQty   = isBuy ? (val / coin.current_price) : (val * coin.current_price);
@@ -813,7 +829,7 @@ const Trade = (() => {
         ? (val / coin.current_price).toFixed(6) + ' ' + coin.symbol.toUpperCase()
         : '$' + (val * coin.current_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const amtFmt   = '$' + val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const priceFmt = '$' + coin.current_price.toLocaleString();
+      const priceFmt = '$' + coin.current_price.toLocaleString() + ' (quote)';
 
       const reviewMsg = [
         '<div style="display:flex;flex-direction:column;gap:10px;text-align:left;">',

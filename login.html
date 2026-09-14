@@ -2044,7 +2044,7 @@ html { text-rendering: optimizeLegibility; }
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="pwa-ios-banner" role="dialog" aria-label="Install NexTrade">
   <div class="pwa-ios-icon">
-    <img src="/pwa1.png" alt="NexTrade" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <img id="login-pwa-ios-img" src="/pwa1.png" alt="NexTrade">
     <i class="fa-solid fa-bolt" style="display:none;"></i>
   </div>
   <div class="pwa-ios-body">
@@ -2054,7 +2054,7 @@ html { text-rendering: optimizeLegibility; }
       then <strong>"Add to Home Screen"</strong> for the full app experience.
     </div>
   </div>
-  <button class="pwa-ios-close" onclick="dismissPWABanner()" aria-label="Dismiss">✕</button>
+  <button class="pwa-ios-close" data-login-action="dismiss-pwa" aria-label="Dismiss">✕</button>
 </div>
 
 <div id="pwa-android-banner" role="dialog" aria-label="Install NexTrade">
@@ -2065,8 +2065,8 @@ html { text-rendering: optimizeLegibility; }
     <div class="pwa-android-title">NexTrade</div>
     <div class="pwa-android-sub">Add to home screen</div>
   </div>
-  <button class="pwa-android-btn" onclick="triggerAndroidInstall()">Install</button>
-  <button class="pwa-android-close" onclick="dismissPWABanner()" aria-label="Dismiss">✕</button>
+  <button class="pwa-android-btn" data-login-action="install-pwa">Install</button>
+  <button class="pwa-android-close" data-login-action="dismiss-pwa" aria-label="Dismiss">✕</button>
 </div>
 
 <div id="toast" role="alert" aria-live="assertive"></div>
@@ -2087,7 +2087,7 @@ html { text-rendering: optimizeLegibility; }
       <div class="masthead-brand-box">
         <img src="/pwa1.png" alt="NexTrade" class="brand-logo-img">
       </div>
-      <div class="masthead-brand-name">NexTrade</div>
+      <div class="masthead-brand-name">NEXTRADE</div>
     </div>
     <div class="masthead-ticker-track" aria-hidden="true">
       <div class="masthead-ticker-inner" id="tickerEl"></div>
@@ -2125,10 +2125,10 @@ html { text-rendering: optimizeLegibility; }
     </div>
 
     <div class="hero-cta-block">
-      <button class="btn-primary" onclick="enterAuth('signup')">
+      <button class="btn-primary" data-login-action="enter-auth" data-mode="signup">
         OPEN AN ACCOUNT — FREE
       </button>
-      <button class="btn-ghost" onclick="enterAuth('login')">
+      <button class="btn-ghost" data-login-action="enter-auth" data-mode="login">
         Sign in to existing account
       </button>
       <p style="font-family:var(--mono);font-size:9px;color:var(--ink-4);text-align:center;letter-spacing:0.8px;text-transform:uppercase;margin-top:4px;">
@@ -2379,7 +2379,7 @@ html { text-rendering: optimizeLegibility; }
 
   </section>
 
-  <!-- ─── WHY NexTrade ──────────────────────────────────────────────────────── -->
+  <!-- ─── WHY NEXTRADE ──────────────────────────────────────────────────────── -->
   <section class="trust-section reveal reveal-d1" id="section-trust">
 
     <div class="section-masthead">
@@ -2494,10 +2494,10 @@ html { text-rendering: optimizeLegibility; }
         Both Strategies are fully disclosed above. Open a free account in 90 seconds — no ID required, no deposit until you decide. Steady Accumulator starts at $100.
       </p>
       <div class="cta-buttons">
-        <button class="btn-primary" onclick="enterAuth('signup')">
+        <button class="btn-primary" data-login-action="enter-auth" data-mode="signup">
           OPEN AN ACCOUNT — FREE
         </button>
-        <button class="btn-ghost" onclick="enterAuth('login')">
+        <button class="btn-ghost" data-login-action="enter-auth" data-mode="login">
           Sign In
         </button>
       </div>
@@ -2527,10 +2527,10 @@ html { text-rendering: optimizeLegibility; }
 <div id="auth" role="dialog" aria-modal="true" aria-labelledby="formTitle">
 
   <div class="auth-bar">
-    <button class="auth-back" onclick="resetView()" aria-label="Back to landing">
+    <button class="auth-back" data-login-action="reset-view" aria-label="Back to landing">
       <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
     </button>
-    <div class="auth-bar-name">NexTrade</div>
+    <div class="auth-bar-name">NEXTRADE</div>
     <div class="auth-bar-spacer" aria-hidden="true"></div>
   </div>
 
@@ -2578,12 +2578,12 @@ html { text-rendering: optimizeLegibility; }
               autocapitalize="none"
               enterkeyhint="done"
               minlength="8">
-            <button type="button" class="input-toggle-pw" onclick="togglePw('regPassword', this)" aria-label="Show password">
+            <button type="button" class="input-toggle-pw" data-login-action="toggle-pw" data-target="regPassword" aria-label="Show password">
               <i class="fa-regular fa-eye"></i>
             </button>
           </div>
         </div>
-        <div class="checkbox-row" onclick="openLegal()">
+        <div class="checkbox-row" data-login-action="open-legal" role="button" tabindex="0">
           <div class="check-box" id="customCheck" role="checkbox" aria-checked="false">
             <i class="fa-solid fa-check" aria-hidden="true"></i>
           </div>
@@ -2614,12 +2614,12 @@ html { text-rendering: optimizeLegibility; }
               autocomplete="current-password"
               autocapitalize="none"
               enterkeyhint="done">
-            <button type="button" class="input-toggle-pw" onclick="togglePw('logPassword', this)" aria-label="Show password">
+            <button type="button" class="input-toggle-pw" data-login-action="toggle-pw" data-target="logPassword" aria-label="Show password">
               <i class="fa-regular fa-eye"></i>
             </button>
           </div>
         </div>
-        <div class="forgot-link" onclick="handleForgotPassword()" role="button" tabindex="0">
+        <div class="forgot-link" data-login-action="forgot-password" role="button" tabindex="0">
           Forgot password?
         </div>
       </div>
@@ -2639,7 +2639,7 @@ html { text-rendering: optimizeLegibility; }
             <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="next"  aria-label="Digit 5">
             <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="done" aria-label="Digit 6">
           </div>
-          <button class="btn-resend" onclick="handleResendOtp()">
+          <button class="btn-resend" data-login-action="resend-otp">
             Didn't receive a code? Resend
           </button>
         </div>
@@ -2661,7 +2661,7 @@ html { text-rendering: optimizeLegibility; }
             enterkeyhint="done"
             spellcheck="false">
         </div>
-        <div class="forgot-link" onclick="window.showLogin()" role="button" tabindex="0"
+        <div class="forgot-link" data-login-action="show-login" role="button" tabindex="0"
           style="justify-content:flex-start;margin-top:var(--space-2);">
           ← Back to Sign In
         </div>
@@ -2683,7 +2683,7 @@ html { text-rendering: optimizeLegibility; }
             <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="next"  aria-label="Digit 5">
             <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocorrect="off" enterkeyhint="done" aria-label="Digit 6">
           </div>
-          <button class="btn-resend" onclick="handleResendResetOtp()">
+          <button class="btn-resend" data-login-action="resend-reset-otp">
             Didn't receive a code? Resend
           </button>
         </div>
@@ -2704,7 +2704,7 @@ html { text-rendering: optimizeLegibility; }
               autocapitalize="none"
               enterkeyhint="next"
               minlength="8">
-            <button type="button" class="input-toggle-pw" onclick="togglePw('newPassword', this)" aria-label="Show password">
+            <button type="button" class="input-toggle-pw" data-login-action="toggle-pw" data-target="newPassword" aria-label="Show password">
               <i class="fa-regular fa-eye"></i>
             </button>
           </div>
@@ -2718,16 +2718,16 @@ html { text-rendering: optimizeLegibility; }
               autocapitalize="none"
               enterkeyhint="done"
               minlength="8">
-            <button type="button" class="input-toggle-pw" onclick="togglePw('confirmPassword', this)" aria-label="Show password">
+            <button type="button" class="input-toggle-pw" data-login-action="toggle-pw" data-target="confirmPassword" aria-label="Show password">
               <i class="fa-regular fa-eye"></i>
             </button>
           </div>
         </div>
       </div>
 
-      <button class="btn-submit" id="submitBtn" onclick="handleAction()">CREATE ACCOUNT</button>
+      <button class="btn-submit" id="submitBtn" data-login-action="handle-action">CREATE ACCOUNT</button>
 
-      <div class="auth-switch" id="authSwitch">Already have an account? <button class="auth-switch-link" onclick="window.showLogin()">Sign in →</button></div>
+      <div class="auth-switch" id="authSwitch">Already have an account? <button class="auth-switch-link" data-login-action="show-login">Sign in →</button></div>
 
     </div><!-- /auth-form-body -->
 
@@ -2745,14 +2745,14 @@ html { text-rendering: optimizeLegibility; }
   <div class="modal-card">
     <div class="modal-head">
       <div class="modal-title" id="modalTitle">RISK DISCLOSURE &amp; TERMS</div>
-      <div class="modal-date">Last updated: February 2026</div>
+      <div class="modal-date">Product terms model · September 2026</div>
     </div>
     <div class="modal-body">
       <p>
         <strong style="color: black;">The short version:</strong>
-        NexTrade operates a managed yield pool designed to generate returns during market activity.
+        NexTrade is designed as a managed yield platform where capital is allocated across defined strategy pools and fees are earned from positive performance.
 
-<p>Returns are projected, not guaranteed.</p> 
+<p>Returns are projected, not guaranteed. This public portfolio build demonstrates the intended product architecture and business model; live operation would require jurisdiction-specific legal, custody, compliance, and security approval.</p> 
 <p>The value of your balance may rise or fall based on Bitcoin market conditions and currency exchange movements.</p>
 
 <p>NexTrade does not charge fees on deposited principal. Fees are earned only from profits generated by the platform.</p>
@@ -2766,7 +2766,7 @@ html { text-rendering: optimizeLegibility; }
       <h4>3. Deposits &amp; Withdrawals</h4>
       <p>Deposits are subject to verification (1–5 business days). Withdrawals go only to verified methods on your account. NexTrade is not a bank. Balances are not covered by any deposit insurance scheme (e.g., FDIC, FSCS). Crypto assets are not SIPC-protected.</p>
       <h4>4. Investment &amp; Pool Risk</h4>
-      <p>Pool strategies are not savings accounts. Projected returns (22% per 90-day cycle for Steady Accumulator; 67% per 30-day cycle for Surge Pool) are based on historical strategy performance — they are not guarantees. Markets move against positions. You can lose part or all of your invested capital, particularly in high-risk strategies.</p>
+      <p>Pool strategies are not savings accounts. Projected returns (22% per 90-day cycle for Steady Accumulator; 67% per 30-day cycle for Surge Pool) are gross strategy targets defined by the product model — they are not guarantees and actual pool performance may be lower or negative. Markets move against positions. You can lose part or all of your invested capital, particularly in high-risk strategies.</p>
       <h4>5. Performance Fee</h4>
       <p>NexTrade charges a performance fee of 15% (Steady Accumulator) or 20% (Surge Pool) on the profit generated by the pool during your investment term. This fee is deducted at the point of claim. Your principal is never subject to fees. If the pool generates zero profit, no fee is charged.</p>
       <h4>6. Early Exit</h4>
@@ -2776,14 +2776,14 @@ html { text-rendering: optimizeLegibility; }
       <h4>8. Our Liability</h4>
       <p>NexTrade is not liable for losses arising from market movements, your investment decisions, blockchain outages, third-party failures, or your failure to secure your account. Our total liability in any circumstance is capped at the fees you paid to NexTrade in the preceding 12 months.</p>
       <h4>9. Privacy</h4>
-      <p>We do not sell your personal data. We share it only with regulated third-party service providers under strict data processing agreements, and with authorities when legally required to do so.</p>
+      <p>NexTrade is designed not to sell personal data. A production operation would share data only with service providers required to run the platform under appropriate contractual and regulatory controls, and with authorities where legally required.</p>
       <h4>10. Disputes &amp; Governing Law</h4>
       <p>Disputes are subject to binding arbitration under AAA rules, seated in Delaware. You waive the right to a class action and jury trial. Contact support first — we will make every reasonable effort to resolve disputes informally within 30 days. Governing law: State of Delaware, USA.</p>
       <h4>11. Amendments</h4>
-      <p>We will provide at least 14 days' in-app notice before significant changes take effect. Continued use of the platform after the notice period constitutes acceptance of revised terms. Contact: <span style="color:var(--ink);text-decoration:underline;">legal@NexTrade.app</span></p>
+      <p>We will provide at least 14 days' in-app notice before significant changes take effect. Continued use of the platform after the notice period constitutes acceptance of revised terms. Contact: <span style="color:var(--ink);text-decoration:underline;">legal@nextrade.app</span></p>
     </div>
     <div class="modal-foot">
-      <button class="btn-submit" onclick="confirmLegal()" style="margin-top:0;">
+      <button class="btn-submit" data-login-action="confirm-legal" style="margin-top:0;">
         I UNDERSTAND &amp; ACCEPT
       </button>
     </div>
@@ -2794,188 +2794,10 @@ html { text-rendering: optimizeLegibility; }
 <!-- ══════════════════════════════════════════════════════════════════════
      SCRIPTS
 ══════════════════════════════════════════════════════════════════════════ -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0"></script>
 <script src="config.js"></script>
 <script src="auth.js"></script>
 
-<script>
-/* ── SERVICE WORKER ─────────────────────────────────────────────────────── */
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' })
-      .then(reg => {
-        reg.addEventListener('updatefound', () => {
-          const w = reg.installing;
-          if (!w) return;
-          w.addEventListener('statechange', () => {
-            if (w.state === 'installed' && navigator.serviceWorker.controller) {
-              w.postMessage({ type: 'SKIP_WAITING' });
-            }
-          });
-        });
-      })
-      .catch(err => console.warn('[SW]', err));
-  });
-  // NOTE: intentionally no controllerchange → reload here.
-  // Triggering location.reload() from controllerchange fires while the user
-  // is already scrolling the landing, causing the visible scroll-jump.
-  // index.html handles its own SW-update reload independently.
-}
-
-/* ── PWA INSTALL ────────────────────────────────────────────────────────── */
-const PWA_DISMISSED_KEY = 'yld_pwa_dismissed';
-let androidInstallEvent = null;
-
-function shouldShowBanner() {
-  if (window.matchMedia('(display-mode: standalone)').matches) return false;
-  if (window.navigator.standalone === true) return false;
-  const ts = localStorage.getItem(PWA_DISMISSED_KEY);
-  if (ts && (Date.now() - Number(ts)) / 86400000 < 7) return false;
-  return true;
-}
-
-function dismissPWABanner() {
-  localStorage.setItem(PWA_DISMISSED_KEY, String(Date.now()));
-  const ios = document.getElementById('pwa-ios-banner');
-  const and = document.getElementById('pwa-android-banner');
-  if (ios) ios.classList.remove('show');
-  if (and) and.style.display = 'none';
-}
-window.dismissPWABanner = dismissPWABanner;
-
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  androidInstallEvent = e;
-  if (!shouldShowBanner()) return;
-  setTimeout(() => {
-    const b = document.getElementById('pwa-android-banner');
-    if (b) b.style.display = 'flex';
-  }, 2800);
-});
-
-window.triggerAndroidInstall = async () => {
-  if (!androidInstallEvent) return;
-  dismissPWABanner();
-  androidInstallEvent.prompt();
-  const { outcome } = await androidInstallEvent.userChoice;
-  androidInstallEvent = null;
-};
-
-window.addEventListener('appinstalled', () => { dismissPWABanner(); androidInstallEvent = null; });
-
-function isIosSafari() {
-  const ua = navigator.userAgent;
-  return /iphone|ipad|ipod/i.test(ua) && /safari/i.test(ua) && !/crios|fxios|opios|mercury/i.test(ua);
-}
-if (isIosSafari() && shouldShowBanner()) {
-  setTimeout(() => {
-    const b = document.getElementById('pwa-ios-banner');
-    if (b) b.classList.add('show');
-  }, 2800);
-}
-
-/* ── LIVE TICKER ────────────────────────────────────────────────────────── */
-const TICKERS = [
-  { sym: 'BTC',  price: 67842.50, chg: +2.14 },
-  { sym: 'ETH',  price:  3521.80, chg: +1.32 },
-  { sym: 'SOL',  price:   168.42, chg: +3.81 },
-  { sym: 'BNB',  price:   584.10, chg: +0.87 },
-  { sym: 'XRP',  price:    0.6218, chg: -0.43 },
-  { sym: 'ADA',  price:    0.4512, chg: +0.72 },
-  { sym: 'AVAX', price:    38.75, chg: +2.21 },
-  { sym: 'DOGE', price:    0.1642, chg: +1.95 },
-  { sym: 'LINK', price:    14.87, chg: +0.64 },
-  { sym: 'DOT',  price:     7.14, chg: -1.08 },
-  { sym: 'UNI',  price:     9.34, chg: +1.23 },
-  { sym: 'MATIC',price:    0.8812, chg: -0.54 },
-];
-
-function fmtP(p) {
-  return p < 1 ? p.toFixed(4) : p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function buildTicker() {
-  const el = document.getElementById('tickerEl');
-  if (!el) return;
-  // Double the list so the seamless loop has content to scroll into.
-  const items = [...TICKERS, ...TICKERS];
-  el.innerHTML = items.map((t, i) => `
-    <div class="t-item">
-      <span class="t-sym">${t.sym}/USDT</span>
-      <span class="t-price" data-i="${i % TICKERS.length}">${fmtP(t.price)}</span>
-      <span class="${t.chg >= 0 ? 't-up' : 't-dn'} t-chg" data-i="${i % TICKERS.length}">${t.chg >= 0 ? '+' : ''}${t.chg.toFixed(2)}%</span>
-    </div>`).join('');
-
-  // Calibrate scroll speed to actual rendered content width so the ticker
-  // reads at ~80px/s regardless of screen width. Must run after paint so
-  // scrollWidth reflects real layout.
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      const totalW = el.scrollWidth; // full doubled content
-      const halfW  = totalW / 2;     // one loop cycle width
-      const PX_PER_SECOND = 80;
-      const duration = Math.round(halfW / PX_PER_SECOND);
-      el.style.animationDuration = Math.max(duration, 12) + 's';
-    });
-  });
-}
-buildTicker();
-
-// Update prices in-place — never touch innerHTML or animationDuration again.
-// Querying existing spans avoids any animation reset on iOS WebKit.
-setInterval(() => {
-  TICKERS.forEach((t, i) => {
-    t.price *= 1 + (Math.random() - 0.5) * 0.004;
-    t.chg = parseFloat((t.chg + (Math.random() - 0.5) * 0.09).toFixed(2));
-  });
-
-  const el = document.getElementById('tickerEl');
-  if (!el) return;
-
-  el.querySelectorAll('.t-price').forEach(span => {
-    const i = parseInt(span.dataset.i, 10);
-    span.textContent = fmtP(TICKERS[i].price);
-  });
-  el.querySelectorAll('.t-chg').forEach(span => {
-    const i = parseInt(span.dataset.i, 10);
-    const t = TICKERS[i];
-    span.className = (t.chg >= 0 ? 't-up' : 't-dn') + ' t-chg';
-    span.textContent = (t.chg >= 0 ? '+' : '') + t.chg.toFixed(2) + '%';
-  });
-}, 3500);
-
-/* ── DATE ───────────────────────────────────────────────────────────────── */
-(function () {
-  const el = document.getElementById('dateEl');
-  if (!el) return;
-  el.textContent = new Date().toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric'
-  }).toUpperCase();
-})();
-
-/* ── SCROLL REVEAL ──────────────────────────────────────────────────────── */
-const revealObserver = new IntersectionObserver(entries => {
-  entries.forEach(e => {
-    if (e.isIntersecting) { e.target.classList.add('in'); revealObserver.unobserve(e.target); }
-  });
-}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
-
-document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
-
-/* ── FEE BAR ANIMATION ──────────────────────────────────────────────────── */
-const barObserver = new IntersectionObserver(entries => {
-  entries.forEach(e => {
-    if (e.isIntersecting) {
-      const bar = e.target.querySelector('.fee-bar-you');
-      if (bar) { setTimeout(() => { bar.style.width = bar.dataset.width; }, 300); }
-      barObserver.unobserve(e.target);
-    }
-  });
-}, { threshold: 0.3 });
-const feeSection = document.querySelector('.fee-split');
-if (feeSection) barObserver.observe(feeSection);
-
-
-</script>
+<script src="login-page.js"></script>
 </body>
 </html>

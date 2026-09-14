@@ -1,7 +1,7 @@
 {
-  "name": "NexTrade — Institutional Wealth",
+  "name": "NexTrade — Yield on Your Terms",
   "short_name": "NexTrade",
-  "description": "Institutional-grade yield strategies starting at $1,500. Performance fee only on profit.",
+  "description": "Managed yield strategies with performance fees charged only on profit.",
   "start_url": "/login.html",
   "scope": "/",
   "display": "standalone",
@@ -10,7 +10,10 @@
   "theme_color": "#0B0E11",
   "lang": "en",
   "dir": "ltr",
-  "categories": ["finance", "business"],
+  "categories": [
+    "finance",
+    "business"
+  ],
   "icons": [
     {
       "src": "pwa1.png",
@@ -23,14 +26,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "pwa2.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "form_factor": "narrow"
     }
   ],
   "prefer_related_applications": false

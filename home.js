@@ -113,14 +113,14 @@
     try {
       const today = new Date().toDateString();
       const yesterday = new Date(Date.now() - 86400000).toDateString();
-      const raw = localStorage.getItem('nex_streak');
+      const raw = localStorage.getItem('nextrade_streak');
       const streak = raw ? JSON.parse(raw) : { count: 0, lastDate: null };
       if (streak.lastDate === today) return streak;
       const next = {
         count: streak.lastDate === yesterday ? (streak.count || 0) + 1 : 1,
         lastDate: today
       };
-      localStorage.setItem('nex_streak', JSON.stringify(next));
+      localStorage.setItem('nextrade_streak', JSON.stringify(next));
       return next;
     } catch (_) {
       return { count: 1, lastDate: null };
@@ -128,11 +128,11 @@
   }
 
   function markOnboarded() {
-    try { localStorage.setItem('nex_onboarded', '1'); } catch (_) {}
+    try { localStorage.setItem('nextrade_onboarded', '1'); } catch (_) {}
   }
 
   function isFirstLogin() {
-    try { return !localStorage.getItem('nex_onboarded'); } catch (_) { return false; }
+    try { return !localStorage.getItem('nextrade_onboarded'); } catch (_) { return false; }
   }
 
   function portfolioTotal(snapshot) {
@@ -174,34 +174,19 @@
   }
 
   function investmentProgress(inv) {
-    const amount = Math.max(0, Number(inv?.amount) || 0);
-    const created = new Date(inv?.created_at || Date.now()).getTime();
-    const durationDays = Number(inv?.durationDays || inv?.duration || 0);
-    const maturesAt = inv?.matures_at
-      ? new Date(inv.matures_at).getTime()
-      : (durationDays > 0 ? created + durationDays * 86400000 : NaN);
-    const now = Date.now();
-
-    let progress = 0;
-    if (Number.isFinite(maturesAt) && maturesAt > created) {
-      progress = Math.max(0, Math.min(1, (now - created) / (maturesAt - created)));
+    const created = Date.parse(inv?.created_at || '');
+    const maturesAt = inv?.matures_at ? Date.parse(inv.matures_at) : NaN;
+    if (window.FinanceMath) {
+      const estimate = FinanceMath.investmentEstimate(inv);
+      return {
+        progress: estimate.progress,
+        atMaturity: estimate.atMaturity,
+        currentEstimate: estimate.value,
+        maturesAt
+      };
     }
-
-    const apyRaw = Number(inv?.apy);
-    const apy = Number.isFinite(apyRaw) ? (apyRaw > 1 ? apyRaw / 100 : apyRaw) : 0;
-
-    // atMaturity: the full cycle return applied to principal.
-    // inv.apy stores the cycle return (67 = 67% over 30 days, 22 = 22% over 90 days),
-    // NOT an annualised rate. Apply it directly — no calendar scaling.
-    const atMaturity = amount > 0 ? amount * (1 + apy) : 0;
-
-    // currentEstimate: linear interpolation toward atMaturity based on progress.
-    // Home page overview only — vault.js uses its own GBM engine for live precision.
-    const dbVal          = Number(inv?.current_value);
-    const linearNow      = amount + (atMaturity - amount) * progress;
-    const currentEstimate = (Number.isFinite(dbVal) && dbVal > amount) ? dbVal : linearNow;
-
-    return { progress, atMaturity, currentEstimate, maturesAt };
+    const amount = Math.max(0, Number(inv?.amount) || 0);
+    return { progress: 0, atMaturity: amount, currentEstimate: amount, maturesAt: Number.isFinite(maturesAt) ? maturesAt : created };
   }
 
   function timeRemaining(ts) {
@@ -284,7 +269,7 @@
     const total = portfolioTotal(snapshot);
     const change = portfolioChange(snapshot);
     const streak = getStreak();
-    const hidden = localStorage.getItem('nex_hide_balance') === 'true';
+    const hidden = localStorage.getItem('nextrade_hide_balance') === 'true';
     const ready = snapshot.balanceSyncStatus === 'ready';
 
     const card = el('button', [
@@ -812,7 +797,7 @@
   }
 
   function buildRoot(snapshot) {
-    const root = el('div', 'display:flex;flex-direction:column;gap:14px;min-width:0;width:100%;padding:0 0 calc(110px + env(safe-area-inset-bottom,0px)) 0;box-sizing:border-box;');
+    const root = el('div', 'display:flex;flex-direction:column;gap:14px;min-width:0;width:100%;padding:0 0 var(--scroll-bottom-clearance, 116px) 0;box-sizing:border-box;');
 
     root.appendChild(heroCard(snapshot));
 
@@ -855,10 +840,18 @@
   // ── Content update — preserves scroll position ──────────────────────────
   function _updateContent() {
     if (!_scrollEl || _destroyed) return;
+    // Was the user at (or essentially at) the bottom before this refresh?
+    // Content height can drift a few px between the loading skeleton and
+    // real data (or as icon-font glyphs finish loading and reflow), so
+    // restoring the old absolute scrollTop can land short of the new true
+    // bottom — the last item ends up peeking out from under the floating
+    // nav. Re-anchoring to "bottom" instead of "old pixel value" survives
+    // that drift.
+    const wasNearBottom = (_scrollEl.scrollHeight - _scrollEl.scrollTop - _scrollEl.clientHeight) < 40;
     const saved = _scrollEl.scrollTop;
     _scrollEl.innerHTML = '';
     _scrollEl.appendChild(buildRoot(state()));
-    _scrollEl.scrollTop = saved;
+    _scrollEl.scrollTop = wasNearBottom ? _scrollEl.scrollHeight : saved;
   }
 
   // ── Full mount — called once per navigation ───────────────────────────────

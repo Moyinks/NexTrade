@@ -1,1169 +1,969 @@
--- ═══════════════════════════════════════════════════════════════════════════
--- NEXTRADE — NON-DESTRUCTIVE DATABASE MIGRATION v2
--- ═══════════════════════════════════════════════════════════════════════════
--- Safe to run on an existing NexTrade database with live users and data.
+-- ============================================================================
+-- NEXTRADE — CANONICAL FRESH DATABASE SCHEMA v2.1
+-- ============================================================================
+-- Purpose: reproducible bootstrap for the public portfolio implementation.
 --
--- EXECUTION ORDER (why this order matters):
---   1.  Extensions
---   2.  Drop guard triggers safely — DO blocks catch undefined_table (42P01)
---   2b. Drop ALL constraints early — prevents backfill from hitting legacy bad rows
---   3.  Create NEW tables first (strategies, kyc_documents, deposit_addresses)
---   4.  Alter EXISTING tables only (profiles, transactions, investments)
---   5.  Backfill NULLs on existing tables only
---   6.  Normalise data that would block unique partial indexes
---   7.  Add / replace constraints
---   8.  Create indexes
---   9.  Seed strategies catalogue
---   10. Sequence for HD wallet derivation
---   11. Row-Level Security
---   12. get_my_role() helper (prevents 42P17 recursion)
---   13. Drop & recreate all RLS policies
---   14. Triggers
---   15. financial_write_allowed() + guard triggers
---   16. All seven SECURITY DEFINER RPCs
---   17. Storage bucket notes
---   18. Grants
+-- Financial design:
+--   * transactions is the Spot/Vault-cash ledger and source of truth.
+--   * profiles.spot_balance / vault_balance are server-maintained read caches.
+--   * active investment value is derived from immutable term snapshots.
+--   * browser clients receive SELECT access only to financial rows.
+--   * all money mutations cross SECURITY DEFINER RPCs or service-only endpoints.
+--   * mutations serialize per user with SELECT ... FOR UPDATE.
+--   * retryable mutations use per-user idempotency keys.
 --
--- WHAT THIS NEVER DOES:
---   • Delete any row from any table
---   • Modify any existing balance, transaction amount, or investment record
---   • Break existing user sessions
---
--- ADMIN APPROVAL:
---   The Supabase Table Editor uses the service role key, which satisfies
---   financial_write_allowed(). Toggling a deposit to 'approved' in the
---   Table Editor will work correctly after this migration.
--- ═══════════════════════════════════════════════════════════════════════════
+-- IMPORTANT: for a legacy database with real rows, do not blindly run a fresh
+-- schema over unknown accounting history. See MIGRATION_V2_1_CUTOVER.sql first.
+-- ============================================================================
 
+begin;
 
--- ── 1. EXTENSIONS ─────────────────────────────────────────────────────────
-create extension if not exists "pgcrypto";
-create extension if not exists "pg_trgm";
+create extension if not exists pgcrypto;
 
+-- ---------------------------------------------------------------------------
+-- 1. TABLES
+-- ---------------------------------------------------------------------------
 
--- ── 2. DROP GUARD TRIGGERS ────────────────────────────────────────────────
--- profiles / transactions / investments EXIST on NexTrade — plain DROP.
--- kyc_documents / deposit_addresses are NEW — DO block catches 42P01.
+create table if not exists public.profiles (
+  id                         uuid primary key references auth.users(id) on delete cascade,
+  email                      text,
+  full_name                  text,
+  avatar_url                 text,
+  role                       text not null default 'user'
+                             check (role in ('user','admin')),
+  kyc_status                 text not null default 'none'
+                             check (kyc_status in ('none','pending','approved','rejected')),
+  spot_balance               numeric(30,8) not null default 0 check (spot_balance >= 0),
+  vault_balance              numeric(30,8) not null default 0 check (vault_balance >= 0),
+  holdings                   jsonb not null default '{}'::jsonb
+                             check (jsonb_typeof(holdings)='object'),
+  withdrawal_passphrase_hash text,
+  withdrawal_failed_attempts integer not null default 0 check (withdrawal_failed_attempts >= 0),
+  withdrawal_locked_until    timestamptz,
+  withdrawal_verified_at     timestamptz,
+  created_at                 timestamptz not null default now(),
+  updated_at                 timestamptz not null default now()
+);
 
-drop trigger if exists guard_profile_sensitive_write   on public.profiles;
-drop trigger if exists guard_transactions_server_only  on public.transactions;
-drop trigger if exists guard_investments_server_only   on public.investments;
-drop trigger if exists set_updated_at_profiles         on public.profiles;
-drop trigger if exists set_updated_at_transactions     on public.transactions;
-drop trigger if exists set_updated_at_investments      on public.investments;
-drop trigger if exists guard_transaction_immutability  on public.transactions;
-drop trigger if exists on_auth_user_created            on auth.users;
+create table if not exists public.transactions (
+  id                uuid primary key default gen_random_uuid(),
+  user_id           uuid not null references auth.users(id) on delete cascade,
+  type              text not null check (type in (
+                      'opening_balance','migration_credit','migration_debit',
+                      'deposit','withdraw','investment','claim',
+                      'transfer_in','transfer_out','buy','sell'
+                    )),
+  amount            numeric(30,8) not null check (amount > 0 and amount <= 1000000000),
+  status            text not null default 'pending'
+                    check (status in ('pending','approved','completed','rejected','cancelled','failed')),
+  description       text check (description is null or char_length(description) <= 500),
+  metadata          jsonb not null default '{}'::jsonb,
+  idempotency_key   text,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  constraint transactions_idempotency_format
+    check (idempotency_key is null or idempotency_key ~ '^[A-Za-z0-9:_-]{16,100}$')
+);
 
-do $$ begin
-  drop trigger if exists guard_kyc_documents_server_only on public.kyc_documents;
-exception when undefined_table then null; end $$;
-do $$ begin
-  drop trigger if exists set_updated_at_kyc_documents on public.kyc_documents;
-exception when undefined_table then null; end $$;
-do $$ begin
-  drop trigger if exists on_kyc_document_reviewed on public.kyc_documents;
-exception when undefined_table then null; end $$;
+create unique index if not exists transactions_user_idempotency_unique
+  on public.transactions(user_id, idempotency_key)
+  where idempotency_key is not null;
+create index if not exists transactions_user_created_idx
+  on public.transactions(user_id, created_at desc);
+create index if not exists transactions_user_status_idx
+  on public.transactions(user_id, status, type);
 
-
--- ── 2b. DROP ALL CHECK CONSTRAINTS ON EXISTING TABLES ────────────────────
--- profiles / transactions / investments EXIST — plain ALTER TABLE, no DO block.
--- Plain ALTER TABLE IF EXISTS is reliable. DO-block wrappers on existing
--- tables were masking silent failures on some Supabase executor versions.
--- This must run before ANY DML so no backfill UPDATE can trigger a stale
--- constraint left over from a previous partial migration run.
-
-alter table public.profiles drop constraint if exists profiles_role_allowlist;
-alter table public.profiles drop constraint if exists profiles_kyc_status_allowlist;
-alter table public.profiles drop constraint if exists profiles_spot_non_negative;
-alter table public.profiles drop constraint if exists profiles_vault_non_negative;
-
-alter table public.transactions drop constraint if exists transactions_type_allowlist;
-alter table public.transactions drop constraint if exists transactions_amount_positive;
-alter table public.transactions drop constraint if exists transactions_status_allowlist;
-alter table public.transactions drop constraint if exists transactions_description_safe;
-
-alter table public.investments drop constraint if exists investments_amount_positive;
-alter table public.investments drop constraint if exists investments_current_value_non_negative;
-alter table public.investments drop constraint if exists investments_apy_check;
-alter table public.investments drop constraint if exists investments_apy_range;
-alter table public.investments drop constraint if exists investments_profit_non_negative;
-alter table public.investments drop constraint if exists investments_status_allowlist;
-alter table public.investments drop constraint if exists investments_strategy_id_slug;
-
--- ── 3. CREATE NEW TABLES ───────────────────────────────────────────────────
--- These tables do not exist on NexTrade. Created here, before any ALTER or
--- UPDATE that references them.
-
--- ── 3a. strategies ────────────────────────────────────────────────────────
 create table if not exists public.strategies (
   id            text primary key check (id ~ '^[a-z0-9_-]{2,60}$'),
   name          text not null,
   tagline       text,
   category      text,
-  apy           numeric(6, 4) not null check (apy >= 0 and apy <= 100),
-  min_amount    numeric(18, 8) not null check (min_amount > 0),
-  duration_days integer not null check (duration_days > 0 and duration_days <= 3650),
-  penalty_rate  numeric(6, 4) not null check (penalty_rate >= 0 and penalty_rate <= 1),
-  perf_fee      numeric(6, 4) not null check (perf_fee >= 0 and perf_fee <= 100),
+  apy           numeric(8,4) not null check (apy >= 0 and apy <= 1000),
+  min_amount    numeric(30,8) not null check (min_amount > 0),
+  duration_days integer not null check (duration_days between 1 and 3650),
+  penalty_rate  numeric(8,6) not null check (penalty_rate between 0 and 1),
+  perf_fee      numeric(8,4) not null check (perf_fee between 0 and 100),
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
 
--- ── 3b. kyc_documents ─────────────────────────────────────────────────────
--- NEW on NexTrade. Created with all required columns — no ALTER needed.
+create table if not exists public.investments (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null references auth.users(id) on delete cascade,
+  strategy_id    text not null references public.strategies(id),
+  amount         numeric(30,8) not null check (amount > 0 and amount <= 1000000000),
+  current_value  numeric(30,8) not null check (current_value >= 0),
+  apy            numeric(8,4) not null check (apy >= 0 and apy <= 1000),
+  duration_days  integer not null check (duration_days between 1 and 3650),
+  penalty_rate   numeric(8,6) not null check (penalty_rate between 0 and 1),
+  perf_fee       numeric(8,4) not null check (perf_fee between 0 and 100),
+  profit         numeric(30,8) not null default 0,
+  status         text not null default 'active'
+                 check (status in ('active','claimed','cancelled')),
+  matures_at     timestamptz not null,
+  completed_at   timestamptz,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+create index if not exists investments_user_status_idx
+  on public.investments(user_id, status, created_at desc);
+
 create table if not exists public.kyc_documents (
-  id               uuid        primary key default gen_random_uuid(),
-  user_id          uuid        not null references auth.users(id) on delete cascade,
-  full_name        text        not null check (char_length(full_name) between 2 and 120),
-  dob              date        not null,
-  country          text        not null check (char_length(country) between 2 and 80),
-  doc_type         text        not null
-                   check (doc_type in ('passport', 'national_id', 'drivers_license', 'residence_permit')),
-  id_front_path    text        not null,
+  id               uuid primary key default gen_random_uuid(),
+  user_id          uuid not null references auth.users(id) on delete cascade,
+  full_name        text not null check (char_length(full_name) between 2 and 120),
+  dob              date not null,
+  country          text not null check (country in ('NG','GH','KE','ZA','US','GB','CA','AU','DE','FR','AE','SG','OTHER')),
+  doc_type         text not null check (doc_type in ('passport','nin','drivers_license','voters_card','residence_permit')),
+  id_front_path    text not null,
   id_back_path     text,
-  selfie_path      text        not null,
-  status           text        not null default 'pending'
-                   check (status in ('pending', 'approved', 'rejected')),
+  selfie_path      text not null,
+  status           text not null default 'pending' check (status in ('pending','approved','rejected')),
   rejection_reason text,
   submitted_at     timestamptz not null default now(),
   reviewed_at      timestamptz,
-  updated_at       timestamptz          default now()
+  updated_at       timestamptz not null default now()
 );
+create unique index if not exists kyc_one_pending_per_user
+  on public.kyc_documents(user_id) where status = 'pending';
+create index if not exists kyc_user_submitted_idx
+  on public.kyc_documents(user_id, submitted_at desc);
 
-comment on table public.kyc_documents is
-  'KYC submissions. Admin sets status + rejection_reason via Table Editor '
-  '(service role) or admin portal. On approval the sync_kyc_status trigger '
-  'automatically updates profiles.kyc_status.';
-
--- ── 3c. deposit_addresses ─────────────────────────────────────────────────
--- NEW on NexTrade. Written exclusively by /api/generate-address (service role).
 create table if not exists public.deposit_addresses (
-  id                uuid        primary key default gen_random_uuid(),
-  user_id           uuid        not null references auth.users(id) on delete cascade,
-  address           text        not null unique
-                    check (address ~ '^0x[0-9a-fA-F]{40}$'),
-  derivation_index  integer     not null unique check (derivation_index >= 0),
-  network           text        not null default 'eth'
-                    check (network in ('eth', 'btc', 'usdt_trc20')),
-  expires_at        timestamptz not null,
-  used              boolean     not null default false,
-  created_at        timestamptz not null default now()
+  id               uuid primary key default gen_random_uuid(),
+  user_id          uuid not null references auth.users(id) on delete cascade,
+  address          text not null unique check (address ~ '^0x[0-9a-fA-F]{40}$'),
+  derivation_index bigint not null unique check (derivation_index >= 0),
+  network          text not null default 'eth' check (network in ('eth')),
+  expires_at       timestamptz not null,
+  used             boolean not null default false,
+  created_at       timestamptz not null default now()
 );
 
-comment on table public.deposit_addresses is
-  'Written exclusively by the /api/generate-address Vercel function using '
-  'SUPABASE_SERVICE_KEY. All client access is blocked by RLS default-deny.';
-
-
--- ── 4. ALTER EXISTING TABLES — ADD MISSING COLUMNS ────────────────────────
--- These tables already exist on NexTrade. ADD COLUMN IF NOT EXISTS is safe
--- and silent when the column is already present.
-
--- profiles
-alter table public.profiles
-  add column if not exists full_name     text,
-  add column if not exists avatar_url    text,
-  add column if not exists role          text,
-  add column if not exists kyc_status    text,
-  add column if not exists spot_balance  numeric(18, 8),
-  add column if not exists vault_balance numeric(18, 8),
-  add column if not exists holdings      jsonb,
-  add column if not exists created_at    timestamptz,
-  add column if not exists updated_at    timestamptz;
-
--- transactions
-alter table public.transactions
-  add column if not exists type        text,
-  add column if not exists amount      numeric(18, 8),
-  add column if not exists status      text,
-  add column if not exists description text,
-  add column if not exists created_at  timestamptz,
-  add column if not exists updated_at  timestamptz;
-
--- investments
-alter table public.investments
-  add column if not exists strategy_id   text,
-  add column if not exists amount        numeric(18, 8),
-  add column if not exists current_value numeric(18, 8),
-  add column if not exists apy           numeric(6, 4),
-  add column if not exists profit        numeric(18, 8),
-  add column if not exists status        text,
-  add column if not exists matures_at    timestamptz,
-  add column if not exists created_at    timestamptz,
-  add column if not exists completed_at  timestamptz,
-  add column if not exists updated_at    timestamptz;
-
-
--- ── 5. BACKFILL EXISTING TABLES ───────────────────────────────────────────
--- coalesce() ensures existing non-NULL values are never overwritten.
--- kyc_documents and deposit_addresses are excluded — they were just created
--- and have no rows to backfill.
-
-update public.profiles
-set
-  role          = coalesce(role, 'user'),
-  kyc_status    = coalesce(kyc_status, 'unverified'),
-  spot_balance  = coalesce(spot_balance, 0),
-  vault_balance = coalesce(vault_balance, 0),
-  holdings      = coalesce(holdings, '{}'::jsonb),
-  created_at    = coalesce(created_at, now()),
-  updated_at    = coalesce(updated_at, created_at, now());
-
-update public.transactions
-set
-  created_at = coalesce(created_at, now()),
-  updated_at = coalesce(updated_at, created_at, now());
-
--- Skip rows with amount = 0 or NULL — legacy bad data written by the old
--- client when it zeroed amount on claim. These rows already have timestamps
--- from prior partial runs and must not be touched (constraint would fire).
-update public.investments
-set
-  created_at   = coalesce(created_at, now()),
-  completed_at = coalesce(completed_at, null),
-  updated_at   = coalesce(updated_at, created_at, now())
-where coalesce(amount, 0) > 0;
-
-
--- ── 6. DATA NORMALISATION ─────────────────────────────────────────────────
--- Resolve duplicate active investments per strategy per user so the unique
--- partial index below can be created. Extra rows are cancelled, not deleted.
-with ranked as (
-  select
-    id,
-    row_number() over (
-      partition by user_id, strategy_id
-      order by created_at desc, id desc
-    ) as rn
-  from public.investments
-  where status = 'active'
-), to_cancel as (
-  select id from ranked where rn > 1
-)
-update public.investments
-set
-  status       = 'cancelled',
-  completed_at = now(),
-  updated_at   = now()
-where id in (select id from to_cancel);
-
--- Sanitise any existing transaction descriptions that contain angle brackets.
-update public.transactions
-set description = replace(replace(description, '<', '&lt;'), '>', '&gt;')
-where description ~ '[<>]';
-
-
--- ── 7. CONSTRAINTS ────────────────────────────────────────────────────────
-
-alter table public.profiles drop constraint if exists profiles_role_allowlist;
-alter table public.profiles
-  add constraint profiles_role_allowlist
-  check (role in ('user', 'admin')) not valid;
-
-alter table public.profiles drop constraint if exists profiles_kyc_status_allowlist;
-alter table public.profiles
-  add constraint profiles_kyc_status_allowlist
-  check (kyc_status in ('unverified', 'pending', 'approved', 'rejected')) not valid;
-
-alter table public.profiles drop constraint if exists profiles_spot_non_negative;
-alter table public.profiles
-  add constraint profiles_spot_non_negative
-  check (spot_balance >= 0) not valid;
-
-alter table public.profiles drop constraint if exists profiles_vault_non_negative;
-alter table public.profiles
-  add constraint profiles_vault_non_negative
-  check (vault_balance >= 0) not valid;
-
-alter table public.transactions drop constraint if exists transactions_type_allowlist;
-alter table public.transactions
-  add constraint transactions_type_allowlist
-  check (type in (
-    'deposit', 'withdraw', 'investment', 'claim',
-    'transfer_in', 'transfer_out', 'buy', 'sell'
-  )) not valid;
-
-alter table public.transactions drop constraint if exists transactions_amount_positive;
-alter table public.transactions
-  add constraint transactions_amount_positive
-  check (amount > 0) not valid;
-
-alter table public.transactions drop constraint if exists transactions_status_allowlist;
-alter table public.transactions
-  add constraint transactions_status_allowlist
-  check (status in ('pending', 'completed', 'approved', 'failed', 'cancelled')) not valid;
-
-alter table public.transactions drop constraint if exists transactions_description_safe;
-alter table public.transactions
-  add constraint transactions_description_safe
-  check (description is null or (char_length(description) <= 500 and description !~ '[<>]')) not valid;
-
-alter table public.investments drop constraint if exists investments_amount_positive;
-alter table public.investments
-  add constraint investments_amount_positive
-  check (amount > 0) not valid;
-
-alter table public.investments drop constraint if exists investments_current_value_non_negative;
-alter table public.investments
-  add constraint investments_current_value_non_negative
-  check (current_value is null or current_value >= 0) not valid;
-
-alter table public.investments drop constraint if exists investments_apy_check;
-alter table public.investments drop constraint if exists investments_apy_range;
-alter table public.investments
-  add constraint investments_apy_range
-  check (apy >= 0 and apy <= 100) not valid;
-
-alter table public.investments drop constraint if exists investments_profit_non_negative;
-alter table public.investments
-  add constraint investments_profit_non_negative
-  check (profit is null or profit >= 0) not valid;
-
-alter table public.investments drop constraint if exists investments_status_allowlist;
-alter table public.investments
-  add constraint investments_status_allowlist
-  check (status in ('active', 'completed', 'cancelled')) not valid;
-
-alter table public.investments drop constraint if exists investments_strategy_id_slug;
-alter table public.investments
-  add constraint investments_strategy_id_slug
-  check (strategy_id ~ '^[a-z0-9_-]{2,60}$') not valid;
-
-
--- ── 8. INDEXES ────────────────────────────────────────────────────────────
-create index if not exists transactions_user_id_idx  on public.transactions  (user_id);
-create index if not exists transactions_status_idx   on public.transactions  (status);
-create index if not exists transactions_type_idx     on public.transactions  (type);
-create index if not exists investments_user_id_idx   on public.investments   (user_id);
-create index if not exists investments_status_idx    on public.investments   (status);
-create index if not exists kyc_documents_user_id_idx on public.kyc_documents (user_id);
-create index if not exists deposit_addresses_user_id on public.deposit_addresses (user_id);
-
-create index if not exists transactions_balance_derivation
-  on public.transactions (user_id, status, type);
-
--- One active investment per strategy per user
-create unique index if not exists investments_one_active_per_strategy
-  on public.investments (user_id, strategy_id)
-  where (status = 'active');
-
--- One pending KYC submission per user
-create unique index if not exists kyc_documents_one_pending_per_user
-  on public.kyc_documents (user_id)
-  where (status = 'pending');
-
-
--- ── 9. STRATEGIES SEED DATA ───────────────────────────────────────────────
-insert into public.strategies
-  (id, name, tagline, category, apy, min_amount, duration_days, penalty_rate, perf_fee)
-values
-  (
-    'steady-accumulator',
-    'Steady Accumulator',
-    'Start with $100. 90-day cycle. Low volatility, consistent pool growth.',
-    'Conservative · Strategy A',
-    22, 100, 90, 0.08, 15
-  ),
-  (
-    'alpha-seeker',
-    'Surge Pool',
-    'More capital, faster cycle. The algorithm scales with what you put in. Target: +67% per 30-day cycle.',
-    'Quant Momentum · Strategy B',
-    67, 1500, 30, 0.15, 20
-  )
-on conflict (id) do update set
-  name          = excluded.name,
-  tagline       = excluded.tagline,
-  category      = excluded.category,
-  apy           = excluded.apy,
-  min_amount    = excluded.min_amount,
-  duration_days = excluded.duration_days,
-  penalty_rate  = excluded.penalty_rate,
-  perf_fee      = excluded.perf_fee,
-  updated_at    = now();
-
-
--- ── 10. SEQUENCE ──────────────────────────────────────────────────────────
--- Atomic counter for HD wallet derivation indices. Race-safe alternative
--- to max(derivation_index) + 1 which suffers from TOCTOU race conditions.
-create sequence if not exists public.deposit_address_index_seq
-  as integer
-  minvalue 0
-  start with 0
-  increment by 1;
-
-
--- ── 11. ROW-LEVEL SECURITY ────────────────────────────────────────────────
-alter table public.profiles          enable row level security;
-alter table public.transactions       enable row level security;
-alter table public.investments        enable row level security;
-alter table public.kyc_documents      enable row level security;
-alter table public.deposit_addresses  enable row level security;
-
-
--- ── 12. get_my_role() HELPER ──────────────────────────────────────────────
--- SECURITY DEFINER means it runs as the table owner, bypassing RLS on
--- profiles. This breaks the infinite-recursion (42P17) that would occur
--- if a profiles policy queried profiles directly.
-create or replace function public.get_my_role()
-returns text
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select role from public.profiles where id = auth.uid()
-$$;
-
-
--- ── 13. RLS POLICIES ──────────────────────────────────────────────────────
--- Drop all first (idempotent re-run safety), then recreate.
-
-drop policy if exists "profiles: user reads own"                        on public.profiles;
-drop policy if exists "profiles: user updates own (restricted columns)" on public.profiles;
-drop policy if exists "profiles: admin reads all"                       on public.profiles;
-drop policy if exists "profiles: admin updates all"                     on public.profiles;
-drop policy if exists "transactions: user reads own"                    on public.transactions;
-drop policy if exists "transactions: user inserts own"                  on public.transactions;
-drop policy if exists "transactions: admin reads all"                   on public.transactions;
-drop policy if exists "transactions: admin updates"                     on public.transactions;
-drop policy if exists "investments: user reads own"                     on public.investments;
-drop policy if exists "investments: user inserts own"                   on public.investments;
-drop policy if exists "investments: user claims own"                    on public.investments;
-drop policy if exists "investments: admin reads all"                    on public.investments;
-drop policy if exists "investments: admin updates all"                  on public.investments;
-drop policy if exists "kyc_documents: user inserts own"                 on public.kyc_documents;
-drop policy if exists "kyc_documents: user reads own"                   on public.kyc_documents;
-drop policy if exists "kyc_documents: admin reads all"                  on public.kyc_documents;
-drop policy if exists "kyc_documents: admin updates all"                on public.kyc_documents;
-
--- profiles
-create policy "profiles: user reads own"
-  on public.profiles for select
-  using (auth.uid() = id);
-
-create policy "profiles: user updates own (restricted columns)"
-  on public.profiles for update
-  using (auth.uid() = id)
-  with check (
-    auth.uid() = id
-    and public.get_my_role() = role
-    and kyc_status in ('unverified', 'pending')
-    and spot_balance  >= 0
-    and vault_balance >= 0
-  );
-
-create policy "profiles: admin reads all"
-  on public.profiles for select
-  using (public.get_my_role() = 'admin');
-
-create policy "profiles: admin updates all"
-  on public.profiles for update
-  using (public.get_my_role() = 'admin');
-
--- transactions
-create policy "transactions: user reads own"
-  on public.transactions for select
-  using (auth.uid() = user_id);
-
-create policy "transactions: user inserts own"
-  on public.transactions for insert
-  with check (
-    auth.uid() = user_id
-    and (
-      (type in ('deposit', 'withdraw') and status = 'pending')
-      or
-      (type in ('investment', 'claim', 'transfer_in', 'transfer_out', 'buy', 'sell')
-       and status in ('pending', 'completed'))
-    )
-  );
-
-create policy "transactions: admin reads all"
-  on public.transactions for select
-  using (public.get_my_role() = 'admin');
-
--- Admins update transactions — e.g. toggle deposit status to 'approved'.
--- Also works via Supabase Table Editor (service role bypasses RLS entirely).
-create policy "transactions: admin updates"
-  on public.transactions for update
-  using (public.get_my_role() = 'admin');
-
--- investments
-create policy "investments: user reads own"
-  on public.investments for select
-  using (auth.uid() = user_id);
-
-create policy "investments: user inserts own"
-  on public.investments for insert
-  with check (
-    auth.uid() = user_id
-    and status = 'active'
-    and amount > 0
-    and apy >= 0 and apy <= 100
-  );
-
-create policy "investments: user claims own"
-  on public.investments for update
-  using (auth.uid() = user_id)
-  with check (
-    auth.uid() = user_id
-    and status in ('completed', 'cancelled')
-  );
-
-create policy "investments: admin reads all"
-  on public.investments for select
-  using (public.get_my_role() = 'admin');
-
-create policy "investments: admin updates all"
-  on public.investments for update
-  using (public.get_my_role() = 'admin');
-
--- kyc_documents
-create policy "kyc_documents: user inserts own"
-  on public.kyc_documents for insert
-  with check (auth.uid() = user_id and status = 'pending');
-
-create policy "kyc_documents: user reads own"
-  on public.kyc_documents for select
-  using (auth.uid() = user_id);
-
-create policy "kyc_documents: admin reads all"
-  on public.kyc_documents for select
-  using (public.get_my_role() = 'admin');
-
-create policy "kyc_documents: admin updates all"
-  on public.kyc_documents for update
-  using (public.get_my_role() = 'admin');
-
--- deposit_addresses: no client policies — service role only.
--- Default RLS deny blocks all authenticated/anon access.
-
-
--- ── 14. TRIGGERS ──────────────────────────────────────────────────────────
-
--- 14a. Auto-create profile on sign-up
-create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer set search_path = public
-as $$
+create table if not exists public.app_settings (
+  singleton                boolean primary key default true check (singleton),
+  real_deposits_enabled    boolean not null default false,
+  real_withdrawals_enabled boolean not null default false,
+  updated_at               timestamptz not null default now()
+);
+insert into public.app_settings(singleton) values (true)
+on conflict (singleton) do nothing;
+
+create sequence if not exists public.deposit_address_derivation_seq start with 0 minvalue 0;
+
+-- ---------------------------------------------------------------------------
+-- 1b. LEGACY ATTACK-SURFACE CLEANUP
+-- ---------------------------------------------------------------------------
+-- PostgreSQL overloads functions by signature. An upgrade that only creates the
+-- v2.1 signatures would leave old authenticated money RPCs callable. Likewise,
+-- legacy RLS policies can survive CREATE TABLE IF NOT EXISTS. Remove the old
+-- surface explicitly before installing the canonical policies/functions below.
+do $$
+declare r record;
 begin
-  insert into public.profiles (id, full_name, avatar_url)
+  for r in
+    select schemaname, tablename, policyname
+    from pg_policies
+    where schemaname='public'
+      and tablename in ('profiles','transactions','investments','strategies','kyc_documents','deposit_addresses','app_settings')
+  loop
+    execute format('drop policy if exists %I on %I.%I', r.policyname, r.schemaname, r.tablename);
+  end loop;
+end $$;
+
+drop function if exists public.request_deposit(numeric,text);
+drop function if exists public.request_withdrawal(numeric,text);
+drop function if exists public.transfer_spot_vault(text,numeric);
+drop function if exists public.execute_trade(text,text,numeric,numeric);
+drop function if exists public.create_investment(text,numeric);
+drop function if exists public.claim_investment(uuid,boolean);
+drop function if exists public.derive_vault_balance(uuid);
+drop function if exists public.reconcile_all_spot_balances();
+drop function if exists public.get_my_role();
+
+-- ---------------------------------------------------------------------------
+-- 2. STATIC STRATEGY CATALOGUE
+-- ---------------------------------------------------------------------------
+
+insert into public.strategies
+  (id,name,tagline,category,apy,min_amount,duration_days,penalty_rate,perf_fee)
+values
+  ('steady-accumulator','Steady Accumulator','90-day managed strategy cycle','Conservative · Strategy A',22,100,90,0.08,15),
+  ('alpha-seeker','Surge Pool','30-day quantitative strategy cycle','Quant Momentum · Strategy B',67,1500,30,0.15,20)
+on conflict (id) do update set
+  name=excluded.name,
+  tagline=excluded.tagline,
+  category=excluded.category,
+  apy=excluded.apy,
+  min_amount=excluded.min_amount,
+  duration_days=excluded.duration_days,
+  penalty_rate=excluded.penalty_rate,
+  perf_fee=excluded.perf_fee,
+  updated_at=now();
+
+-- ---------------------------------------------------------------------------
+-- 3. GENERIC HELPERS + AUTH PROFILE CREATION
+-- ---------------------------------------------------------------------------
+
+create or replace function public.set_updated_at()
+returns trigger language plpgsql set search_path=public as $$
+begin new.updated_at = now(); return new; end; $$;
+
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+  insert into public.profiles(id,email,full_name)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name'),
-    new.raw_user_meta_data->>'avatar_url'
+    new.email,
+    left(coalesce(new.raw_user_meta_data->>'full_name',''),120)
   )
   on conflict (id) do nothing;
   return new;
-end;
-$$;
+end; $$;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+  after insert on auth.users for each row execute procedure public.handle_new_user();
 
--- 14b. Sync profiles.kyc_status when admin approves/rejects a KYC doc
-create or replace function public.sync_kyc_status()
-returns trigger language plpgsql security definer set search_path = public
-as $$
+create or replace function public.is_service_role()
+returns boolean language sql stable set search_path=public as $$
+  select coalesce(auth.role(),'') = 'service_role';
+$$;
+
+create or replace function public.assert_self(p_user_id uuid)
+returns void language plpgsql stable security definer set search_path=public as $$
 begin
-  if new.status in ('approved', 'rejected') and new.status != old.status then
-    update public.profiles
-    set kyc_status = new.status, updated_at = now()
-    where id = new.user_id;
+  if not public.is_service_role() and auth.uid() is distinct from p_user_id then
+    raise exception 'Not authorized';
   end if;
-  return new;
-end;
+end; $$;
+
+create or replace function public.valid_money(p_amount numeric)
+returns boolean language sql immutable set search_path=public as $$
+  select p_amount is not null
+     and p_amount::text not in ('NaN','Infinity','-Infinity')
+     and p_amount > 0
+     and p_amount <= 1000000000;
 $$;
 
-drop trigger if exists on_kyc_document_reviewed on public.kyc_documents;
-create trigger on_kyc_document_reviewed
-  after update on public.kyc_documents
-  for each row execute procedure public.sync_kyc_status();
+create or replace function public.valid_holdings(p_holdings jsonb)
+returns boolean language sql immutable set search_path=public as $$
+  select jsonb_typeof(p_holdings)='object'
+     and not exists (
+       select 1
+       from jsonb_each(p_holdings) as h(asset,value)
+       where asset not in ('btc','eth','sol','bnb','xrp','ada','avax','dot','matic','doge','shib','trx','ltc','link','uni','ton','near','xlm','sui')
+          or case
+               when jsonb_typeof(value)='number'
+                 then (value::text)::numeric < 0 or (value::text)::numeric > 1000000000000000000
+               else true
+             end
+     );
+$$;
 
--- 14c. Auto-update updated_at
-create or replace function public.set_updated_at()
-returns trigger language plpgsql
-as $$
+alter table public.profiles drop constraint if exists profiles_holdings_supported_values;
+alter table public.profiles add constraint profiles_holdings_supported_values
+  check (public.valid_holdings(holdings));
+
+-- Cross-field invariants are installed with ALTER TABLE so they also apply when
+-- SCHEMA.sql follows the legacy cutover rather than only on a fresh database.
+alter table public.investments drop constraint if exists investments_maturity_after_creation;
+alter table public.investments add constraint investments_maturity_after_creation
+  check (matures_at > created_at);
+alter table public.investments drop constraint if exists investments_claimed_has_completion;
+alter table public.investments add constraint investments_claimed_has_completion
+  check (status <> 'claimed' or completed_at is not null);
+
+alter table public.kyc_documents drop constraint if exists kyc_country_document_pair;
+alter table public.kyc_documents add constraint kyc_country_document_pair
+  check ((doc_type <> 'nin' or country='NG') and (doc_type <> 'voters_card' or country in ('NG','GH')));
+alter table public.kyc_documents drop constraint if exists kyc_front_path_owned;
+alter table public.kyc_documents add constraint kyc_front_path_owned
+  check (id_front_path ~ ('^'||user_id::text||'/id_front_[0-9]{10,17}\.jpg$'));
+alter table public.kyc_documents drop constraint if exists kyc_selfie_path_owned;
+alter table public.kyc_documents add constraint kyc_selfie_path_owned
+  check (selfie_path ~ ('^'||user_id::text||'/selfie_[0-9]{10,17}\.jpg$'));
+alter table public.kyc_documents drop constraint if exists kyc_back_path_owned;
+alter table public.kyc_documents add constraint kyc_back_path_owned
+  check (id_back_path is null or id_back_path ~ ('^'||user_id::text||'/id_back_[0-9]{10,17}\.jpg$'));
+
+alter table public.deposit_addresses drop constraint if exists deposit_address_nonzero;
+alter table public.deposit_addresses add constraint deposit_address_nonzero
+  check (lower(address) <> '0x0000000000000000000000000000000000000000');
+
+-- ---------------------------------------------------------------------------
+-- 4. LEDGER DERIVATION
+-- ---------------------------------------------------------------------------
+
+create or replace function public.derive_spot_balance(p_user_id uuid)
+returns numeric language plpgsql stable security definer set search_path=public as $$
+declare v_balance numeric;
 begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
+  perform public.assert_self(p_user_id);
+  select coalesce(sum(case
+    when type in ('opening_balance','migration_credit','deposit','claim','transfer_in','sell')
+         and status in ('completed','approved') then amount
+    when type in ('migration_debit','investment','transfer_out','buy')
+         and status in ('completed','approved') then -amount
+    when type='withdraw' and status in ('pending','approved','completed') then -amount
+    else 0 end),0)
+  into v_balance
+  from public.transactions where user_id=p_user_id;
 
-drop trigger if exists set_updated_at_profiles     on public.profiles;
-drop trigger if exists set_updated_at_transactions on public.transactions;
-drop trigger if exists set_updated_at_investments  on public.investments;
+  if v_balance < 0 then raise exception 'Spot ledger invariant violated'; end if;
+  return v_balance;
+end; $$;
 
-create trigger set_updated_at_profiles
-  before update on public.profiles
-  for each row execute procedure public.set_updated_at();
-
-create trigger set_updated_at_transactions
-  before update on public.transactions
-  for each row execute procedure public.set_updated_at();
-
-create trigger set_updated_at_investments
-  before update on public.investments
-  for each row execute procedure public.set_updated_at();
-
-create trigger set_updated_at_kyc_documents
-  before update on public.kyc_documents
-  for each row execute procedure public.set_updated_at();
-
--- 14d. Guard: transactions are append-only (user_id, type, amount immutable)
-create or replace function public.guard_transaction_immutability()
-returns trigger language plpgsql
-as $$
+create or replace function public.derive_vault_cash(p_user_id uuid)
+returns numeric language plpgsql stable security definer set search_path=public as $$
+declare v_balance numeric;
 begin
-  if new.user_id != old.user_id then raise exception 'transactions.user_id is immutable'; end if;
-  if new.type    != old.type    then raise exception 'transactions.type is immutable'; end if;
-  if new.amount  != old.amount  then raise exception 'transactions.amount is immutable'; end if;
-  return new;
-end;
-$$;
+  perform public.assert_self(p_user_id);
+  select coalesce(sum(case
+    when type='transfer_out' and status in ('completed','approved') then amount
+    when type='transfer_in'  and status in ('completed','approved') then -amount
+    else 0 end),0)
+  into v_balance
+  from public.transactions where user_id=p_user_id;
 
-drop trigger if exists guard_transaction_immutability on public.transactions;
-create trigger guard_transaction_immutability
-  before update on public.transactions
-  for each row execute procedure public.guard_transaction_immutability();
+  if v_balance < 0 then raise exception 'Vault cash ledger invariant violated'; end if;
+  return v_balance;
+end; $$;
 
+-- Read caches are repaired after any ledger mutation. They are never used as
+-- authority inside the mutation RPCs.
+create or replace function public.refresh_balance_caches()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare v_user uuid; v_spot numeric; v_vault numeric;
+begin
+  v_user := case when tg_op='DELETE' then old.user_id else new.user_id end;
+  perform set_config('nextrade.bypass_financial_guard','1',true);
+  v_spot := public.derive_spot_balance(v_user);
+  v_vault := public.derive_vault_cash(v_user);
+  update public.profiles
+     set spot_balance=v_spot, vault_balance=v_vault, updated_at=now()
+   where id=v_user;
+  return case when tg_op='DELETE' then old else new end;
+end; $$;
 
--- ── 15. FINANCIAL GUARD LAYER ─────────────────────────────────────────────
--- financial_write_allowed() is the single gate checked by all guard triggers.
--- Returns true for:
---   (a) Service role — Supabase Table Editor, /api/* serverless functions,
---       any request authenticated with SUPABASE_SERVICE_KEY
---   (b) SECURITY DEFINER RPCs — set nextrade.bypass_financial_guard = '1'
---       for the duration of their transaction
+-- ---------------------------------------------------------------------------
+-- 5. DEFENSE-IN-DEPTH WRITE GUARDS
+-- ---------------------------------------------------------------------------
 
 create or replace function public.financial_write_allowed()
-returns boolean language sql stable set search_path = public
-as $$
-  select
-    coalesce(current_setting('nextrade.bypass_financial_guard', true), '') = '1'
-    or coalesce(current_setting('request.jwt.claim.role', true), '') = 'service_role';
+returns boolean language sql stable set search_path=public as $$
+  select public.is_service_role()
+      or coalesce(current_setting('nextrade.bypass_financial_guard',true),'')='1';
 $$;
 
--- Guard: profiles sensitive fields
 create or replace function public.guard_profile_sensitive_write()
-returns trigger language plpgsql set search_path = public
-as $$
+returns trigger language plpgsql set search_path=public as $$
 begin
   if public.financial_write_allowed() then return new; end if;
-
-  if new.role          is distinct from old.role
-  or new.kyc_status    is distinct from old.kyc_status
-  or new.spot_balance  is distinct from old.spot_balance
-  or new.vault_balance is distinct from old.vault_balance
-  or new.holdings      is distinct from old.holdings then
-    raise exception 'profiles financial fields are server-managed — use the provided RPCs';
+  if new.role is distinct from old.role
+     or new.kyc_status is distinct from old.kyc_status
+     or new.spot_balance is distinct from old.spot_balance
+     or new.vault_balance is distinct from old.vault_balance
+     or new.holdings is distinct from old.holdings
+     or new.withdrawal_passphrase_hash is distinct from old.withdrawal_passphrase_hash
+     or new.withdrawal_failed_attempts is distinct from old.withdrawal_failed_attempts
+     or new.withdrawal_locked_until is distinct from old.withdrawal_locked_until
+     or new.withdrawal_verified_at is distinct from old.withdrawal_verified_at then
+    raise exception 'Protected profile fields are server-managed';
   end if;
-
   return new;
-end;
-$$;
+end; $$;
 
-drop trigger if exists guard_profile_sensitive_write on public.profiles;
-create trigger guard_profile_sensitive_write
-  before update on public.profiles
-  for each row execute procedure public.guard_profile_sensitive_write();
-
--- Guard: transactions, investments, kyc_documents — server-managed
 create or replace function public.guard_server_managed_write()
-returns trigger language plpgsql set search_path = public
-as $$
+returns trigger language plpgsql set search_path=public as $$
 begin
   if public.financial_write_allowed() then
-    if tg_op = 'DELETE' then return old; end if;
+    if tg_op='DELETE' then return old; end if;
     return new;
   end if;
-  raise exception '% is server-managed — use the provided RPCs', tg_table_name;
-end;
-$$;
+  raise exception '% is server-managed', tg_table_name;
+end; $$;
 
-create trigger guard_transactions_server_only
-  before insert or update or delete on public.transactions
+create or replace function public.guard_transaction_immutability()
+returns trigger language plpgsql set search_path=public as $$
+begin
+  if new.user_id is distinct from old.user_id
+     or new.type is distinct from old.type
+     or new.amount is distinct from old.amount
+     or new.idempotency_key is distinct from old.idempotency_key then
+    raise exception 'Transaction identity and amount are immutable';
+  end if;
+  return new;
+end; $$;
+
+-- updated_at triggers
+
+drop trigger if exists set_updated_at_profiles on public.profiles;
+create trigger set_updated_at_profiles before update on public.profiles
+  for each row execute procedure public.set_updated_at();
+drop trigger if exists set_updated_at_transactions on public.transactions;
+create trigger set_updated_at_transactions before update on public.transactions
+  for each row execute procedure public.set_updated_at();
+drop trigger if exists set_updated_at_strategies on public.strategies;
+create trigger set_updated_at_strategies before update on public.strategies
+  for each row execute procedure public.set_updated_at();
+drop trigger if exists set_updated_at_investments on public.investments;
+create trigger set_updated_at_investments before update on public.investments
+  for each row execute procedure public.set_updated_at();
+drop trigger if exists set_updated_at_kyc on public.kyc_documents;
+create trigger set_updated_at_kyc before update on public.kyc_documents
+  for each row execute procedure public.set_updated_at();
+
+drop trigger if exists guard_profile_sensitive_write on public.profiles;
+create trigger guard_profile_sensitive_write before update on public.profiles
+  for each row execute procedure public.guard_profile_sensitive_write();
+drop trigger if exists guard_transactions_server_only on public.transactions;
+create trigger guard_transactions_server_only before insert or update or delete on public.transactions
   for each row execute procedure public.guard_server_managed_write();
-
-create trigger guard_investments_server_only
-  before insert or update or delete on public.investments
+drop trigger if exists guard_investments_server_only on public.investments;
+create trigger guard_investments_server_only before insert or update or delete on public.investments
   for each row execute procedure public.guard_server_managed_write();
-
-create trigger guard_kyc_documents_server_only
-  before insert or update or delete on public.kyc_documents
+drop trigger if exists guard_kyc_documents_server_only on public.kyc_documents;
+create trigger guard_kyc_documents_server_only before insert or update or delete on public.kyc_documents
   for each row execute procedure public.guard_server_managed_write();
+drop trigger if exists guard_transaction_immutability on public.transactions;
+create trigger guard_transaction_immutability before update on public.transactions
+  for each row execute procedure public.guard_transaction_immutability();
+drop trigger if exists refresh_balance_caches on public.transactions;
+create trigger refresh_balance_caches after insert or update or delete on public.transactions
+  for each row execute procedure public.refresh_balance_caches();
 
-
--- ── 16. SECURITY DEFINER RPCs ─────────────────────────────────────────────
-
--- 16a. derive_spot_balance
-create or replace function public.derive_spot_balance(p_user_id uuid)
-returns numeric language plpgsql security definer set search_path = public
-as $$
-declare
-  credit_types text[] := array['deposit', 'claim', 'transfer_in'];
-  debit_types  text[] := array['withdraw', 'investment', 'transfer_out'];
-  has_deposit  boolean;
-  stored_bal   numeric;
-  result       numeric := 0;
+-- Keep profiles.kyc_status synchronized with the latest admin review.
+create or replace function public.sync_kyc_status()
+returns trigger language plpgsql security definer set search_path=public as $$
 begin
-  select exists (
-    select 1 from public.transactions
-    where user_id = p_user_id and type = 'deposit'
-      and status in ('completed', 'approved')
-  ) into has_deposit;
+  if new.status is distinct from old.status and new.status in ('approved','rejected') then
+    perform set_config('nextrade.bypass_financial_guard','1',true);
+    update public.profiles set kyc_status=new.status where id=new.user_id;
+    new.reviewed_at := coalesce(new.reviewed_at,now());
+  end if;
+  return new;
+end; $$;
+drop trigger if exists on_kyc_document_reviewed on public.kyc_documents;
+create trigger on_kyc_document_reviewed before update of status on public.kyc_documents
+  for each row execute procedure public.sync_kyc_status();
 
-  if not has_deposit then
-    select coalesce(spot_balance, 0) into stored_bal
-    from public.profiles where id = p_user_id;
+-- ---------------------------------------------------------------------------
+-- 6. USER RPCs — ALL MUTATIONS SERIALIZE THE PROFILE ROW
+-- ---------------------------------------------------------------------------
 
-    select stored_bal + coalesce(sum(
-      case
-        when type = any(credit_types) and status in ('completed','approved') then  amount
-        when type = any(debit_types)  and status in ('completed','approved') then -amount
-        when type = 'withdraw'        and status = 'pending'                 then -amount
-        else 0
-      end
-    ), 0) into result
-    from public.transactions where user_id = p_user_id;
-  else
-    select coalesce(sum(
-      case
-        when type = any(credit_types) and status in ('completed','approved') then  amount
-        when type = any(debit_types)  and status in ('completed','approved') then -amount
-        when type = 'withdraw'        and status = 'pending'                 then -amount
-        else 0
-      end
-    ), 0) into result
-    from public.transactions where user_id = p_user_id;
+create or replace function public.request_deposit(
+  p_amount numeric,
+  p_description text,
+  p_idempotency_key text
+)
+returns table(tx_id uuid, spot_balance numeric, created_at timestamptz)
+language plpgsql security definer set search_path=public as $$
+declare v_user uuid:=auth.uid(); v_existing public.transactions%rowtype; v_tx public.transactions%rowtype;
+begin
+  if v_user is null then raise exception 'Authentication required'; end if;
+  if not public.valid_money(p_amount) then raise exception 'Invalid deposit amount'; end if;
+  if p_amount < 10 then raise exception 'Minimum deposit is 10'; end if;
+  if p_idempotency_key is null or p_idempotency_key !~ '^deposit:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-4[0-9A-Fa-f]{3}-[89ABab][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$' then raise exception 'Invalid deposit idempotency key'; end if;
+  perform 1 from public.profiles where id=v_user for update;
+  if not found then raise exception 'Profile not found'; end if;
+
+  select * into v_existing from public.transactions
+   where user_id=v_user and idempotency_key=p_idempotency_key;
+  if found then
+    if v_existing.type<>'deposit' or v_existing.amount<>p_amount
+       or v_existing.description<>left(coalesce(p_description,'Deposit request'),500) then
+      raise exception 'Idempotency key was already used for a different deposit request';
+    end if;
+    return query select v_existing.id, public.derive_spot_balance(v_user), v_existing.created_at;
+    return;
   end if;
 
-  return greatest(0, result);
-end;
-$$;
-
--- 16b. derive_vault_balance
-create or replace function public.derive_vault_balance(p_user_id uuid)
-returns numeric language plpgsql security definer set search_path = public
-as $$
-declare result numeric := 0;
-begin
-  select coalesce(sum(
-    case
-      when i.status = 'active' then
-        greatest(0,
-          coalesce(i.amount,0) + (
-            coalesce(i.amount,0) *
-            (case when coalesce(i.apy,0) > 1 then coalesce(i.apy,0)/100 else coalesce(i.apy,0) end) *
-            greatest(0, least(1,
-              extract(epoch from (least(now(), coalesce(i.matures_at,now())) - coalesce(i.created_at,now()))) / 31536000.0
-            ))
-          )
-        )
-      else 0
-    end
-  ), 0) into result
-  from public.investments i where i.user_id = p_user_id;
-
-  return greatest(0, coalesce(result, 0));
-end;
-$$;
-
--- 16c. reconcile_all_spot_balances (admin utility)
-create or replace function public.reconcile_all_spot_balances()
-returns table (user_id uuid, stored numeric, derived numeric, drift numeric)
-language plpgsql security definer set search_path = public
-as $$
-begin
-  return query
-  select p.id, p.spot_balance,
-    public.derive_spot_balance(p.id),
-    p.spot_balance - public.derive_spot_balance(p.id)
-  from public.profiles p
-  where public.derive_spot_balance(p.id) != p.spot_balance;
-end;
-$$;
-
--- 16d. request_deposit
-create or replace function public.request_deposit(p_amount numeric, p_description text)
-returns table (tx_id uuid)
-language plpgsql security definer set search_path = public
-as $$
-declare
-  v_user_id uuid := auth.uid();
-  v_tx_id   uuid;
-begin
-  if v_user_id is null then raise exception 'Not authenticated'; end if;
-  if p_amount is null or p_amount <= 0 then raise exception 'Invalid amount'; end if;
-
-  perform set_config('nextrade.bypass_financial_guard', '1', true);
-
-  insert into public.transactions (user_id, type, amount, status, description, created_at, updated_at)
-  values (v_user_id, 'deposit', p_amount, 'pending',
-    left(coalesce(p_description, 'Deposit request'), 500), now(), now())
-  returning id into v_tx_id;
-
-  return query select v_tx_id;
-end;
-$$;
-
--- 16e. request_withdrawal
-create or replace function public.request_withdrawal(p_amount numeric, p_destination_address text)
-returns table (tx_id uuid, spot_balance numeric)
-language plpgsql security definer set search_path = public
-as $$
-declare
-  v_user_id uuid := auth.uid();
-  v_tx_id   uuid;
-  v_spot    numeric;
-begin
-  if v_user_id is null then raise exception 'Not authenticated'; end if;
-  if p_amount is null or p_amount <= 0 then raise exception 'Invalid amount'; end if;
-
-  select public.derive_spot_balance(v_user_id) into v_spot;
-  if coalesce(v_spot, 0) < p_amount then raise exception 'Insufficient balance'; end if;
-
-  perform set_config('nextrade.bypass_financial_guard', '1', true);
-
-  insert into public.transactions (user_id, type, amount, status, description, created_at, updated_at)
-  values (v_user_id, 'withdraw', p_amount, 'pending',
-    'Withdraw to ' || left(coalesce(p_destination_address,'unknown'), 40), now(), now())
-  returning id into v_tx_id;
-
-  select public.derive_spot_balance(v_user_id) into v_spot;
-  update public.profiles set spot_balance = v_spot, updated_at = now() where id = v_user_id;
-
-  return query select v_tx_id, v_spot;
-end;
-$$;
-
--- 16f. transfer_spot_vault
-create or replace function public.transfer_spot_vault(p_from text, p_amount numeric)
-returns table (tx_id uuid, spot_balance numeric, vault_balance numeric)
-language plpgsql security definer set search_path = public
-as $$
-declare
-  v_user_id  uuid := auth.uid();
-  v_tx_id    uuid;
-  v_spot     numeric;
-  v_vault    numeric;
-  v_holdings jsonb;
-begin
-  if v_user_id is null then raise exception 'Not authenticated'; end if;
-  if p_amount is null or p_amount <= 0 then raise exception 'Invalid amount'; end if;
-  if p_from not in ('spot','vault') then raise exception 'Invalid direction'; end if;
-
-  select coalesce(p.spot_balance,0), coalesce(p.vault_balance,0), coalesce(p.holdings,'{}'::jsonb)
-  into v_spot, v_vault, v_holdings
-  from public.profiles p where p.id = v_user_id for update;
-
-  if p_from = 'spot' then
-    if public.derive_spot_balance(v_user_id) < p_amount then raise exception 'Insufficient balance'; end if;
-  else
-    if coalesce(v_vault,0) < p_amount then raise exception 'Insufficient vault balance'; end if;
+  if not coalesce((select real_deposits_enabled from public.app_settings where singleton),false) then
+    raise exception 'Real deposits are disabled for this deployment';
   end if;
 
-  perform set_config('nextrade.bypass_financial_guard', '1', true);
+  perform set_config('nextrade.bypass_financial_guard','1',true);
+  insert into public.transactions(user_id,type,amount,status,description,idempotency_key)
+  values(v_user,'deposit',p_amount,'pending',left(coalesce(p_description,'Deposit request'),500),p_idempotency_key)
+  returning * into v_tx;
+  return query select v_tx.id, public.derive_spot_balance(v_user), v_tx.created_at;
+end; $$;
 
-  if p_from = 'spot' then
-    insert into public.transactions (user_id,type,amount,status,description,created_at,updated_at)
-    values (v_user_id,'transfer_out',p_amount,'completed','Transfer Spot → Vault',now(),now())
-    returning id into v_tx_id;
-    select public.derive_spot_balance(v_user_id) into v_spot;
-    v_vault := greatest(0, coalesce(v_vault,0) + p_amount);
-  else
-    insert into public.transactions (user_id,type,amount,status,description,created_at,updated_at)
-    values (v_user_id,'transfer_in',p_amount,'completed','Transfer Vault → Spot',now(),now())
-    returning id into v_tx_id;
-    select public.derive_spot_balance(v_user_id) into v_spot;
-    v_vault := greatest(0, coalesce(v_vault,0) - p_amount);
+create or replace function public.transfer_spot_vault(
+  p_from text,
+  p_amount numeric,
+  p_idempotency_key text
+)
+returns table(tx_id uuid, spot_balance numeric, vault_cash numeric, created_at timestamptz)
+language plpgsql security definer set search_path=public as $$
+declare v_user uuid:=auth.uid(); v_spot numeric; v_vault numeric; v_type text; v_existing public.transactions%rowtype; v_tx public.transactions%rowtype;
+begin
+  if v_user is null then raise exception 'Authentication required'; end if;
+  if p_from not in ('spot','vault') then raise exception 'Invalid transfer source'; end if;
+  if not public.valid_money(p_amount) then raise exception 'Invalid transfer amount'; end if;
+  if p_idempotency_key is null or p_idempotency_key !~ '^transfer:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-4[0-9A-Fa-f]{3}-[89ABab][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$' then raise exception 'Invalid transfer idempotency key'; end if;
+  perform 1 from public.profiles where id=v_user for update;
+  if not found then raise exception 'Profile not found'; end if;
+  v_type:=case when p_from='spot' then 'transfer_out' else 'transfer_in' end;
+
+  select * into v_existing from public.transactions where user_id=v_user and idempotency_key=p_idempotency_key;
+  if found then
+    if v_existing.type<>v_type or v_existing.amount<>p_amount then
+      raise exception 'Idempotency key was already used for a different transfer request';
+    end if;
+    return query select v_existing.id, public.derive_spot_balance(v_user), public.derive_vault_cash(v_user), v_existing.created_at;
+    return;
   end if;
 
-  update public.profiles
-  set spot_balance=v_spot, vault_balance=v_vault, holdings=v_holdings, updated_at=now()
-  where id = v_user_id;
+  v_spot:=public.derive_spot_balance(v_user); v_vault:=public.derive_vault_cash(v_user);
+  if p_from='spot' and p_amount>v_spot then raise exception 'Insufficient Spot balance'; end if;
+  if p_from='vault' and p_amount>v_vault then raise exception 'Insufficient Vault cash'; end if;
 
-  return query select v_tx_id, v_spot, v_vault;
-end;
-$$;
+  perform set_config('nextrade.bypass_financial_guard','1',true);
+  insert into public.transactions(user_id,type,amount,status,description,idempotency_key)
+  values(v_user,v_type,p_amount,'completed',case when p_from='spot' then 'Transfer Spot → Vault' else 'Transfer Vault → Spot' end,p_idempotency_key)
+  returning * into v_tx;
+  return query select v_tx.id, public.derive_spot_balance(v_user), public.derive_vault_cash(v_user), v_tx.created_at;
+end; $$;
 
--- 16g. execute_trade
-create or replace function public.execute_trade(p_side text, p_asset text, p_amount numeric, p_price numeric)
-returns table (tx_id uuid, spot_balance numeric, holdings jsonb)
-language plpgsql security definer set search_path = public
-as $$
-declare
-  v_user_id    uuid    := auth.uid();
-  v_tx_id      uuid;
-  v_spot       numeric;
-  v_holdings   jsonb;
-  v_current    numeric := 0;
-  v_new        numeric := 0;
-  v_usd_amount numeric := 0;
-  v_asset      text    := lower(trim(coalesce(p_asset,'')));
+create or replace function public.create_investment(
+  p_strategy_id text,
+  p_amount numeric,
+  p_idempotency_key text
+)
+returns table(investment_id uuid, tx_id uuid, spot_balance numeric, vault_cash numeric, created_at timestamptz)
+language plpgsql security definer set search_path=public as $$
+declare v_user uuid:=auth.uid(); v_spot numeric; v_strategy public.strategies%rowtype; v_inv public.investments%rowtype; v_tx public.transactions%rowtype; v_existing public.transactions%rowtype; v_existing_inv uuid;
 begin
-  if v_user_id is null then raise exception 'Not authenticated'; end if;
-  if p_amount is null or p_amount <= 0 then raise exception 'Invalid amount'; end if;
-  if p_price  is null or p_price  <= 0 then raise exception 'Invalid price'; end if;
-  if v_asset !~ '^[a-z0-9_-]{2,30}$' then raise exception 'Invalid asset'; end if;
-  if p_side not in ('buy','sell') then raise exception 'Invalid trade side'; end if;
+  if v_user is null then raise exception 'Authentication required'; end if;
+  if not public.valid_money(p_amount) then raise exception 'Invalid investment amount'; end if;
+  if p_idempotency_key is null or p_idempotency_key !~ '^investment:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-4[0-9A-Fa-f]{3}-[89ABab][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$' then raise exception 'Invalid investment idempotency key'; end if;
+  perform 1 from public.profiles where id=v_user for update;
+  if not found then raise exception 'Profile not found'; end if;
 
-  select coalesce(p.spot_balance,0), coalesce(p.holdings,'{}'::jsonb)
-  into v_spot, v_holdings
-  from public.profiles p where p.id = v_user_id for update;
-
-  if p_side = 'buy' then
-    v_usd_amount := p_amount;
-    if public.derive_spot_balance(v_user_id) < v_usd_amount then raise exception 'Insufficient balance'; end if;
-    v_current := coalesce((v_holdings ->> v_asset)::numeric, 0);
-    v_new     := v_current + (v_usd_amount / p_price);
-    if v_new <= 0 then v_holdings := v_holdings - v_asset;
-    else v_holdings := jsonb_set(v_holdings, array[v_asset], to_jsonb(v_new), true); end if;
-  else
-    v_current := coalesce((v_holdings ->> v_asset)::numeric, 0);
-    if p_amount > v_current then raise exception 'Insufficient asset balance'; end if;
-    v_new        := greatest(0, v_current - p_amount);
-    v_usd_amount := p_amount * p_price;
-    if v_new <= 0.00000001 then v_holdings := v_holdings - v_asset;
-    else v_holdings := jsonb_set(v_holdings, array[v_asset], to_jsonb(v_new), true); end if;
+  select * into v_existing from public.transactions where user_id=v_user and idempotency_key=p_idempotency_key;
+  if found then
+    if v_existing.type<>'investment' or v_existing.amount<>p_amount
+       or coalesce(v_existing.metadata->>'strategy_id','')<>p_strategy_id then
+      raise exception 'Idempotency key was already used for a different investment request';
+    end if;
+    v_existing_inv := nullif(v_existing.metadata->>'investment_id','')::uuid;
+    if v_existing_inv is null then raise exception 'Stored investment replay metadata is incomplete'; end if;
+    return query select v_existing_inv, v_existing.id, public.derive_spot_balance(v_user), public.derive_vault_cash(v_user), v_existing.created_at;
+    return;
   end if;
 
-  perform set_config('nextrade.bypass_financial_guard', '1', true);
-
-  insert into public.transactions (user_id,type,amount,status,description,created_at,updated_at)
-  values (v_user_id, p_side, v_usd_amount, 'completed',
-    upper(p_side)||' '||upper(v_asset), now(), now())
-  returning id into v_tx_id;
-
-  select public.derive_spot_balance(v_user_id) into v_spot;
-  update public.profiles set spot_balance=v_spot, holdings=v_holdings, updated_at=now()
-  where id = v_user_id;
-
-  return query select v_tx_id, v_spot, v_holdings;
-end;
-$$;
-
--- 16h. create_investment
-create or replace function public.create_investment(p_strategy_id text, p_amount numeric)
-returns table (investment_id uuid, tx_id uuid, spot_balance numeric, vault_balance numeric)
-language plpgsql security definer set search_path = public
-as $$
-declare
-  v_user_id  uuid := auth.uid();
-  v_strategy public.strategies%rowtype;
-  v_inv_id   uuid;
-  v_tx_id    uuid;
-  v_spot     numeric;
-  v_vault    numeric;
-begin
-  if v_user_id is null then raise exception 'Not authenticated'; end if;
-  if p_amount is null or p_amount <= 0 then raise exception 'Invalid amount'; end if;
-  if p_strategy_id is null or p_strategy_id !~ '^[a-z0-9_-]{2,60}$' then raise exception 'Invalid strategy'; end if;
-
-  select * into v_strategy from public.strategies where id = p_strategy_id;
+  select * into v_strategy from public.strategies where id=p_strategy_id;
   if not found then raise exception 'Unknown strategy'; end if;
-  if p_amount < v_strategy.min_amount then
-    raise exception 'Minimum investment is %', v_strategy.min_amount;
-  end if;
+  if p_amount<v_strategy.min_amount then raise exception 'Amount is below strategy minimum'; end if;
+  v_spot:=public.derive_spot_balance(v_user);
+  if p_amount>v_spot then raise exception 'Insufficient Spot balance'; end if;
 
-  select coalesce(p.spot_balance,0), coalesce(p.vault_balance,0)
-  into v_spot, v_vault
-  from public.profiles p where p.id = v_user_id for update;
+  perform set_config('nextrade.bypass_financial_guard','1',true);
+  insert into public.investments(user_id,strategy_id,amount,current_value,apy,duration_days,penalty_rate,perf_fee,matures_at)
+  values(v_user,v_strategy.id,p_amount,p_amount,v_strategy.apy,v_strategy.duration_days,v_strategy.penalty_rate,v_strategy.perf_fee,now()+make_interval(days=>v_strategy.duration_days))
+  returning * into v_inv;
 
-  if public.derive_spot_balance(v_user_id) < p_amount then raise exception 'Insufficient balance'; end if;
+  insert into public.transactions(user_id,type,amount,status,description,metadata,idempotency_key)
+  values(v_user,'investment',p_amount,'completed','Invested in '||v_strategy.name,jsonb_build_object('investment_id',v_inv.id,'strategy_id',v_strategy.id),p_idempotency_key)
+  returning * into v_tx;
 
-  perform set_config('nextrade.bypass_financial_guard', '1', true);
+  return query select v_inv.id,v_tx.id,public.derive_spot_balance(v_user),public.derive_vault_cash(v_user),v_tx.created_at;
+end; $$;
 
-  insert into public.investments
-    (user_id,strategy_id,amount,current_value,apy,status,matures_at,created_at,updated_at)
-  values
-    (v_user_id, v_strategy.id, p_amount, p_amount, v_strategy.apy, 'active',
-     now() + make_interval(days => v_strategy.duration_days), now(), now())
-  returning id into v_inv_id;
-
-  insert into public.transactions (user_id,type,amount,status,description,created_at,updated_at)
-  values (v_user_id,'investment',p_amount,'completed','Invested in '||v_strategy.name,now(),now())
-  returning id into v_tx_id;
-
-  select public.derive_spot_balance(v_user_id) into v_spot;
-  select public.derive_vault_balance(v_user_id) into v_vault;
-
-  update public.profiles set spot_balance=v_spot, vault_balance=v_vault, updated_at=now()
-  where id = v_user_id;
-
-  return query select v_inv_id, v_tx_id, v_spot, v_vault;
-end;
-$$;
-
--- 16i. claim_investment
 create or replace function public.claim_investment(
   p_investment_id uuid,
-  p_penalty_confirmed boolean default true
+  p_penalty_confirmed boolean,
+  p_idempotency_key text
 )
-returns table (investment_id uuid, tx_id uuid, spot_balance numeric, vault_balance numeric, profit numeric, received numeric)
-language plpgsql security definer set search_path = public
-as $$
+returns table(tx_id uuid, spot_balance numeric, vault_cash numeric, received numeric, performance_fee numeric, penalty numeric, created_at timestamptz)
+language plpgsql security definer set search_path=public as $$
 declare
-  v_user_id      uuid := auth.uid();
-  v_inv          public.investments%rowtype;
-  v_strategy     public.strategies%rowtype;
-  v_tx_id        uuid;
-  v_spot         numeric;
-  v_vault        numeric;
-  v_claim_amount numeric := 0;
-  v_penalty      numeric := 0;
-  v_receive      numeric := 0;
-  v_profit       numeric := 0;
+  v_user uuid:=auth.uid(); v_inv public.investments%rowtype; v_tx public.transactions%rowtype; v_existing public.transactions%rowtype;
+  v_progress numeric; v_gross_profit numeric; v_fee numeric; v_value numeric; v_remaining numeric; v_penalty numeric; v_received numeric;
 begin
-  if v_user_id is null then raise exception 'Not authenticated'; end if;
-  if p_investment_id is null then raise exception 'Invalid investment'; end if;
+  if v_user is null then raise exception 'Authentication required'; end if;
+  if p_idempotency_key is null or p_idempotency_key !~ '^claim:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-4[0-9A-Fa-f]{3}-[89ABab][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$' then raise exception 'Invalid claim idempotency key'; end if;
+  perform 1 from public.profiles where id=v_user for update;
+  if not found then raise exception 'Profile not found'; end if;
 
-  select * into v_inv from public.investments
-  where id = p_investment_id and user_id = v_user_id for update;
+  select * into v_existing from public.transactions where user_id=v_user and idempotency_key=p_idempotency_key;
+  if found then
+    if v_existing.type<>'claim' or coalesce(v_existing.metadata->>'investment_id','')<>p_investment_id::text then
+      raise exception 'Idempotency key was already used for a different claim request';
+    end if;
+    return query select v_existing.id,public.derive_spot_balance(v_user),public.derive_vault_cash(v_user),
+      coalesce((v_existing.metadata->>'received')::numeric,v_existing.amount),
+      coalesce((v_existing.metadata->>'performance_fee')::numeric,0),
+      coalesce((v_existing.metadata->>'penalty')::numeric,0),v_existing.created_at;
+    return;
+  end if;
 
+  select * into v_inv from public.investments where id=p_investment_id and user_id=v_user for update;
   if not found then raise exception 'Investment not found'; end if;
-  if v_inv.status <> 'active' then raise exception 'Investment is not active'; end if;
+  if v_inv.status<>'active' then raise exception 'Investment is not active'; end if;
 
-  select * into v_strategy from public.strategies where id = v_inv.strategy_id;
-  if not found then raise exception 'Unknown strategy'; end if;
+  v_progress:=greatest(0,least(1,extract(epoch from (least(now(),v_inv.matures_at)-v_inv.created_at))/greatest(1,extract(epoch from (v_inv.matures_at-v_inv.created_at)))));
+  v_gross_profit:=v_inv.amount*(v_inv.apy/100)*v_progress;
+  v_fee:=greatest(v_gross_profit,0)*(v_inv.perf_fee/100);
+  v_value:=greatest(0,v_inv.amount+v_gross_profit-v_fee);
+  v_remaining:=1-v_progress;
+  v_penalty:=case when v_progress<1 then v_value*v_inv.penalty_rate*v_remaining else 0 end;
+  if v_progress<1 and not coalesce(p_penalty_confirmed,false) then raise exception 'Early-exit penalty confirmation required'; end if;
+  v_received:=greatest(0,v_value-v_penalty);
+  if not public.valid_money(v_received) then raise exception 'Invalid claim result'; end if;
 
-  v_claim_amount := greatest(0,
-    coalesce(v_inv.amount,0) + (
-      coalesce(v_inv.amount,0) *
-      (case when coalesce(v_strategy.apy,0) > 1 then coalesce(v_strategy.apy,0)/100 else coalesce(v_strategy.apy,0) end) *
-      greatest(0, least(1,
-        extract(epoch from (least(now(), coalesce(v_inv.matures_at,now())) - coalesce(v_inv.created_at,now()))) / 31536000.0
-      ))
-    )
-  );
+  perform set_config('nextrade.bypass_financial_guard','1',true);
+  update public.investments set status='claimed',current_value=v_received,profit=v_received-v_inv.amount,completed_at=now() where id=v_inv.id;
+  insert into public.transactions(user_id,type,amount,status,description,metadata,idempotency_key)
+  values(v_user,'claim',v_received,'completed','Claimed investment',jsonb_build_object(
+    'investment_id',v_inv.id,'received',v_received,'performance_fee',v_fee,'penalty',v_penalty
+  ),p_idempotency_key) returning * into v_tx;
+  return query select v_tx.id,public.derive_spot_balance(v_user),public.derive_vault_cash(v_user),v_received,v_fee,v_penalty,v_tx.created_at;
+end; $$;
 
-  if now() < v_inv.matures_at and not coalesce(p_penalty_confirmed, false) then
-    raise exception 'Early exit confirmation required';
-  end if;
+-- ---------------------------------------------------------------------------
+-- 7. WITHDRAWAL CONFIRMATION + WITHDRAWAL RPC
+-- ---------------------------------------------------------------------------
 
-  if now() < v_inv.matures_at then
-    v_penalty := round(
-      (v_strategy.penalty_rate *
-       greatest(0, least(1, extract(epoch from (v_inv.matures_at - now())) / (v_strategy.duration_days * 86400.0))) *
-       v_claim_amount) * 100
-    ) / 100.0;
-  end if;
-
-  v_receive := greatest(0, v_claim_amount - v_penalty);
-  v_profit  := greatest(0, v_receive - coalesce(v_inv.amount, 0));
-
-  perform set_config('nextrade.bypass_financial_guard', '1', true);
-
-  update public.investments
-  set status='completed', profit=v_profit, current_value=v_claim_amount,
-      completed_at=now(), updated_at=now()
-  where id = v_inv.id;
-
-  insert into public.transactions (user_id,type,amount,status,description,created_at,updated_at)
-  values (
-    v_user_id, 'claim', v_receive, 'completed',
-    'Claimed '||v_strategy.name||case when now() < v_inv.matures_at then ' (Early Exit)' else '' end,
-    now(), now()
-  )
-  returning id into v_tx_id;
-
-  select public.derive_spot_balance(v_user_id) into v_spot;
-  select public.derive_vault_balance(v_user_id) into v_vault;
-
-  update public.profiles set spot_balance=v_spot, vault_balance=v_vault, updated_at=now()
-  where id = v_user_id;
-
-  return query select v_inv.id, v_tx_id, v_spot, v_vault, v_profit, v_receive;
-end;
+create or replace function public.get_withdrawal_passphrase_status()
+returns boolean language sql stable security definer set search_path=public as $$
+  select coalesce((select withdrawal_passphrase_hash is not null from public.profiles where id=auth.uid()),false);
 $$;
 
--- 16j. submit_kyc
-create or replace function public.submit_kyc(
-  p_full_name     text,
-  p_dob           date,
-  p_country       text,
-  p_doc_type      text,
-  p_id_front_path text,
-  p_id_back_path  text,
-  p_selfie_path   text
-)
-returns table (document_id uuid, kyc_status text)
-language plpgsql security definer set search_path = public
-as $$
-declare
-  v_user_id uuid := auth.uid();
-  v_doc_id  uuid;
+create or replace function public.set_withdrawal_passphrase(p_passphrase text)
+returns boolean language plpgsql security definer set search_path=public,extensions as $$
+declare v_user uuid:=auth.uid(); v_phrase text;
 begin
-  if v_user_id is null then raise exception 'Not authenticated'; end if;
-  if p_full_name is null or char_length(trim(p_full_name)) < 2 then raise exception 'Invalid full name'; end if;
-  if p_dob is null or p_dob > current_date then raise exception 'Invalid date of birth'; end if;
-  if p_country is null or char_length(trim(p_country)) < 2 then raise exception 'Invalid country'; end if;
-  if p_doc_type not in ('passport','national_id','drivers_license','residence_permit') then
-    raise exception 'Invalid document type';
+  if v_user is null then raise exception 'Authentication required'; end if;
+  v_phrase:=regexp_replace(btrim(coalesce(p_passphrase,'')),'\s+',' ','g');
+  if char_length(v_phrase)<8 or char_length(v_phrase)>250 or array_length(regexp_split_to_array(v_phrase,'\s+'),1)<>5 then
+    raise exception 'Passphrase must contain exactly 5 words';
   end if;
-  if p_id_front_path is null or p_selfie_path is null then raise exception 'Missing document uploads'; end if;
+  perform 1 from public.profiles where id=v_user for update;
+  if not found then raise exception 'Profile not found'; end if;
+  if (select withdrawal_passphrase_hash is not null from public.profiles where id=v_user) then
+    raise exception 'Withdrawal passphrase is already set';
+  end if;
+  perform set_config('nextrade.bypass_financial_guard','1',true);
+  update public.profiles set
+    withdrawal_passphrase_hash=crypt(v_phrase,gen_salt('bf',12)),
+    withdrawal_failed_attempts=0,
+    withdrawal_locked_until=null,
+    withdrawal_verified_at=now()
+  where id=v_user;
+  return true;
+end; $$;
 
-  perform set_config('nextrade.bypass_financial_guard', '1', true);
+create or replace function public.verify_withdrawal_passphrase(p_passphrase text)
+returns boolean language plpgsql security definer set search_path=public,extensions as $$
+declare v_user uuid:=auth.uid(); v_profile public.profiles%rowtype; v_phrase text; v_ok boolean;
+begin
+  if v_user is null then raise exception 'Authentication required'; end if;
+  v_phrase:=regexp_replace(btrim(coalesce(p_passphrase,'')),'\s+',' ','g');
+  if char_length(v_phrase)<8 or char_length(v_phrase)>250 or array_length(regexp_split_to_array(v_phrase,'\s+'),1)<>5 then
+    raise exception 'Passphrase must contain exactly 5 words';
+  end if;
+  select * into v_profile from public.profiles where id=v_user for update;
+  if not found then raise exception 'Profile not found'; end if;
+  if v_profile.withdrawal_passphrase_hash is null then return false; end if;
+  if v_profile.withdrawal_locked_until is not null and v_profile.withdrawal_locked_until>now() then
+    raise exception 'Withdrawal confirmation is temporarily locked';
+  end if;
+  v_ok := v_profile.withdrawal_passphrase_hash=crypt(v_phrase,v_profile.withdrawal_passphrase_hash);
+  perform set_config('nextrade.bypass_financial_guard','1',true);
+  if v_ok then
+    update public.profiles set withdrawal_failed_attempts=0,withdrawal_locked_until=null,withdrawal_verified_at=now() where id=v_user;
+    return true;
+  end if;
+  if v_profile.withdrawal_failed_attempts+1>=5 then
+    update public.profiles set withdrawal_failed_attempts=0,withdrawal_locked_until=now()+interval '15 minutes',withdrawal_verified_at=null where id=v_user;
+  else
+    update public.profiles set withdrawal_failed_attempts=v_profile.withdrawal_failed_attempts+1,withdrawal_verified_at=null where id=v_user;
+  end if;
+  return false;
+end; $$;
 
-  insert into public.kyc_documents
-    (user_id,full_name,dob,country,doc_type,id_front_path,id_back_path,selfie_path,status,submitted_at,updated_at)
-  values
-    (v_user_id, left(trim(p_full_name),120), p_dob, left(trim(p_country),80), p_doc_type,
-     p_id_front_path, p_id_back_path, p_selfie_path, 'pending', now(), now())
-  returning id into v_doc_id;
+create or replace function public.request_withdrawal(
+  p_amount numeric,
+  p_destination_address text,
+  p_idempotency_key text
+)
+returns table(tx_id uuid, spot_balance numeric, created_at timestamptz)
+language plpgsql security definer set search_path=public as $$
+declare v_user uuid:=auth.uid(); v_profile public.profiles%rowtype; v_existing public.transactions%rowtype; v_tx public.transactions%rowtype; v_spot numeric; v_address text;
+begin
+  if v_user is null then raise exception 'Authentication required'; end if;
+  if not public.valid_money(p_amount) then raise exception 'Invalid withdrawal amount'; end if;
+  if p_amount < 10 then raise exception 'Minimum withdrawal is 10'; end if;
+  if p_idempotency_key is null or p_idempotency_key !~ '^withdraw:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-4[0-9A-Fa-f]{3}-[89ABab][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$' then raise exception 'Invalid withdraw idempotency key'; end if;
+  v_address:=btrim(coalesce(p_destination_address,''));
+  if v_address !~ '^0x[0-9a-fA-F]{40}$' then raise exception 'Invalid ERC-20 destination address'; end if;
+  if lower(v_address)='0x0000000000000000000000000000000000000000' then raise exception 'Zero address is not a valid withdrawal destination'; end if;
 
-  update public.profiles set kyc_status='pending', updated_at=now() where id = v_user_id;
+  select * into v_profile from public.profiles where id=v_user for update;
+  if not found then raise exception 'Profile not found'; end if;
 
-  return query select v_doc_id, 'pending'::text;
-end;
-$$;
+  select * into v_existing from public.transactions where user_id=v_user and idempotency_key=p_idempotency_key;
+  if found then
+    if v_existing.type<>'withdraw' or v_existing.amount<>p_amount
+       or lower(coalesce(v_existing.metadata->>'destination_address',''))<>lower(v_address) then
+      raise exception 'Idempotency key was already used for a different withdrawal request';
+    end if;
+    return query select v_existing.id,public.derive_spot_balance(v_user),v_existing.created_at;
+    return;
+  end if;
 
--- 16k. next_deposit_address_index
+  if not coalesce((select real_withdrawals_enabled from public.app_settings where singleton),false) then
+    raise exception 'Real withdrawals are disabled for this deployment';
+  end if;
+  if v_profile.kyc_status<>'approved' then raise exception 'Approved KYC is required'; end if;
+  if v_profile.withdrawal_verified_at is null or v_profile.withdrawal_verified_at < now()-interval '2 minutes' then
+    raise exception 'Withdrawal confirmation expired; verify your 5 words again';
+  end if;
+  if v_profile.withdrawal_locked_until is not null and v_profile.withdrawal_locked_until>now() then raise exception 'Withdrawal confirmation is locked'; end if;
+
+  v_spot:=public.derive_spot_balance(v_user);
+  if p_amount>v_spot then raise exception 'Insufficient Spot balance'; end if;
+
+  perform set_config('nextrade.bypass_financial_guard','1',true);
+  -- Consume the recent passphrase authorization in the same serialized transaction.
+  update public.profiles set withdrawal_verified_at=null where id=v_user;
+  insert into public.transactions(user_id,type,amount,status,description,metadata,idempotency_key)
+  values(v_user,'withdraw',p_amount,'pending','Withdrawal request',jsonb_build_object('destination_address',v_address,'network','ERC20'),p_idempotency_key)
+  returning * into v_tx;
+  return query select v_tx.id,public.derive_spot_balance(v_user),v_tx.created_at;
+end; $$;
+
+-- ---------------------------------------------------------------------------
+-- 8. KYC SUBMISSION RPC
+-- ---------------------------------------------------------------------------
+
+create or replace function public.submit_kyc(
+  p_full_name text,
+  p_dob date,
+  p_country text,
+  p_doc_type text,
+  p_id_front_path text,
+  p_id_back_path text,
+  p_selfie_path text
+)
+returns table(submission_id uuid, kyc_status text)
+language plpgsql security definer set search_path=public as $$
+declare v_user uuid:=auth.uid(); v_id uuid; v_path_re text;
+begin
+  if v_user is null then raise exception 'Authentication required'; end if;
+  if char_length(btrim(coalesce(p_full_name,''))) not between 2 and 120 then raise exception 'Invalid legal name'; end if;
+  if p_dob is null or p_dob>current_date-interval '18 years' or p_dob<current_date-interval '120 years' then raise exception 'Applicant must be an adult with a valid date of birth'; end if;
+  if p_country not in ('NG','GH','KE','ZA','US','GB','CA','AU','DE','FR','AE','SG','OTHER') then raise exception 'Unsupported country'; end if;
+  if p_doc_type not in ('passport','nin','drivers_license','voters_card','residence_permit') then raise exception 'Unsupported document type'; end if;
+  if p_doc_type='nin' and p_country<>'NG' then raise exception 'NIN is only accepted for Nigeria'; end if;
+  if p_doc_type='voters_card' and p_country not in ('NG','GH') then raise exception 'Voter card is not accepted for this country'; end if;
+
+  v_path_re:='^'||v_user::text||'/(id_front|id_back|selfie)_[0-9]{10,17}\.jpg$';
+  if coalesce(p_id_front_path,'') !~ v_path_re or coalesce(p_selfie_path,'') !~ v_path_re then raise exception 'Invalid KYC storage path'; end if;
+  if p_id_front_path !~ ('^'||v_user::text||'/id_front_') then raise exception 'Invalid ID-front path'; end if;
+  if p_selfie_path !~ ('^'||v_user::text||'/selfie_') then raise exception 'Invalid selfie path'; end if;
+  if p_id_back_path is not null and (p_id_back_path !~ v_path_re or p_id_back_path !~ ('^'||v_user::text||'/id_back_')) then raise exception 'Invalid ID-back path'; end if;
+
+  -- Paths alone are not evidence that an upload exists. Verify every submitted
+  -- object is present in the private KYC bucket before accepting the record.
+  if not exists(select 1 from storage.objects where bucket_id='kyc-docs' and name=p_id_front_path) then
+    raise exception 'ID-front upload not found';
+  end if;
+  if not exists(select 1 from storage.objects where bucket_id='kyc-docs' and name=p_selfie_path) then
+    raise exception 'Selfie upload not found';
+  end if;
+  if p_id_back_path is not null and not exists(select 1 from storage.objects where bucket_id='kyc-docs' and name=p_id_back_path) then
+    raise exception 'ID-back upload not found';
+  end if;
+
+  -- Serialize submissions on the profile row before checking the partial unique
+  -- invariant. This gives a clean domain error instead of relying on a race to
+  -- reach the unique-index violation.
+  perform 1 from public.profiles where id=v_user for update;
+  if not found then raise exception 'Profile not found'; end if;
+  if exists(select 1 from public.kyc_documents where user_id=v_user and status='pending') then raise exception 'A KYC submission is already pending'; end if;
+  perform set_config('nextrade.bypass_financial_guard','1',true);
+  insert into public.kyc_documents(user_id,full_name,dob,country,doc_type,id_front_path,id_back_path,selfie_path,status)
+  values(v_user,btrim(p_full_name),p_dob,p_country,p_doc_type,p_id_front_path,p_id_back_path,p_selfie_path,'pending')
+  returning id into v_id;
+  update public.profiles set kyc_status='pending' where id=v_user;
+  return query select v_id,'pending'::text;
+end; $$;
+
+-- ---------------------------------------------------------------------------
+-- 9. SERVICE-ONLY TRADE + DEPOSIT ADDRESS RPCs
+-- ---------------------------------------------------------------------------
+
+create or replace function public.execute_trade(
+  p_user_id uuid,
+  p_side text,
+  p_asset text,
+  p_amount numeric,
+  p_price numeric,
+  p_idempotency_key text
+)
+returns table(tx_id uuid, spot_balance numeric, holdings jsonb, executed_price numeric, executed_usd_amount numeric, asset_quantity numeric)
+language plpgsql security definer set search_path=public as $$
+declare v_profile public.profiles%rowtype; v_existing public.transactions%rowtype; v_tx public.transactions%rowtype; v_spot numeric; v_qty numeric; v_usd numeric; v_held numeric; v_holdings jsonb;
+begin
+  if not public.is_service_role() then raise exception 'Service role required'; end if;
+  if p_user_id is null then raise exception 'User required'; end if;
+  if p_side not in ('buy','sell') then raise exception 'Invalid side'; end if;
+  if p_asset not in ('btc','eth','sol','bnb','xrp','ada','avax','dot','matic','doge','shib','trx','ltc','link','uni','ton','near','xlm','sui') then raise exception 'Unsupported asset'; end if;
+  if not public.valid_money(p_amount) or not public.valid_money(p_price) then raise exception 'Invalid trade amount or price'; end if;
+  if p_idempotency_key is null or p_idempotency_key !~ '^trade:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-4[0-9A-Fa-f]{3}-[89ABab][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$' then raise exception 'Invalid trade idempotency key'; end if;
+
+  select * into v_profile from public.profiles where id=p_user_id for update;
+  if not found then raise exception 'Profile not found'; end if;
+  v_holdings:=coalesce(v_profile.holdings,'{}'::jsonb);
+
+  select * into v_existing from public.transactions where user_id=p_user_id and idempotency_key=p_idempotency_key;
+  if found then
+    if v_existing.type<>p_side or coalesce(v_existing.metadata->>'asset','')<>p_asset
+       or coalesce((v_existing.metadata->>'requested_amount')::numeric,-1)<>p_amount then
+      raise exception 'Idempotency key was already used for a different trade request';
+    end if;
+    return query select v_existing.id,public.derive_spot_balance(p_user_id),v_holdings,
+      coalesce((v_existing.metadata->>'executed_price')::numeric,p_price),v_existing.amount,
+      coalesce((v_existing.metadata->>'asset_quantity')::numeric,0);
+    return;
+  end if;
+
+  v_spot:=public.derive_spot_balance(p_user_id);
+  v_held:=coalesce((v_holdings->>p_asset)::numeric,0);
+  if p_side='buy' then
+    v_usd:=p_amount; v_qty:=p_amount/p_price;
+    if v_usd>v_spot then raise exception 'Insufficient Spot balance'; end if;
+    v_holdings:=jsonb_set(v_holdings,array[p_asset],to_jsonb(v_held+v_qty),true);
+  else
+    v_qty:=p_amount; v_usd:=p_amount*p_price;
+    if v_qty>v_held then raise exception 'Insufficient asset holding'; end if;
+    v_holdings:=jsonb_set(v_holdings,array[p_asset],to_jsonb(greatest(0,v_held-v_qty)),true);
+  end if;
+
+  perform set_config('nextrade.bypass_financial_guard','1',true);
+  update public.profiles set holdings=v_holdings where id=p_user_id;
+  insert into public.transactions(user_id,type,amount,status,description,metadata,idempotency_key)
+  values(p_user_id,p_side,v_usd,'completed',upper(p_side)||' '||upper(p_asset),jsonb_build_object(
+    'asset',p_asset,'asset_quantity',v_qty,'executed_price',p_price,'executed_usd_amount',v_usd,
+    'requested_amount',p_amount,'requested_side',p_side
+  ),p_idempotency_key) returning * into v_tx;
+  return query select v_tx.id,public.derive_spot_balance(p_user_id),v_holdings,p_price,v_usd,v_qty;
+end; $$;
+
 create or replace function public.next_deposit_address_index()
-returns integer language sql security definer set search_path = public
-as $$
-  select nextval('public.deposit_address_index_seq')::integer;
-$$;
+returns bigint language plpgsql security definer set search_path=public as $$
+begin
+  if not public.is_service_role() then raise exception 'Service role required'; end if;
+  if not coalesce((select real_deposits_enabled from public.app_settings where singleton),false) then
+    raise exception 'Real deposits are disabled for this deployment';
+  end if;
+  return nextval('public.deposit_address_derivation_seq');
+end; $$;
 
+-- ---------------------------------------------------------------------------
+-- 10. RLS
+-- ---------------------------------------------------------------------------
 
--- ── 17. STORAGE BUCKET ────────────────────────────────────────────────────
--- In Supabase Dashboard → Storage → New bucket:
---   Name: kyc-docs   |   Public: NO
---
--- Then run in SQL Editor:
---
---   create policy "kyc-docs: user uploads own"
---     on storage.objects for insert
---     with check (
---       bucket_id = 'kyc-docs'
---       and auth.uid()::text = (storage.foldername(name))[1]
---     );
+alter table public.profiles enable row level security;
+alter table public.transactions enable row level security;
+alter table public.strategies enable row level security;
+alter table public.investments enable row level security;
+alter table public.kyc_documents enable row level security;
+alter table public.deposit_addresses enable row level security;
+alter table public.app_settings enable row level security;
 
+drop policy if exists profiles_select_own on public.profiles;
+create policy profiles_select_own on public.profiles for select to authenticated using (id=auth.uid());
+drop policy if exists transactions_select_own on public.transactions;
+create policy transactions_select_own on public.transactions for select to authenticated using (user_id=auth.uid());
+drop policy if exists investments_select_own on public.investments;
+create policy investments_select_own on public.investments for select to authenticated using (user_id=auth.uid());
+drop policy if exists strategies_select on public.strategies;
+create policy strategies_select on public.strategies for select to authenticated using (true);
+-- KYC documents and deposit-address rows intentionally have no authenticated
+-- SELECT/UPDATE/DELETE policy. Their sensitive details stay service-side.
 
--- ── 18. GRANTS ────────────────────────────────────────────────────────────
-grant usage on schema public to authenticated, anon;
+-- Private KYC object bucket. Authenticated users may only insert into their own
+-- UID folder; they cannot read, overwrite or delete evidence from the browser.
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+values('kyc-docs','kyc-docs',false,5242880,array['image/jpeg'])
+on conflict (id) do update set public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
 
-grant select, insert, update on public.profiles          to authenticated;
-grant select, insert, update on public.transactions      to authenticated;
-grant select, insert, update on public.investments       to authenticated;
-grant select, insert, update on public.kyc_documents     to authenticated;
-grant select, insert, update on public.deposit_addresses to authenticated;
-grant select                 on public.strategies        to authenticated, anon;
+drop policy if exists "kyc-docs: user uploads own" on storage.objects;
+drop policy if exists kyc_docs_insert_own_folder on storage.objects;
+create policy kyc_docs_insert_own_folder on storage.objects for insert to authenticated
+with check (
+  bucket_id='kyc-docs'
+  and (storage.foldername(name))[1]=auth.uid()::text
+  and name ~ ('^'||auth.uid()::text||'/(id_front|id_back|selfie)_[0-9]{10,17}\.jpg$')
+);
 
-grant execute on function public.get_my_role()                                        to authenticated;
-grant execute on function public.derive_spot_balance(uuid)                            to authenticated;
-grant execute on function public.derive_vault_balance(uuid)                           to authenticated;
-grant execute on function public.transfer_spot_vault(text, numeric)                   to authenticated;
-grant execute on function public.request_deposit(numeric, text)                       to authenticated;
-grant execute on function public.request_withdrawal(numeric, text)                    to authenticated;
-grant execute on function public.execute_trade(text, text, numeric, numeric)          to authenticated;
-grant execute on function public.create_investment(text, numeric)                     to authenticated;
-grant execute on function public.claim_investment(uuid, boolean)                      to authenticated;
-grant execute on function public.submit_kyc(text, date, text, text, text, text, text) to authenticated;
-grant execute on function public.next_deposit_address_index()                         to authenticated;
-grant execute on function public.reconcile_all_spot_balances()                        to authenticated;
+-- ---------------------------------------------------------------------------
+-- 11. PRIVILEGES
+-- ---------------------------------------------------------------------------
 
--- ═══════════════════════════════════════════════════════════════════════════
--- MIGRATION COMPLETE
--- ═══════════════════════════════════════════════════════════════════════════
+revoke all on public.profiles,public.transactions,public.strategies,public.investments,public.kyc_documents,public.deposit_addresses,public.app_settings from anon,authenticated;
+
+-- Expose only the profile fields the browser needs. Withdrawal passphrase
+-- hashes, lock counters and verification timestamps never leave Postgres.
+grant select (id,email,full_name,avatar_url,role,kyc_status,holdings,created_at,updated_at)
+  on public.profiles to authenticated;
+grant select (id,user_id,type,amount,status,description,metadata,created_at,updated_at)
+  on public.transactions to authenticated;
+grant select on public.investments,public.strategies to authenticated;
+
+-- PostgreSQL grants EXECUTE on new functions to PUBLIC by default. Revoke that
+-- default explicitly, then grant only the intended API surface.
+revoke all on function public.set_updated_at() from public,anon,authenticated;
+revoke all on function public.handle_new_user() from public,anon,authenticated;
+revoke all on function public.is_service_role() from public,anon,authenticated;
+revoke all on function public.assert_self(uuid) from public,anon,authenticated;
+revoke all on function public.valid_money(numeric) from public,anon,authenticated;
+revoke all on function public.valid_holdings(jsonb) from public,anon,authenticated;
+revoke all on function public.refresh_balance_caches() from public,anon,authenticated;
+revoke all on function public.financial_write_allowed() from public,anon,authenticated;
+revoke all on function public.guard_profile_sensitive_write() from public,anon,authenticated;
+revoke all on function public.guard_server_managed_write() from public,anon,authenticated;
+revoke all on function public.guard_transaction_immutability() from public,anon,authenticated;
+revoke all on function public.sync_kyc_status() from public,anon,authenticated;
+
+revoke all on function public.derive_spot_balance(uuid) from public,anon,authenticated;
+revoke all on function public.derive_vault_cash(uuid) from public,anon,authenticated;
+grant execute on function public.derive_spot_balance(uuid) to authenticated,service_role;
+grant execute on function public.derive_vault_cash(uuid) to authenticated,service_role;
+
+revoke all on function public.request_deposit(numeric,text,text) from public,anon,authenticated;
+revoke all on function public.request_withdrawal(numeric,text,text) from public,anon,authenticated;
+revoke all on function public.transfer_spot_vault(text,numeric,text) from public,anon,authenticated;
+revoke all on function public.create_investment(text,numeric,text) from public,anon,authenticated;
+revoke all on function public.claim_investment(uuid,boolean,text) from public,anon,authenticated;
+revoke all on function public.submit_kyc(text,date,text,text,text,text,text) from public,anon,authenticated;
+revoke all on function public.get_withdrawal_passphrase_status() from public,anon,authenticated;
+revoke all on function public.set_withdrawal_passphrase(text) from public,anon,authenticated;
+revoke all on function public.verify_withdrawal_passphrase(text) from public,anon,authenticated;
+
+grant execute on function public.request_deposit(numeric,text,text) to authenticated;
+grant execute on function public.request_withdrawal(numeric,text,text) to authenticated;
+grant execute on function public.transfer_spot_vault(text,numeric,text) to authenticated;
+grant execute on function public.create_investment(text,numeric,text) to authenticated;
+grant execute on function public.claim_investment(uuid,boolean,text) to authenticated;
+grant execute on function public.submit_kyc(text,date,text,text,text,text,text) to authenticated;
+grant execute on function public.get_withdrawal_passphrase_status() to authenticated;
+grant execute on function public.set_withdrawal_passphrase(text) to authenticated;
+grant execute on function public.verify_withdrawal_passphrase(text) to authenticated;
+
+comment on column public.strategies.apy is
+  'Legacy field name retained for compatibility. Value is the gross target return percentage for one strategy cycle, NOT annual percentage yield.';
+comment on column public.investments.apy is
+  'Immutable snapshot of the strategy gross target return percentage for this position cycle; NOT annualized APY.';
+
+revoke all on function public.execute_trade(uuid,text,text,numeric,numeric,text) from public,anon,authenticated;
+revoke all on function public.next_deposit_address_index() from public,anon,authenticated;
+grant execute on function public.execute_trade(uuid,text,text,numeric,numeric,text) to service_role;
+grant execute on function public.next_deposit_address_index() to service_role;
+commit;

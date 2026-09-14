@@ -1,38 +1,55 @@
 /**
- * NexTrade — Wallet (Institutional Terminal) v5.1
- * ═══════════════════════════════════════════════════════════════════════════
- * FIXES (v5.0 → v5.1):
- * 1. Internal transfer now writes a ledger entry — previously openTransferModal
- *    updated profiles.spot_balance and profiles.vault_balance directly with no
- *    record in the transactions table. The next time deriveSpotBalance ran (on
- *    any subsequent buy/sell/invest/claim), it would re-derive the spot balance
- *    from ledger, find no transfer record, and restore the pre-transfer amount.
- *    This created phantom funds equal to the transferred amount.
+ * NexTrade — Wallet
  *
- *    Fix: before updating profiles, one transactions.insert() is executed:
- *      - spot → vault: type = 'transfer_out' (spot debited)
- *      - vault → spot: type = 'transfer_in'  (spot credited)
- *    vault_balance has no ledger derivation function; it remains a stored value
- *    updated directly. The ledger entry covers the spot side, which is the only
- *    side that deriveSpotBalance reads. CREDIT_TYPES and DEBIT_TYPES in trade.js
- *    and vault.js are updated to recognise these two new type strings.
- *
- * 2. Fresh DB read before transfer execution — amount was validated against
- *    state.balances captured when the modal opened. If the user had a concurrent
- *    session or a pending operation that changed the balance, the in-memory
- *    snapshot could be stale. Now reads spot_balance and vault_balance fresh from
- *    profiles immediately before execution and re-validates.
- *
- * PRIOR FIXES (v5.0, carried forward):
- * 1. Added showAssetDetails() modal with P/L estimation
- * 2. Integrated Buy/Sell buttons with Trade module
- * 3. Fixed asset click handlers
- * 4. Added defensive checks for missing market data
- * ═══════════════════════════════════════════════════════════════════════════
+ * Spot/Vault values are display state hydrated from server-authoritative ledger
+ * derivation. Transfers execute only through the serialized transfer RPC; the
+ * browser never writes financial tables or profile balance caches directly.
  */
 
 const Wallet = (() => {
   'use strict';
+
+  /* ── Bottom clearance, as a real px number ──────────────────────────────
+     Other pages read --scroll-bottom-clearance directly in CSS. The
+     virtualized Activity list can't: VirtualScroller sizes its own
+     scrollable range from its internal spacer div height, not from any
+     CSS padding on the container, so this number has to be measured and
+     handed to it directly. --scroll-bottom-clearance is itself derived
+     from navbar.js's live getBoundingClientRect() measurement of the
+     actual pill (see core.css), so this probe is reading a real,
+     device-specific number, not a hard-coded estimate. */
+  function getScrollBottomClearancePx() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute; visibility:hidden; height:0; padding-bottom:var(--scroll-bottom-clearance, 116px);';
+    document.body.appendChild(probe);
+    const px = parseFloat(getComputedStyle(probe).paddingBottom) || 116;
+    probe.remove();
+    return px;
+  }
+
+  /* ── Activity row stride, measured not guessed ──────────────────────────
+     VirtualScroller needs the true distance between successive row tops
+     (rendered card height + the gap render() applies below each row) to
+     size its spacer and virtualization math correctly. A hardcoded
+     estimate drifts the moment createTransactionCard's markup/CSS changes
+     — actual measured height in this app's own real card, real fonts, and
+     real CSS was 70px, not the 72px previously assumed, so this renders
+     one real card offscreen and reads its true box height directly. */
+  function getActivityItemStridePx() {
+    const probe = createTransactionCard({
+      type: 'buy', amount: 5000, status: 'completed',
+      created_at: new Date().toISOString(), asset: 'SOL'
+    });
+    probe.style.position = 'absolute';
+    probe.style.visibility = 'hidden';
+    probe.style.left = '-9999px';
+    probe.style.width = '100%';
+    document.body.appendChild(probe);
+    const cardHeight = probe.getBoundingClientRect().height || CONFIG.VIRTUAL_SCROLL_ITEM_HEIGHT;
+    probe.remove();
+    const gap = (typeof VirtualScroller !== 'undefined' && VirtualScroller.ITEM_GAP_PX) || 8;
+    return cardHeight + gap;
+  }
 
   /* ═══════════════════════════════════════════════════════════════════════════
      CONFIGURATION
@@ -40,9 +57,11 @@ const Wallet = (() => {
   const CONFIG = {
     TICKER_INTERVAL: 1000,
     ITEMS_PER_PAGE: 50,
+    // Fallback only — real stride is measured at runtime by
+    // getActivityItemStridePx(); this is used solely if that measurement
+    // ever comes back falsy (e.g. called before layout is ready).
     VIRTUAL_SCROLL_ITEM_HEIGHT: 72,
     VIRTUAL_SCROLL_BUFFER: 5,
-    WALLET_ADDRESS: "0x71C7656EC7ab88b098defB751B7401B5f6d89A23",
     HERO_MIN_HEIGHT: 140,
   };
 
@@ -51,8 +70,7 @@ const Wallet = (() => {
      ═══════════════════════════════════════════════════════════════════════════ */
   let container = null;
   let tickerInterval = null;
-  let unsubTx = null;      // AppState 'transactions' subscription — cleaned up on re-render
-  let heroObserver = null; // IntersectionObserver for hero collapse — cleaned up on re-render
+  let unsubTx = null; // AppState 'transactions' subscription — cleaned up on re-render
   let virtualScrollers = {};
 
   const state = {
@@ -61,7 +79,7 @@ const Wallet = (() => {
     holdings: {},
     transactions: [],
     marketData: [],
-    hideBalance: localStorage.getItem('nex_hide_balance') === 'true',
+    hideBalance: localStorage.getItem('nextrade_hide_balance') === 'true',
     ui: {
       activeTab: 'overview',
       scrollPositions: {},
@@ -95,23 +113,13 @@ const Wallet = (() => {
 
   function togglePrivacy() {
     state.hideBalance = !state.hideBalance;
-    localStorage.setItem('nex_hide_balance', state.hideBalance);
+    localStorage.setItem('nextrade_hide_balance', state.hideBalance);
     render(container);
   }
 
-  function copyAddress() {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(CONFIG.WALLET_ADDRESS)
-        .then(() => { if (window.App && App.showSuccess) App.showSuccess('Address copied to clipboard'); })
-        .catch(() => { if (window.App && App.showError) App.showError('Could not copy — please copy the address manually.'); });
-    } else {
-      try {
-        window.prompt('Copy this address:', CONFIG.WALLET_ADDRESS);
-      } catch (_) {
-        if (window.App && App.showError) App.showError('Could not copy address.');
-      }
-    }
-  }
+  const safeText = (value) => window.SafeDOM && SafeDOM.text ? SafeDOM.text(value) : String(value == null ? '' : value);
+  const safeHttpsUrl = (value) => window.SafeDOM && SafeDOM.httpsUrl ? SafeDOM.httpsUrl(value) : '';
+
   /* ═══════════════════════════════════════════════════════════════════════════
      DATA AGGREGATION
      ═══════════════════════════════════════════════════════════════════════════ */
@@ -327,7 +335,6 @@ const Wallet = (() => {
     
     const contentContainer = container.querySelector('#tab-content-container');
     if (contentContainer) {
-      if (heroObserver) { heroObserver.disconnect(); heroObserver = null; }
       Object.values(virtualScrollers).forEach(scroller => {
         if (scroller && scroller.destroy) scroller.destroy();
       });
@@ -337,8 +344,6 @@ const Wallet = (() => {
       contentContainer.innerHTML = '';
       contentContainer.appendChild(newContent);
       
-      if (tabId === 'overview') requestAnimationFrame(() => setupHeroObserver());
-
       requestAnimationFrame(() => {
         if (state.ui.scrollPositions[tabId] && virtualScrollers[tabId]) {
           requestAnimationFrame(() => {
@@ -370,11 +375,14 @@ const Wallet = (() => {
   function createOverviewTab() {
     const tab = document.createElement('div');
     tab.className = 'overview-tab';
-    tab.style.cssText = 'flex:1; min-height:0; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; padding-bottom:calc(80px + env(safe-area-inset-bottom, 0px));';
+    tab.style.cssText = 'flex:1; min-height:0; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; padding-bottom:var(--scroll-bottom-clearance, 116px);';
     
     const summary = getPortfolioSummary();
     
-    tab.appendChild(createHeroCard(summary));
+    const heroShell = document.createElement('div');
+    heroShell.className = 'wallet-hero-shell';
+    heroShell.appendChild(createHeroCard(summary));
+    tab.appendChild(heroShell);
     tab.appendChild(createBalanceCards(summary));
     tab.appendChild(createQuickActions());
     
@@ -385,50 +393,6 @@ const Wallet = (() => {
     return tab;
   }
 
-  // ── Hero scroll-snap ──────────────────────────────────────────────────────
-  // Hero scrolls naturally — no sticky, no transitions during scroll.
-  // A passive scroll listener reads overviewTab.scrollTop each frame.
-  // snapThreshold = the exact pixel where only compactH of hero remains
-  // visible. At that pixel the snap is seamless: view identical before/after.
-  // Instant class toggle = native feel. CSS layout transitions = jank.
-  //
-  // Two classes keep concerns separate:
-  //   hero--compact  visual state (grid layout, collapsed content)
-  //   hero--snapped  position: sticky; top: 0
-  //
-  // heroObserver exposes .disconnect() so all six existing teardown
-  // points work without modification.
-  function setupHeroObserver() {
-    if (heroObserver) { heroObserver.disconnect(); heroObserver = null; }
-
-    const overviewTab = container.querySelector('.overview-tab');
-    const hero        = document.getElementById('wallet-main-hero');
-    if (!overviewTab || !hero) return;
-
-    // Measure compact height from live DOM before first paint.
-    // Brief class add/remove — invisible inside RAF, no flash.
-    hero.classList.add('hero--compact');
-    const compactH = hero.getBoundingClientRect().height;
-    hero.classList.remove('hero--compact');
-
-    const snapThreshold = Math.max(0, hero.offsetHeight - compactH);
-    let isSnapped = false;
-
-    function onScroll() {
-      const st = overviewTab.scrollTop;
-      if (st >= snapThreshold && !isSnapped) {
-        isSnapped = true;
-        hero.classList.add('hero--compact', 'hero--snapped');
-      } else if (st < snapThreshold && isSnapped) {
-        isSnapped = false;
-        hero.classList.remove('hero--compact', 'hero--snapped');
-      }
-    }
-
-    overviewTab.addEventListener('scroll', onScroll, { passive: true });
-    heroObserver = { disconnect: () => overviewTab.removeEventListener('scroll', onScroll) };
-  }
-
   function createHeroCard(summary) {
     const card = document.createElement('div');
     card.id = 'wallet-main-hero';
@@ -436,7 +400,7 @@ const Wallet = (() => {
       position: relative;
       border-radius: 0 0 16px 16px;
       padding: 20px;
-      margin-bottom: 16px;
+      margin-bottom: 0;
       background: linear-gradient(180deg, #111318 0%, #0c0e11 100%);
       border: none;
       border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -448,15 +412,15 @@ const Wallet = (() => {
     const iconClass = state.hideBalance ? 'fa-eye-slash' : 'fa-eye';
     
     card.innerHTML = `
-      <div class="hero-top-row" style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px;">
         <div style="flex:1;">
-          <div class="hero-equity-label" style="font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:rgba(255,255,255,0.5); margin-bottom:6px;">
+          <div style="font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:rgba(255,255,255,0.5); margin-bottom:6px;">
             Total Equity
           </div>
-          <div id="total-equity-display" class="hero-equity-amount" style="font-family:var(--font-mono); font-size:32px; font-weight:700; color:#ffffff; letter-spacing:-1px; line-height:1.15; margin-bottom:8px;">
+          <div id="total-equity-display" style="font-family:var(--font-mono); font-size:32px; font-weight:700; color:#ffffff; letter-spacing:-1px; line-height:1.15; margin-bottom:8px;">
             ${formatMoney(summary.totalEquity)}
           </div>
-          <div class="hero-breakdown" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
             <div style="font-size:10px; color:rgba(255,255,255,0.7);">
               <span style="opacity:0.6;">Liquid: </span>
               <span style="font-weight:600;">${formatMoney(summary.liquidBalance)}</span>
@@ -471,18 +435,16 @@ const Wallet = (() => {
           <i class="fas ${iconClass}" style="font-size:12px;"></i>
         </button>
       </div>
-      <button id="copy-addr-btn" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); padding:5px 10px; border-radius:8px; color:rgba(255,255,255,0.85); font-family:var(--font-mono); font-size:10px; font-weight:500; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all 0.2s; align-self:flex-start;">
-        <span style="opacity:0.9;">${CONFIG.WALLET_ADDRESS.substring(0, 6)}...${CONFIG.WALLET_ADDRESS.substring(38)}</span>
-        <i class="fas fa-copy" style="font-size:8px; opacity:0.6;"></i>
-      </button>
+      <div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); padding:5px 10px; border-radius:8px; color:rgba(255,255,255,0.75); font-size:10px; font-weight:600; display:inline-flex; align-items:center; gap:6px; align-self:flex-start;">
+        <i class="fas fa-flask" style="font-size:8px; opacity:0.7;"></i>
+        <span>Portfolio model</span>
+      </div>
     `;
     
     card.querySelector('#wallet-privacy-btn').onclick = (e) => { 
       e.stopPropagation(); 
       togglePrivacy(); 
     };
-    
-    card.querySelector('#copy-addr-btn').onclick = copyAddress;
     
     return card;
   }
@@ -548,7 +510,6 @@ const Wallet = (() => {
 
   function createQuickActions() {
     const section = document.createElement('div');
-    section.id = 'wallet-quick-actions';
     section.style.cssText = 'display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:16px; padding:0;';
     
     const actions = [
@@ -597,7 +558,7 @@ const Wallet = (() => {
     section.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <h3 style="font-size:14px; font-weight:700; color:var(--color-text-primary); margin:0;">Recent Activity</h3>
-        <button onclick="Wallet.switchToActivity()" style="background:none; border:none; color:var(--color-primary); font-size:11px; font-weight:600; cursor:pointer;">View All →</button>
+        <button data-app-action="wallet-activity" style="background:none; border:none; color:var(--color-primary); font-size:11px; font-weight:600; cursor:pointer;">View All →</button>
       </div>
     `;
     
@@ -620,7 +581,7 @@ const Wallet = (() => {
   function createAssetsTab() {
     const tab = document.createElement('div');
     tab.className = 'assets-tab';
-    tab.style.cssText = 'flex:1; min-height:0; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; padding-bottom:calc(80px + env(safe-area-inset-bottom, 0px));';
+    tab.style.cssText = 'flex:1; min-height:0; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; padding-bottom:var(--scroll-bottom-clearance, 116px);';
     
     const assets = getAssetsList();
     
@@ -682,11 +643,11 @@ const Wallet = (() => {
       item.innerHTML = `
         <div style="display:flex; align-items:center; gap:10px;">
           <div style="width:38px; height:38px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden;">
-            ${asset.image ? `<img src="${asset.image}" style="width:100%; height:100%;">` : `<span style="font-size:13px; font-weight:700;">${asset.symbol[0]}</span>`}
+            ${safeHttpsUrl(asset.image) ? `<img src="${safeHttpsUrl(asset.image)}" style="width:100%; height:100%;" referrerpolicy="no-referrer" alt="">` : `<span style="font-size:13px; font-weight:700;">${safeText(String(asset.symbol || "?")[0])}</span>`}
           </div>
           <div>
-            <div style="font-size:14px; font-weight:700; color:var(--color-text-primary);">${asset.name}</div>
-            <div style="font-size:11px; color:var(--color-text-secondary);">${state.hideBalance ? '•••••' : asset.amount.toFixed(4)} ${asset.symbol.toUpperCase()}</div>
+            <div style="font-size:14px; font-weight:700; color:var(--color-text-primary);">${safeText(asset.name)}</div>
+            <div style="font-size:11px; color:var(--color-text-secondary);">${state.hideBalance ? '•••••' : asset.amount.toFixed(4)} ${safeText(String(asset.symbol || '').toUpperCase())}</div>
           </div>
         </div>
         <div style="text-align:right;">
@@ -732,10 +693,10 @@ const Wallet = (() => {
     content.innerHTML = `
       <div style="text-align:center; margin-bottom:20px;">
         <div style="width:64px; height:64px; margin:0 auto 14px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden;">
-          ${asset.image ? `<img src="${asset.image}" style="width:100%; height:100%;">` : `<span style="font-size:24px; font-weight:700;">${asset.symbol[0]}</span>`}
+          ${safeHttpsUrl(asset.image) ? `<img src="${safeHttpsUrl(asset.image)}" style="width:100%; height:100%;" referrerpolicy="no-referrer" alt="">` : `<span style="font-size:24px; font-weight:700;">${safeText(String(asset.symbol || "?")[0])}</span>`}
         </div>
-        <h3 style="font-size:18px; font-weight:700; color:var(--color-text-primary); margin-bottom:4px;">${asset.name}</h3>
-        <div style="font-size:13px; color:var(--color-text-secondary);">${asset.symbol.toUpperCase()}</div>
+        <h3 style="font-size:18px; font-weight:700; color:var(--color-text-primary); margin-bottom:4px;">${safeText(asset.name)}</h3>
+        <div style="font-size:13px; color:var(--color-text-secondary);">${safeText(String(asset.symbol || "").toUpperCase())}</div>
       </div>
 
       <div style="background:var(--color-surface-elevated); padding:18px; border-radius:12px; margin-bottom:18px; border:1px solid var(--color-border);">
@@ -864,17 +825,15 @@ const Wallet = (() => {
     const scroller = new VirtualScroller(
       scrollContainer,
       filtered,
-      CONFIG.VIRTUAL_SCROLL_ITEM_HEIGHT,
-      (tx, index) => createTransactionCard(tx)
+      getActivityItemStridePx(),
+      (tx, index) => createTransactionCard(tx),
+      getScrollBottomClearancePx(),
+      CONFIG.VIRTUAL_SCROLL_BUFFER
     );
     
     virtualScrollers.activity = scroller;
     
-    // Bottom spacer so last transaction clears the navbar
-    const activitySpacer = document.createElement('div');
-    activitySpacer.style.cssText = 'flex-shrink:0; height:calc(80px + env(safe-area-inset-bottom, 0px));';
     tab.appendChild(scrollContainer);
-    tab.appendChild(activitySpacer);
     
     return tab;
   }
@@ -1018,9 +977,10 @@ const Wallet = (() => {
     const amountColor = isFailed ? '#ef4444' : (isCredit ? '#10b981' : 'var(--color-text-primary)');
     const amountSign  = isFailed ? '' : (isCredit ? '+' : '-');
 
-    const label   = getTxLabel(tx);
-    const subline = getTxSubline(tx);
-    const dateStr = formatTxDate(tx.created_at);
+    const label   = safeText(getTxLabel(tx));
+    const subline = safeText(getTxSubline(tx));
+    const dateStr = safeText(formatTxDate(tx.created_at));
+    const safeStatus = safeText(tx.status || 'unknown');
 
     card.innerHTML = `
       <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
@@ -1044,7 +1004,7 @@ const Wallet = (() => {
             <span style="display:inline-block; padding:1px 5px; border-radius:3px;
                          font-weight:700; text-transform:uppercase; letter-spacing:0.3px;
                          background:${statusBadgeColor}18; color:${statusBadgeColor};">
-              ${tx.status}
+              ${safeStatus}
             </span>
           </div>
         </div>
@@ -1189,191 +1149,122 @@ const Wallet = (() => {
      MODALS
      ═══════════════════════════════════════════════════════════════════════════ */
   async function openTransferModal() {
+    const balances = window.AppState ? (AppState.get('balances') || {}) : state.balances;
+    const vaultCash = window.AppState ? Number(AppState.get('vaultCash') || 0) : 0;
     const content = document.createElement('div');
-    
+
     content.innerHTML = `
       <div style="text-align:center; margin-bottom:20px;">
         <div style="width:60px; height:60px; margin:0 auto 14px; border-radius:14px; background:rgba(139,92,246,0.12); border:1px solid rgba(139,92,246,0.2); display:flex; align-items:center; justify-content:center;">
           <i class="fas fa-exchange-alt" style="font-size:26px; color:#ffffff;"></i>
         </div>
         <h3 style="font-size:18px; font-weight:700; color:var(--color-text-primary); margin-bottom:6px;">Transfer Funds</h3>
-        <p style="font-size:12px; color:var(--color-text-secondary);">Move funds between Spot and Vault</p>
+        <p style="font-size:12px; color:var(--color-text-secondary);">Move uninvested cash between Spot and Vault</p>
       </div>
-      
       <div class="input-group" style="margin-bottom:14px;">
         <label class="input-label">From</label>
         <select id="transfer-from" class="input-field" style="padding:10px;">
-          <option value="spot">Spot Wallet (${formatMoney(state.balances.spot)})</option>
-          <option value="vault">Vault (${formatMoney(state.balances.vault)})</option>
+          <option value="spot">Spot Wallet (${formatMoney(Number(balances.spot || 0))})</option>
+          <option value="vault">Vault Cash (${formatMoney(vaultCash)})</option>
         </select>
       </div>
-      
       <div class="input-group" style="margin-bottom:14px;">
         <label class="input-label">To</label>
         <select id="transfer-to" class="input-field" style="padding:10px;">
-          <option value="vault">Vault</option>
-          <option value="spot">Spot Wallet</option>
+          <option value="vault">Vault Cash</option>
         </select>
       </div>
-      
       <div class="input-group" style="margin-bottom:18px;">
         <label class="input-label" style="display:flex; justify-content:space-between; align-items:center;">
           <span>Amount</span>
           <button id="max-btn" style="background:none; border:none; color:var(--color-primary); font-size:11px; font-weight:600; cursor:pointer;">MAX</button>
         </label>
-        <input type="number" id="transfer-amount" class="input-field financial-data" placeholder="0.00" style="font-size:17px; font-weight:600; text-align:center;">
+        <input type="number" id="transfer-amount" class="input-field financial-data" inputmode="decimal" min="0" step="0.01" placeholder="0.00" style="font-size:17px; font-weight:600; text-align:center;">
       </div>
-      
       <div style="display:grid; grid-template-columns:1fr 2fr; gap:10px;">
-        <button onclick="Modal.close()" class="btn btn-ghost btn-full">Cancel</button>
+        <button data-app-action="modal-close" class="btn btn-ghost btn-full">Cancel</button>
         <button id="transfer-confirm-btn" class="btn btn-primary btn-full">Transfer</button>
-      </div>
-    `;
-    
+      </div>`;
+
     Modal.open({ title: '', content, maxWidth: '440px' });
-    
     const fromSelect = content.querySelector('#transfer-from');
     const toSelect = content.querySelector('#transfer-to');
     const amountInput = content.querySelector('#transfer-amount');
     const maxBtn = content.querySelector('#max-btn');
     const confirmBtn = content.querySelector('#transfer-confirm-btn');
-    
+
+    function availableFor(from) {
+      if (!window.AppState) return 0;
+      return from === 'spot'
+        ? Number((AppState.get('balances') || {}).spot || 0)
+        : Number(AppState.get('vaultCash') || 0);
+    }
+
     fromSelect.onchange = () => {
-      const from = fromSelect.value;
-      toSelect.innerHTML = from === 'spot' 
-        ? `<option value="vault">Vault</option>` 
-        : `<option value="spot">Spot Wallet</option>`;
+      toSelect.innerHTML = fromSelect.value === 'spot'
+        ? '<option value="vault">Vault Cash</option>'
+        : '<option value="spot">Spot Wallet</option>';
     };
-    
-    maxBtn.onclick = () => {
-      const from = fromSelect.value;
-      const max = from === 'spot' ? state.balances.spot : state.balances.vault;
-      amountInput.value = max;
-    };
-    
+    maxBtn.onclick = () => { amountInput.value = availableFor(fromSelect.value).toFixed(2); };
+
     confirmBtn.onclick = async () => {
+      if (confirmBtn.disabled) return;
       const from = fromSelect.value;
-      const to   = toSelect.value;
-      const amount = parseFloat(amountInput.value);
-      
-      if (!amount || amount <= 0) return App.showError('Invalid amount');
-      
-      // Pre-flight check against current in-memory state (modal-open snapshot).
-      // A fresh DB check happens below before the actual DB write.
-      const snapshotMax = from === 'spot' ? state.balances.spot : state.balances.vault;
-      if (amount > snapshotMax) return App.showError('Insufficient balance');
-      
+      const amount = Number(amountInput.value);
+      const max = availableFor(from);
+      const cap = Number((window.APP_CONFIG && APP_CONFIG.defaults && APP_CONFIG.defaults.maxTransaction) || 1e9);
+      if (!Number.isFinite(amount) || amount <= 0 || amount > cap) return App.showError('Enter a valid amount');
+      if (amount > max) return App.showError('Insufficient available cash');
+
       const confirmed = await Modal.confirm({
         title: 'Confirm Transfer',
-        message: `Transfer ${formatMoney(amount)} from ${from === 'spot' ? 'Spot Wallet' : 'Vault'} to ${to === 'vault' ? 'Vault' : 'Spot Wallet'}?`,
+        message: `Transfer ${formatMoney(amount)} from ${from === 'spot' ? 'Spot Wallet' : 'Vault Cash'} to ${from === 'spot' ? 'Vault Cash' : 'Spot Wallet'}?`,
         confirmText: 'Transfer',
         cancelText: 'Cancel'
       });
-      
       if (!confirmed) return;
-      
+
       confirmBtn.disabled = true;
       confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-      
       try {
-        // ── FIX (v5.1 — D1, step 1): Fresh DB read ──────────────────────────
-        // Re-read actual balances from DB immediately before execution.
-        // The modal-open snapshot could be stale if a concurrent session or
-        // a background operation changed the balance since the modal opened.
-        let freshSpot  = state.balances.spot;
-        let freshVault = state.balances.vault;
-        
-        if (window.supabaseClient && state.user) {
-          const { data: freshProfile, error: readErr } = await window.supabaseClient
-            .from('profiles')
-            .select('spot_balance, vault_balance')
-            .eq('id', state.user.id)
-            .single();
-          if (readErr) throw readErr;
-          freshSpot  = parseFloat(freshProfile.spot_balance)  || 0;
-          freshVault = parseFloat(freshProfile.vault_balance) || 0;
+        const activeUser = window.AppState && AppState.get('user');
+        if (!window.supabaseClient || !activeUser || !activeUser.id || !window.RequestId) {
+          throw new Error('Secure transfer service unavailable');
         }
-        
-        // Re-validate against fresh balances before touching anything
-        const freshMax = from === 'spot' ? freshSpot : freshVault;
-        if (amount > freshMax) {
-          throw new Error('Insufficient balance. Balance changed since dialog opened.');
-        }
-        // ── END fresh DB read ────────────────────────────────────────────────
-        
-        const newBalances = { spot: freshSpot, vault: freshVault };
-        newBalances[from] -= amount;
-        newBalances[to]   += amount;
-        
-        if (window.supabaseClient && state.user) {
-          // ── FIX (v5.1 — D1, step 2): Ledger entry ──────────────────────────
-          // Insert a transaction record for the spot side of this transfer.
-          //
-          // Why one entry, not two:
-          //   deriveSpotBalance() derives the SPOT balance only. vault_balance
-          //   has no ledger derivation — it is a stored column updated directly
-          //   in profiles. So we write exactly one entry that describes what
-          //   happened to the spot wallet:
-          //
-          //   spot → vault: type = 'transfer_out'
-          //     DEBIT_TYPES includes 'transfer_out' → spot decremented
-          //
-          //   vault → spot: type = 'transfer_in'
-          //     CREDIT_TYPES includes 'transfer_in' → spot incremented
-          //
-          // Without this entry, the next call to deriveSpotBalance (triggered
-          // by any subsequent buy/sell/invest/claim) would recompute spot from
-          // a ledger with no transfer record, restoring the pre-transfer amount
-          // and creating phantom funds equal to the transfer.
-          const ledgerType = from === 'spot' ? 'transfer_out' : 'transfer_in';
-          const { error: txError } = await window.supabaseClient
-            .from('transactions')
-            .insert({
-              user_id:     state.user.id,
-              type:        ledgerType,
-              amount:      amount,
-              status:      'completed',
-              description: 'Transfer ' + (from === 'spot' ? 'Spot → Vault' : 'Vault → Spot'),
-              created_at:  new Date().toISOString()
-            });
-          if (txError) throw txError;
-          // ── END ledger entry ─────────────────────────────────────────────────
-          
-          // Update both balances in a single profiles write
-          const { error } = await window.supabaseClient
-            .from('profiles')
-            .update({
-              spot_balance:  newBalances.spot,
-              vault_balance: newBalances.vault,
-              updated_at:    new Date().toISOString()
-            })
-            .eq('id', state.user.id);
-          if (error) throw error;
-        }
-        
-        AppState.updateBalances(newBalances);
-        
-        // Also record locally in AppState transactions so activity tab updates
+        const fingerprint = `${from}|${amount.toFixed(8)}`;
+        const idempotencyKey = RequestId.get('transfer', fingerprint);
+        const { data, error } = await window.supabaseClient.rpc('transfer_spot_vault', {
+          p_from: from,
+          p_amount: amount,
+          p_idempotency_key: idempotencyKey
+        });
+        if (error) throw error;
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row || !row.tx_id) throw new Error('Transfer authority returned an invalid response');
+
         if (window.AppState) {
+          AppState.updateBalances({
+            spot: Number(row.spot_balance),
+            vaultCash: Number(row.vault_cash)
+          });
           AppState.addTransaction({
-            id:         'tx_' + Date.now(),
-            type:       from === 'spot' ? 'transfer_out' : 'transfer_in',
-            amount:     amount,
-            status:     'completed',
-            description: 'Transfer ' + (from === 'spot' ? 'Spot → Vault' : 'Vault → Spot'),
-            created_at: new Date().toISOString()
+            id: row.tx_id,
+            type: from === 'spot' ? 'transfer_out' : 'transfer_in',
+            amount,
+            status: 'completed',
+            description: from === 'spot' ? 'Transfer Spot → Vault' : 'Transfer Vault → Spot',
+            created_at: row.created_at || new Date().toISOString()
           });
         }
-        
+        RequestId.clear('transfer', idempotencyKey);
         await Modal.close();
         render(container);
         App.showSuccess(`Transferred ${formatMoney(amount)}`);
-        
       } catch (error) {
         console.error('[WALLET] Transfer failed:', error);
         App.showError(error.message || 'Transfer failed');
         confirmBtn.disabled = false;
-        confirmBtn.innerHTML = 'Transfer';
+        confirmBtn.textContent = 'Transfer';
       }
     };
   }
@@ -1398,7 +1289,6 @@ const Wallet = (() => {
   function render(element) {
     if (tickerInterval) clearInterval(tickerInterval);
     if (unsubTx) { unsubTx(); unsubTx = null; }
-    if (heroObserver) { heroObserver.disconnect(); heroObserver = null; }
     Object.values(virtualScrollers).forEach(scroller => {
       if (scroller && scroller.destroy) scroller.destroy();
     });
@@ -1427,8 +1317,6 @@ const Wallet = (() => {
     contentContainer.style.cssText = 'flex:1; display:flex; flex-direction:column; min-height:0;';
     contentContainer.appendChild(renderTabContent(state.ui.activeTab));
     container.appendChild(contentContainer);
-
-    if (state.ui.activeTab === 'overview') requestAnimationFrame(() => setupHeroObserver());
     
     startLiveTicker();
 
@@ -1440,10 +1328,8 @@ const Wallet = (() => {
         state.transactions = txs || [];
         const contentEl = document.getElementById('tab-content-container');
         if (contentEl) {
-          if (heroObserver) { heroObserver.disconnect(); heroObserver = null; }
           contentEl.innerHTML = '';
           contentEl.appendChild(renderTabContent(state.ui.activeTab));
-          if (state.ui.activeTab === 'overview') requestAnimationFrame(() => setupHeroObserver());
         }
       });
 
@@ -1456,10 +1342,8 @@ const Wallet = (() => {
         state.holdings = AppState.get('holdings') || {};
         const contentEl = document.getElementById('tab-content-container');
         if (contentEl) {
-          if (heroObserver) { heroObserver.disconnect(); heroObserver = null; }
           contentEl.innerHTML = '';
           contentEl.appendChild(renderTabContent(state.ui.activeTab));
-          if (state.ui.activeTab === 'overview') requestAnimationFrame(() => setupHeroObserver());
         }
       });
 
@@ -1467,10 +1351,8 @@ const Wallet = (() => {
         state.holdings = holdings || {};
         const contentEl = document.getElementById('tab-content-container');
         if (contentEl) {
-          if (heroObserver) { heroObserver.disconnect(); heroObserver = null; }
           contentEl.innerHTML = '';
           contentEl.appendChild(renderTabContent(state.ui.activeTab));
-          if (state.ui.activeTab === 'overview') requestAnimationFrame(() => setupHeroObserver());
         }
       });
     }

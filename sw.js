@@ -11,7 +11,7 @@
  * Bump CACHE_VERSION whenever you deploy changes so users get fresh files.
  */
 
-const CACHE_VERSION  = 'nextrade-v38.22';
+const CACHE_VERSION  = 'nextrade-v44.0';
 const OFFLINE_URL    = '/login.html';
 
 // ── FILES TO PRECACHE ON INSTALL ──────────────────────────────────────────────
@@ -31,9 +31,17 @@ const PRECACHE_URLS = [
   '/mobile.css',
   // Core scripts (load-order independent — all deferred)
   '/config.js',
+  '/auth.js',
+  '/login-page.js',
+  '/index-pwa.js',
+  '/index-entry.js',
+  '/app-actions.js',
   '/format.js',
   '/validation.js',
+  '/safe-dom.js',
   '/storage.js',
+  '/finance.js',
+  '/request-id.js',
   '/state.js',
   '/supabase.js',
   '/api.js',
@@ -46,6 +54,8 @@ const PRECACHE_URLS = [
   '/market.js',
   '/vault.js',
   '/wallet.js',
+  '/kyc.js',
+  '/withdrawal-auth.js',
   '/trade.js',
   '/feed.js',
   '/card.js',
@@ -149,6 +159,19 @@ self.addEventListener('fetch', (event) => {
   // Only handle http/https
   if (!request.url.startsWith('http')) return;
 
+  // Mutations and serverless API requests are never cacheable. CacheStorage
+  // accepts only GET/HEAD requests, and financial responses must never be
+  // replayed from a service-worker cache.
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   // ── 1. Supabase: always network, never cache ───────────────────────────────
   if (BYPASS_HOSTS.some((host) => url.hostname.includes(host))) {
     event.respondWith(fetch(request));
@@ -161,13 +184,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── 3. Local HTML pages: network-first so deploys show immediately ─────────
+  // ── 3. Other cross-origin resources: network only ──────────────────────────
+  // Market data, QR images, third-party APIs and arbitrary remote resources must
+  // never become hidden stale application state. Only the explicit CDN allowlist
+  // above may be cached cross-origin.
+  if (url.origin !== self.location.origin) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // ── 4. Local HTML pages: network-first so deploys show immediately ─────────
   if (request.destination === 'document') {
     event.respondWith(networkFirstWithOfflineFallback(request));
     return;
   }
 
-  // ── 4. Local static assets (js, css, images): cache-first ─────────────────
+  // ── 5. Local static assets (js, css, images): cache-first ─────────────────
   if (
     request.destination === 'script'   ||
     request.destination === 'style'    ||
@@ -179,7 +211,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── 5. Everything else: network-first ─────────────────────────────────────
+  // ── 6. Everything else: network-first ─────────────────────────────────────
   event.respondWith(networkFirstWithOfflineFallback(request));
 });
 

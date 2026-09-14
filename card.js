@@ -120,7 +120,7 @@ const Card = (() => {
       body.className = 'card-body';
       
       if (typeof opts.body === 'string') {
-        body.innerHTML = opts.body;
+        body.textContent = opts.body;
       } else if (opts.body instanceof HTMLElement) {
         body.appendChild(opts.body);
       }
@@ -134,7 +134,7 @@ const Card = (() => {
       footer.className = 'card-footer';
       
       if (typeof opts.footer === 'string') {
-        footer.innerHTML = opts.footer;
+        footer.textContent = opts.footer;
       } else if (opts.footer instanceof HTMLElement) {
         footer.appendChild(opts.footer);
       }
@@ -278,7 +278,7 @@ const Card = (() => {
     const stats = document.createElement('div');
     stats.className = 'strategy-stats';
 
-    const apyStat = createStrategyStat('Est. APY', Format.apy(strategy.apy), 'apy');
+    const apyStat = createStrategyStat('Cycle Target', Format.apy(strategy.apy), 'apy');
     const lockStat = createStrategyStat('Lock Period', Format.duration(strategy.lockPeriod));
     const minStat = createStrategyStat('Minimum', Format.currency(strategy.minInvestment, false));
 

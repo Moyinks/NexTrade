@@ -1,47 +1,13 @@
 // apps.js
 /**
  * NexTrade — App Controller
- * ══════════════════════════════════════════════════════════════════════════════
- * FIXES:
- * 1. deriveSpotBalance() — balance derived from completed transaction ledger,
- *    not from the stored profiles.spot_balance column. This is the ledger-first
- *    guarantee: the column is a cache that is recomputed on every login.
- * 2. syncProfile() uses derived balance and writes it back to DB.
- * 3. App.handleLogin() exported — auth.js calls this after Supabase signIn/signUp.
- *    It marks a fresh-login flag and redirects; App.init() on index.html does
- *    the actual setup. Clean separation.
- * 4. App.initialized is a getter wired to the internal state flag, not a
- *    permanently-false literal.
- * 5. Removed duplicate `if (createError) throw createError` in ensureProfile.
  *
- * FIXES (v2 → v3):
- * 6. transfer_in / transfer_out registered in CREDIT_TYPES / DEBIT_TYPES.
- *    wallets.js writes these types for internal spot↔vault transfers. Without
- *    registration here, the background poll's deriveSpotBalance call ignores
- *    those ledger entries and restores the pre-transfer spot balance on every
- *    60-second cycle.
- * 7. Pending withdrawals included in derivation. A second query fetches
- *    pending withdrawals and merges them into the ledger rows before reduction.
- *    Previously, the single query (status IN completed,approved) caused pending
- *    withdrawals to be invisible; the background poll restored the
- *    pre-withdrawal balance on every sync, giving users their locked funds back
- *    in the UI until the admin processed the request.
- * 8. hasBaseCredits gate corrected to deposit-only. The gate previously
- *    checked `tx.type === 'deposit' || tx.type === 'claim'`. Including 'claim'
- *    caused the gate to flip from false→true on the user's first claim, which
- *    switched derivation from the seeded-balance path (use storedBalance as
- *    seed) to the zero-sum path (start from 0). For accounts whose balance was
- *    admin-seeded without a deposit transaction, this silently destroyed the
- *    seeded balance. Fixed to check deposit only — matches the gate logic in
- *    trade.js and vault.js.
- *
- * FIX (balance-integrity):
- * 9. balanceSyncStatus lifecycle. AppState starts with balanceSyncStatus:'syncing'
- *    (set in states.js getDefaults). This file sets it to 'ready' after all
- *    three data sources resolve (profile/ledger, investments, market data), and
- *    before navigate() is called so Home.render() always sees the authoritative
- *    state. On syncProfile error it is set to 'error' so the hero can show an
- *    appropriate fallback rather than a permanent spinner.
+ * Financial state is fail-closed and server-authoritative:
+ * - Spot comes from derive_spot_balance().
+ * - Vault cash comes from derive_vault_cash().
+ * - cached profile balances are display caches only.
+ * - the browser never receives withdrawal-secret internals.
+ * - balanceSyncStatus stays "syncing"/"error" until authoritative hydration.
  */
 
 (function () {
@@ -62,86 +28,25 @@
   };
 
   // ============================================
-  // 1. LEDGER-FIRST BALANCE DERIVATION
+  // 1. AUTHORITATIVE BALANCE DERIVATION
   // ============================================
 
-  // FIX (v3 — D1): 'transfer_in' / 'transfer_out' added.
-  // wallets.js writes these types when recording internal spot↔vault transfers.
-  // Without registration here, deriveSpotBalance ignores those entries and the
-  // background poll restores the pre-transfer spot on every 60s cycle.
-  const CREDIT_TYPES = new Set(['deposit', 'sell', 'claim', 'transfer_in']);
-  const DEBIT_TYPES  = new Set(['withdraw', 'buy', 'investment', 'transfer_out']);
+  async function deriveSpotBalance(userId) {
+    if (!window.supabaseClient) throw new Error('Balance authority unavailable');
+    const { data, error } = await window.supabaseClient.rpc('derive_spot_balance', { p_user_id: userId });
+    if (error) throw error;
+    const value = Number(data);
+    if (!Number.isFinite(value) || value < 0) throw new Error('Invalid Spot balance response');
+    return value;
+  }
 
-  /**
-   * Derive the canonical spot balance by summing completed ledger entries.
-   *
-   * Falls back to the stored DB value when no deposit tx exists — this
-   * handles existing users whose balance was set manually before the ledger
-   * architecture was in place. Once the admin portal approves a deposit,
-   * the derivation takes over permanently.
-   */
-  async function deriveSpotBalance(userId, storedBalance) {
-    // Query 1: All settled transactions (completed + admin-approved).
-    // 'approved' is the terminal status the admin portal writes when it
-    // confirms a deposit — it carries the same financial weight as 'completed'.
-    // Querying only 'completed' caused approved deposits to be invisible to
-    // derivation, so spot balance never updated after admin approval.
-    const { data: completedTxs, error: err1 } = await window.supabaseClient
-      .from('transactions')
-      .select('type, amount')
-      .eq('user_id', userId)
-      .in('status', ['completed', 'approved']);
-
-    if (err1) throw err1;
-
-    // FIX (v3 — D2): Query 2 — pending withdrawals only.
-    // A pending withdrawal means the user requested a payout that admin has
-    // not yet processed, but the funds are locked. Counting them as debits
-    // here prevents the background-poll balance restoration bug: without this
-    // query, the single-query path (status IN completed,approved) ignores the
-    // pending withdrawal, and the 60s poll restores the pre-withdrawal amount
-    // to AppState and profiles on every cycle.
-    // Pending deposits are deliberately excluded — external crypto transfers
-    // require admin confirmation before they may be credited.
-    const { data: pendingWithdrawals, error: err2 } = await window.supabaseClient
-      .from('transactions')
-      .select('type, amount')
-      .eq('user_id', userId)
-      .eq('status', 'pending')
-      .in('type', ['withdraw']);
-
-    if (err2) throw err2;
-
-    const rows = [...(completedTxs || []), ...(pendingWithdrawals || [])];
-
-    // FIX (v3 — D3): Gate is deposit-only.
-    // Previously: `tx.type === 'deposit' || tx.type === 'claim'`
-    // The inclusion of 'claim' caused the gate to flip on the user's first
-    // claim, switching derivation from "use storedBalance as seed" to "sum
-    // from zero". For accounts whose balance was admin-seeded without a
-    // deposit transaction, this silently destroyed the seeded amount.
-    // Matches the identical gate logic in trade.js and vault.js.
-    const hasDepositTx = (completedTxs || []).some(tx => tx.type === 'deposit');
-
-    if (!hasDepositTx) {
-      // No canonical deposit tx: apply all ledger movements against storedBalance
-      // as the seed. Correct on first derivation (storedBalance = raw admin seed).
-      // Permanent fix: run the migration in vault.js to insert deposit records
-      // for all admin-seeded accounts so this path becomes unreachable.
-      return Math.max(0, rows.reduce((bal, tx) => {
-        const amt = parseFloat(tx.amount) || 0;
-        if (CREDIT_TYPES.has(tx.type)) return bal + amt;
-        if (DEBIT_TYPES.has(tx.type))  return bal - amt;
-        return bal;
-      }, Math.max(0, parseFloat(storedBalance) || 0)));
-    }
-
-    return Math.max(0, rows.reduce((bal, tx) => {
-      const amt = parseFloat(tx.amount) || 0;
-      if (CREDIT_TYPES.has(tx.type)) return bal + amt;
-      if (DEBIT_TYPES.has(tx.type))  return bal - amt;
-      return bal;
-    }, 0));
+  async function deriveVaultCash(userId) {
+    if (!window.supabaseClient) throw new Error('Vault balance authority unavailable');
+    const { data, error } = await window.supabaseClient.rpc('derive_vault_cash', { p_user_id: userId });
+    if (error) throw error;
+    const value = Number(data);
+    if (!Number.isFinite(value) || value < 0) throw new Error('Invalid Vault cash response');
+    return value;
   }
 
   // ============================================
@@ -154,7 +59,7 @@
 
       const { data: existing, error: fetchError } = await window.supabaseClient
         .from('profiles')
-        .select('*')
+        .select('id, email, full_name, avatar_url, role, kyc_status, holdings, created_at, updated_at')
         .eq('id', user.id)
         .single();
 
@@ -173,7 +78,7 @@
 
       const { data: retried, error: retryError } = await window.supabaseClient
         .from('profiles')
-        .select('*')
+        .select('id, email, full_name, avatar_url, role, kyc_status, holdings, created_at, updated_at')
         .eq('id', user.id)
         .single();
 
@@ -192,9 +97,10 @@
         full_name:     user.user_metadata?.full_name || '',
         spot_balance:  0,
         vault_balance: 0,
+        vault_cash:    0,
         holdings:      {},
         kyc_status:    'none',
-        is_admin:      false,
+        role:          'user',
         created_at:    new Date().toISOString(),
         updated_at:    new Date().toISOString()
       };
@@ -208,47 +114,34 @@
   async function syncProfile(user) {
     try {
       if (!window.supabaseClient) throw new Error('Supabase client missing');
-
       const profile = await ensureProfile(user);
-      if (!profile) return;
+      if (!profile) throw new Error('Profile unavailable');
 
-      // Derive spot balance from ledger (source of truth)
-      const derivedSpot = await deriveSpotBalance(user.id, profile.spot_balance);
-
-      // The database is now the write authority; the browser only derives the
-      // current balance for display and local state. Any cache repair is handled
-      // by server-side RPCs, not by direct client writes.
-
-      const currentVault = (window.AppState && AppState.get('balances'))?.vault || 0;
-
-      const balanceState = {
-        spot:  derivedSpot,
-        // Never overwrite vault from the DB column — vault is derived exclusively
-        // by syncVaultData() (in state.js) when investments are written.
-        // Using the current AppState vault preserves whatever syncVaultData()
-        // last computed, so syncProfile cannot regress the vault to a stale value.
-        vault: currentVault,
-        total: derivedSpot + currentVault
-      };
+      const [spot, vaultCash] = await Promise.all([
+        deriveSpotBalance(user.id),
+        deriveVaultCash(user.id)
+      ]);
 
       if (window.AppState) {
-        AppState.set('user',     user);
-        AppState.set('profile',  { ...profile, spot_balance: derivedSpot });
-        AppState.set('balances', balanceState);
-        if (profile.holdings) AppState.set('holdings', profile.holdings);
+        await AppState.batch(async () => {
+          AppState.set('user', user);
+          AppState.set('profile', { ...profile, spot_balance: spot, vault_cash: vaultCash });
+          if (profile.holdings && typeof profile.holdings === 'object') {
+            AppState.set('holdings', profile.holdings);
+          }
+          AppState.updateBalances({ spot, vaultCash });
+        });
       }
-
-      console.log('[APP] 💰 Ledger-derived balance:', balanceState);
-
+      console.log('[APP] Authoritative balances synchronized');
     } catch (err) {
-      console.error('[APP] ❌ Profile Sync Error:', err);
-      // Keep the last known balances on transient failures so the UI never
-      // flashes to zero while the network or profile row is unavailable.
+      console.error('[APP] Profile sync failed:', err);
       if (window.AppState) {
         AppState.set('user', user);
-        // Signal that balance data could not be confirmed — hero will show error state.
         AppState.set('balanceSyncStatus', 'error');
       }
+      // Keep the application usable in an explicit error state. Financial
+      // actions independently fail closed when authoritative balance RPCs fail.
+      return null;
     }
   }
 
@@ -256,7 +149,7 @@
     try {
       const { data: txs, error } = await window.supabaseClient
         .from('transactions')
-        .select('*')
+        .select('id, user_id, type, amount, status, description, metadata, created_at, updated_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -449,8 +342,7 @@
           if (!currentUser) return;
           await syncHistory(currentUser);
           await syncProfile(currentUser);
-          // Must re-sync investments every poll cycle: syncProfile writes
-          // balances.vault directly from profile.vault_balance (DB column),
+          // Re-sync positions every poll so Vault total remains cash + live positions.
           // which bypasses syncVaultData(). Without this call, vault balance
           // shown on Home/Wallet drifts from the computed value after each poll.
           await syncInvestments(currentUser);
@@ -586,6 +478,7 @@
   };
 
   let _toastStack = [];
+  const MAX_VISIBLE_TOASTS = 3;   // hard cap — a burst of toasts can never fill the screen
 
   function _injectToastStyles() {
     if (document.getElementById('ntm-toast-styles')) return;
@@ -774,6 +667,13 @@
     wrap.appendChild(toast);
     _toastStack.push(toast);
 
+    // Hard cap: if this push put us over the limit, remove the oldest
+    // toast immediately so a burst can never stack up and cover the screen.
+    while (_toastStack.length > MAX_VISIBLE_TOASTS) {
+      const oldest = _toastStack.shift();
+      if (oldest && oldest.parentNode) oldest.parentNode.removeChild(oldest);
+    }
+
     requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.add('show')));
 
     const dismiss = () => {
@@ -796,7 +696,8 @@
   window.App = {
     init,
     navigate,
-    deriveSpotBalance,   // canonical single copy — trade.js and vault.js delegate here
+    deriveSpotBalance,
+    deriveVaultCash,
 
     /**
      * Called by auth.js after Supabase signIn / signUp succeeds.
