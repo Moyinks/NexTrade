@@ -396,7 +396,7 @@
 }
 
 
-/* Market coin artwork: match Yelda's image-first presentation without
+/* Market coin artwork: use an image-first presentation without
    exposing a browser broken-image glyph. The symbol appears only after a
    confirmed image failure (or when no image URL exists). */
 .market-coin-icon-shell {
