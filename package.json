@@ -1,7 +1,7 @@
 {
   "name": "nextrade",
   "version": "2.1.0",
-  "description": "NexTrade \u2014 public portfolio build of a ledger-first investment PWA",
+  "description": "NexTrade — public portfolio build of a ledger-first investment PWA",
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "2.116.0",
