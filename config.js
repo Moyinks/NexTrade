@@ -13,52 +13,113 @@ const SUPABASE_CONFIG = {
 };
 
 let supabaseClient = null;
-const MAX_INIT_ATTEMPTS = 20;
+let supabaseInitPromise = null;
+let supabaseLibraryPromise = null;
 
-function initializeSupabase() {
+const SUPABASE_CDN_SOURCES = [
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0',
+  'https://unpkg.com/@supabase/supabase-js@2.116.0'
+];
+
+function hasSupabaseLibrary() {
+  return Boolean(
+    window.supabase &&
+    typeof window.supabase.createClient === 'function'
+  );
+}
+
+function loadExternalScript(src, timeoutMs = 12000) {
   return new Promise((resolve, reject) => {
-    let attempts = 0;
+    const script = document.createElement('script');
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      script.remove();
+      reject(new Error('Timed out loading Supabase browser library'));
+    }, timeoutMs);
 
-    function attempt() {
-      attempts += 1;
-      if (window.supabase && typeof window.supabase.createClient === 'function') {
-        try {
-          if (!SUPABASE_CONFIG.url || !SUPABASE_CONFIG.anonKey) {
-            throw new Error('Supabase public configuration is missing');
-          }
-          supabaseClient = window.supabase.createClient(
-            SUPABASE_CONFIG.url,
-            SUPABASE_CONFIG.anonKey,
-            {
-              auth: {
-                persistSession: true,
-                autoRefreshToken: true,
-                detectSessionInUrl: true
-              }
-            }
-          );
-          window.supabaseClient = supabaseClient;
-          window.SUPABASE_CONFIG = SUPABASE_CONFIG;
-          resolve(supabaseClient);
-        } catch (error) {
-          reject(error);
-        }
-        return;
-      }
+    script.src = src;
+    script.async = true;
+    script.dataset.nextradeDependency = 'supabase';
 
-      if (attempts >= MAX_INIT_ATTEMPTS) {
-        reject(new Error('Supabase library did not load'));
-        return;
-      }
-      setTimeout(attempt, 100);
-    }
+    script.addEventListener('load', () => {
+      if (settled) return;
+      clearTimeout(timer);
+      settled = true;
+      if (hasSupabaseLibrary()) resolve();
+      else reject(new Error('Supabase browser library loaded without createClient'));
+    }, { once: true });
 
-    attempt();
+    script.addEventListener('error', () => {
+      if (settled) return;
+      clearTimeout(timer);
+      settled = true;
+      script.remove();
+      reject(new Error('Failed to load Supabase browser library'));
+    }, { once: true });
+
+    document.head.appendChild(script);
   });
 }
 
+function ensureSupabaseLibrary() {
+  if (hasSupabaseLibrary()) return Promise.resolve();
+  if (supabaseLibraryPromise) return supabaseLibraryPromise;
+
+  supabaseLibraryPromise = (async () => {
+    let lastError = null;
+    for (const src of SUPABASE_CDN_SOURCES) {
+      try {
+        await loadExternalScript(src);
+        if (hasSupabaseLibrary()) return;
+      } catch (error) {
+        lastError = error;
+        console.warn('[CONFIG] Supabase CDN source failed:', src, error.message);
+      }
+    }
+    throw lastError || new Error('Supabase browser library unavailable');
+  })();
+
+  return supabaseLibraryPromise;
+}
+
+function initializeSupabase() {
+  if (supabaseClient) return Promise.resolve(supabaseClient);
+  if (supabaseInitPromise) return supabaseInitPromise;
+
+  supabaseInitPromise = (async () => {
+    if (!SUPABASE_CONFIG.url || !SUPABASE_CONFIG.anonKey) {
+      throw new Error('Supabase public configuration is missing');
+    }
+
+    await ensureSupabaseLibrary();
+
+    supabaseClient = window.supabase.createClient(
+      SUPABASE_CONFIG.url,
+      SUPABASE_CONFIG.anonKey,
+      {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true
+        }
+      }
+    );
+
+    window.supabaseClient = supabaseClient;
+    window.SUPABASE_CONFIG = SUPABASE_CONFIG;
+    return supabaseClient;
+  })();
+
+  return supabaseInitPromise;
+}
+
 if (typeof window !== 'undefined') {
-  initializeSupabase().catch((error) => {
+  window.SUPABASE_CONFIG = SUPABASE_CONFIG;
+  window.initializeSupabase = initializeSupabase;
+  window.supabaseReady = initializeSupabase();
+  window.supabaseReady.catch((error) => {
     console.error('[CONFIG] Supabase initialization failed:', error);
     window.supabaseInitError = error.message;
   });
@@ -120,5 +181,4 @@ const APP_CONFIG = {
 
 if (typeof window !== 'undefined') {
   window.APP_CONFIG = APP_CONFIG;
-  window.initializeSupabase = initializeSupabase;
 }

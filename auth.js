@@ -94,10 +94,13 @@
     });
   })();
 
+  let landingScrollTop = 0;
+
   /* ── View transitions ──────────────────────────────────────────────────── */
   window.enterAuth = function (newMode) {
     mode = newMode;
     const landing = document.getElementById('landing');
+    landingScrollTop = landing ? landing.scrollTop : 0;
     landing.classList.add('exit');
     const btn = document.getElementById('submitBtn');
     btn.disabled = false; btn.classList.remove('loading');
@@ -125,7 +128,19 @@
     sessionStorage.removeItem('saved_auth_mode');
     sessionStorage.removeItem('saved_auth_email');
     sessionStorage.removeItem('reset_email');
-    location.reload();
+
+    const landing = document.getElementById('landing');
+    const auth = document.getElementById('auth');
+    if (auth) auth.classList.remove('visible');
+
+    if (landing) {
+      landing.style.display = '';
+      landing.classList.add('ready');
+      requestAnimationFrame(function () {
+        landing.classList.remove('exit');
+        landing.scrollTop = landingScrollTop;
+      });
+    }
   };
 
   window.showLogin = function () {
@@ -273,7 +288,10 @@
     setBtn('PROCESSING\u2026', true, true);
 
     try {
-      if (!window.supabaseClient) throw new Error('Connection error. Please refresh.');
+      if (!window.supabaseClient) {
+        await (window.supabaseReady || window.initializeSupabase?.());
+      }
+      if (!window.supabaseClient) throw new Error('Connection unavailable. Check your internet and try again.');
 
       /* SIGN UP */
       if (mode === 'signup') {
@@ -396,11 +414,10 @@
   /* ── Init ──────────────────────────────────────────────────────────────── */
   async function init() {
     try {
-      let att = 0;
-      while (!window.supabaseClient && att < 20) { await new Promise(function(r){setTimeout(r,100);}); att++; }
-      if (!window.supabaseClient) { showToast('Configuration error. Check config.js.'); document.getElementById('landing').classList.add('ready'); return; }
+      const client = window.supabaseClient || await (window.supabaseReady || window.initializeSupabase?.());
+      if (!client) throw new Error('Secure connection unavailable');
 
-      const { data } = await window.supabaseClient.auth.getSession();
+      const { data } = await client.auth.getSession();
       if (data && data.session) { sessionStorage.setItem('nextrade_fresh_login','true'); window.location.replace('index.html'); return; }
 
       const savedMode = sessionStorage.getItem('saved_auth_mode');
@@ -436,7 +453,9 @@
       document.getElementById('landing').classList.add('ready');
     } catch (err) {
       console.error('[AUTH] init error:', err);
-      document.getElementById('landing').classList.add('ready');
+      const landing = document.getElementById('landing');
+      if (landing) landing.classList.add('ready');
+      showToast('Connection unavailable. Check your internet and try again.');
     }
   }
 
