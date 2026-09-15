@@ -55,10 +55,12 @@ const Market = (() => {
       const fallback = shell ? shell.querySelector('.market-coin-fallback') : null;
       const src = img.getAttribute('data-src') || '';
       let settled = false;
+      let fallbackTimer = null;
 
       const showImage = () => {
         if (settled) return;
         settled = true;
+        if (fallbackTimer) clearTimeout(fallbackTimer);
         if (fallback) fallback.hidden = true;
         img.classList.add('is-loaded');
       };
@@ -66,10 +68,12 @@ const Market = (() => {
       const showFallback = () => {
         if (settled) return;
         settled = true;
+        if (fallbackTimer) clearTimeout(fallbackTimer);
         img.remove();
         if (fallback) fallback.hidden = false;
       };
 
+      // Attach handlers BEFORE src. This also handles memory/disk-cached images.
       img.addEventListener('load', showImage, { once: true });
       img.addEventListener('error', showFallback, { once: true });
 
@@ -78,13 +82,11 @@ const Market = (() => {
         return;
       }
 
+      // Do not synchronously inspect img.complete after assigning src.
+      // Mobile Chromium can transiently report complete/naturalWidth=0 while
+      // a newly assigned request is still being scheduled.
+      fallbackTimer = setTimeout(showFallback, 12000);
       img.src = src;
-
-      // Covers memory/disk-cache completion without waiting for another task.
-      if (img.complete) {
-        if (img.naturalWidth > 0) showImage();
-        else showFallback();
-      }
     });
   }
 
