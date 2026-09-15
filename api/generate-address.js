@@ -6,7 +6,7 @@
 'use strict';
 
 const { createClient } = require('@supabase/supabase-js');
-const { ethers } = require('ethers');
+const { HDNodeWallet, isAddress } = require('ethers');
 
 function securityHeaders(res) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
@@ -69,9 +69,11 @@ module.exports = async function handler(req, res) {
     const nextIndex = Number(nextIndexData);
     if (!Number.isSafeInteger(nextIndex) || nextIndex < 0) throw new Error('Invalid derivation index');
 
-    const root = ethers.utils.HDNode.fromExtendedKey(xpub);
-    const address = root.derivePath('0/' + nextIndex).address;
-    if (!ethers.utils.isAddress(address)) throw new Error('Derived invalid address');
+    // ethers v6 returns an HDNodeVoidWallet for xpub keys. Derive only
+    // non-hardened children so the server never needs a private key.
+    const root = HDNodeWallet.fromExtendedKey(xpub);
+    const address = root.deriveChild(0).deriveChild(nextIndex).address;
+    if (!isAddress(address)) throw new Error('Derived invalid address');
 
     const { error: insertError } = await supabase.from('deposit_addresses').insert({
       user_id: user.id,

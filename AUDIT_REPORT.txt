@@ -1,18 +1,28 @@
 
+> nextrade@2.1.0 audit
+> npm run build && node scripts/audit-release.mjs
+
+
+> nextrade@2.1.0 build
+> node scripts/build-static.mjs
+
+Bundled Supabase browser runtime: vendor/supabase/supabase.js
+
 NexTrade release audit
 ======================
-PASS  JavaScript syntax (37 files)
+PASS  Bundled Supabase browser runtime present
+PASS  JavaScript syntax (39 files)
 PASS  JSON parses: package.json
 PASS  JSON parses: manifest.json
 PASS  JSON parses: vercel.json
 PASS  No duplicate DOM IDs: index.html
 PASS  No duplicate DOM IDs: login.html
 PASS  All local HTML asset references resolve
-PASS  Service-worker precache resolves (44 assets)
+PASS  Service-worker precache resolves (45 assets)
 PASS  RPC/schema contract (13 runtime RPCs)
 PASS  No private sibling branding
 PASS  No obvious browser writes to protected financial/KYC tables
 PASS  Public financial features fail closed by default
 PASS  No obvious committed privileged secret material
 
-13 checks passed; 0 failures.
+14 checks passed; 0 failures.

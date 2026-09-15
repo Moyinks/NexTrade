@@ -11,7 +11,7 @@
  * Bump CACHE_VERSION whenever you deploy changes so users get fresh files.
  */
 
-const CACHE_VERSION  = 'nextrade-v45.0';
+const CACHE_VERSION  = 'nextrade-v46.0';
 const OFFLINE_URL    = '/login.html';
 
 // ── FILES TO PRECACHE ON INSTALL ──────────────────────────────────────────────
@@ -30,6 +30,7 @@ const PRECACHE_URLS = [
   '/pages.css',
   '/mobile.css',
   // Core scripts (load-order independent — all deferred)
+  '/vendor/supabase/supabase.js',
   '/config.js',
   '/auth.js',
   '/login-page.js',
@@ -76,7 +77,6 @@ const CDN_HOSTS = [
   'fonts.googleapis.com',
   'fonts.gstatic.com',
   'cdnjs.cloudflare.com',
-  'cdn.jsdelivr.net',
   'unpkg.com',
 ];
 

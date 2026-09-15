@@ -20,6 +20,13 @@ function filesRecursive(dir='') {
 }
 
 const allFiles = filesRecursive();
+const requiredBundledRuntime = 'vendor/supabase/supabase.js';
+if (!fs.existsSync(path.join(root, requiredBundledRuntime))) {
+  fail(`Missing bundled browser runtime: ${requiredBundledRuntime}`);
+} else {
+  pass('Bundled Supabase browser runtime present');
+}
+
 const jsFiles = allFiles.filter((f) => f.endsWith('.js') || f.endsWith('.mjs'));
 const htmlFiles = allFiles.filter((f) => f.endsWith('.html'));
 

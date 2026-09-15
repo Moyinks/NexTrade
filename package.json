@@ -5,13 +5,14 @@
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "2.116.0",
-    "ethers": "5.8.0"
+    "ethers": "6.17.0"
   },
   "engines": {
     "node": "24.x"
   },
   "scripts": {
-    "audit": "node scripts/audit-release.mjs",
-    "test": "node scripts/audit-release.mjs"
+    "audit": "npm run build && node scripts/audit-release.mjs",
+    "test": "npm run audit",
+    "build": "node scripts/build-static.mjs"
   }
 }
