@@ -26,9 +26,8 @@ PASS  No duplicate DOM IDs: login.html
 PASS  All local HTML asset references resolve
 PASS  Service-worker precache resolves (49 assets)
 PASS  RPC/schema contract (13 runtime RPCs)
-PASS  No private sibling branding
 PASS  No obvious browser writes to protected financial/KYC tables
 PASS  Public financial features fail closed by default
 PASS  No obvious committed privileged secret material
 
-18 checks passed; 0 failures.
+17 checks passed; 1 failures.

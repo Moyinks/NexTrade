@@ -32,19 +32,59 @@ const Market = (() => {
   function coinIconMarkup(url, symbol) {
     const safeUrl = safeHttpsUrl(url);
     const fallback = safeText(coinFallbackSymbol(symbol));
+
+    // No remote URL: show the symbol immediately.
+    if (!safeUrl) {
+      return `<span class="market-coin-fallback" aria-hidden="true">${fallback}</span>`;
+    }
+
+    // Important: do not assign src in the HTML string. Handlers are attached
+    // first, then src is assigned. This prevents the browser broken-image glyph
+    // and prevents the text fallback flashing before a valid logo finishes.
     return `
-      <span class="market-coin-fallback" aria-hidden="true">${fallback}</span>
-      ${safeUrl ? `<img class="market-coin-remote-img" src="${safeUrl}" referrerpolicy="no-referrer" alt="">` : ''}
+      <span class="market-coin-fallback" aria-hidden="true" hidden>${fallback}</span>
+      <img class="market-coin-remote-img" data-src="${safeUrl}" referrerpolicy="no-referrer" alt="">
     `;
   }
 
   function armCoinImageFallbacks(root) {
     if (!root || !root.querySelectorAll) return;
+
     root.querySelectorAll('img.market-coin-remote-img').forEach((img) => {
-      const removeBrokenImage = () => img.remove();
-      img.addEventListener('error', removeBrokenImage, { once: true });
-      // Cached failures can be complete before listeners are attached.
-      if (img.complete && img.naturalWidth === 0) removeBrokenImage();
+      const shell = img.closest('.market-coin-icon-shell');
+      const fallback = shell ? shell.querySelector('.market-coin-fallback') : null;
+      const src = img.getAttribute('data-src') || '';
+      let settled = false;
+
+      const showImage = () => {
+        if (settled) return;
+        settled = true;
+        if (fallback) fallback.hidden = true;
+        img.classList.add('is-loaded');
+      };
+
+      const showFallback = () => {
+        if (settled) return;
+        settled = true;
+        img.remove();
+        if (fallback) fallback.hidden = false;
+      };
+
+      img.addEventListener('load', showImage, { once: true });
+      img.addEventListener('error', showFallback, { once: true });
+
+      if (!src) {
+        showFallback();
+        return;
+      }
+
+      img.src = src;
+
+      // Covers memory/disk-cache completion without waiting for another task.
+      if (img.complete) {
+        if (img.naturalWidth > 0) showImage();
+        else showFallback();
+      }
     });
   }
 

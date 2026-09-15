@@ -396,8 +396,9 @@
 }
 
 
-/* Remote market artwork is enhancement-only. Symbols remain readable when
-   CoinGecko image hosts are unavailable, blocked or slow. */
+/* Market coin artwork: match Yelda's image-first presentation without
+   exposing a browser broken-image glyph. The symbol appears only after a
+   confirmed image failure (or when no image URL exists). */
 .market-coin-icon-shell {
   position: relative;
   border-radius: 50%;
@@ -414,6 +415,9 @@
   color: var(--color-text-secondary);
   line-height: 1;
 }
+.market-coin-fallback[hidden] {
+  display: none !important;
+}
 .market-coin-remote-img {
   position: absolute;
   inset: 0;
@@ -421,4 +425,8 @@
   height: 100%;
   object-fit: cover;
   background: var(--color-surface-elevated);
+  opacity: 0;
+}
+.market-coin-remote-img.is-loaded {
+  opacity: 1;
 }
