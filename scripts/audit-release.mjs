@@ -20,11 +20,16 @@ function filesRecursive(dir='') {
 }
 
 const allFiles = filesRecursive();
-const requiredBundledRuntime = 'vendor/supabase/supabase.js';
-if (!fs.existsSync(path.join(root, requiredBundledRuntime))) {
-  fail(`Missing bundled browser runtime: ${requiredBundledRuntime}`);
-} else {
-  pass('Bundled Supabase browser runtime present');
+const bundledRuntimes = [
+  ['vendor/supabase/supabase.js', 'Bundled Supabase browser runtime present'],
+  ['vendor/fontawesome/css/all.min.css', 'Bundled Font Awesome CSS present'],
+  ['vendor/fontawesome/webfonts/fa-solid-900.woff2', 'Bundled Font Awesome solid font present'],
+  ['vendor/fontawesome/webfonts/fa-regular-400.woff2', 'Bundled Font Awesome regular font present'],
+  ['vendor/lightweight-charts/lightweight-charts.standalone.production.js', 'Bundled Lightweight Charts runtime present'],
+];
+for (const [runtime, label] of bundledRuntimes) {
+  if (!fs.existsSync(path.join(root, runtime))) fail(`Missing bundled browser runtime: ${runtime}`);
+  else pass(label);
 }
 
 const jsFiles = allFiles.filter((f) => f.endsWith('.js') || f.endsWith('.mjs'));

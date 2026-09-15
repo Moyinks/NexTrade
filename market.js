@@ -24,6 +24,30 @@ const Market = (() => {
   const safeText = (value) => window.SafeDOM && SafeDOM.text ? SafeDOM.text(value) : String(value == null ? '' : value);
   const safeHttpsUrl = (value) => window.SafeDOM && SafeDOM.httpsUrl ? SafeDOM.httpsUrl(value) : '';
 
+
+  function coinFallbackSymbol(symbol) {
+    return String(symbol || '?').trim().toUpperCase().slice(0, 3) || '?';
+  }
+
+  function coinIconMarkup(url, symbol) {
+    const safeUrl = safeHttpsUrl(url);
+    const fallback = safeText(coinFallbackSymbol(symbol));
+    return `
+      <span class="market-coin-fallback" aria-hidden="true">${fallback}</span>
+      ${safeUrl ? `<img class="market-coin-remote-img" src="${safeUrl}" referrerpolicy="no-referrer" alt="">` : ''}
+    `;
+  }
+
+  function armCoinImageFallbacks(root) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('img.market-coin-remote-img').forEach((img) => {
+      const removeBrokenImage = () => img.remove();
+      img.addEventListener('error', removeBrokenImage, { once: true });
+      // Cached failures can be complete before listeners are attached.
+      if (img.complete && img.naturalWidth === 0) removeBrokenImage();
+    });
+  }
+
   // ============================================
   // STATE
   // ============================================
@@ -399,8 +423,8 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
           </div>
 
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-            <div style="width:28px; height:28px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden;">
-              ${safeHttpsUrl(coin.thumb) ? `<img src="${safeHttpsUrl(coin.thumb)}" style="width:100%; height:100%;" referrerpolicy="no-referrer" alt="">` : `<span style="font-size:11px; font-weight:700;">${safeText(String(coin.symbol || '').substring(0, 2))}</span>`}
+            <div class="market-coin-icon-shell" style="width:28px; height:28px;">
+              ${coinIconMarkup(coin.thumb, coin.symbol)}
             </div>
             <div style="flex:1; min-width:0;">
               <div style="font-size:12px; font-weight:700; color:var(--color-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
@@ -437,6 +461,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
         ${cards}
       </div>
     `;
+    armCoinImageFallbacks(trendingContainer);
 
     // Event delegation — handles clicks on all [data-trending-coin] cards.
     // Decodes the coin id from the data attribute (was encoded to prevent XSS
@@ -649,8 +674,8 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
     card.innerHTML = `
       <div style="display:flex; align-items:center; gap:12px;">
-        <div style="width:40px; height:40px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
-          ${safeHttpsUrl(coin.image) ? `<img src="${safeHttpsUrl(coin.image)}" style="width:100%; height:100%;" referrerpolicy="no-referrer" alt="">` : `<span style="font-size:11px; font-weight:700;">${safeText(String(coin.symbol || '').substring(0, 2))}</span>`}
+        <div class="market-coin-icon-shell" style="width:40px; height:40px; flex-shrink:0;">
+          ${coinIconMarkup(coin.image, coin.symbol)}
         </div>
 
         <div style="flex:1; min-width:0;">
@@ -680,6 +705,8 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
         </div>
       ` : ''}
     `;
+
+    armCoinImageFallbacks(card);
 
     card.addEventListener('click', () => {
       showCoinDetails(coin);

@@ -240,7 +240,7 @@ const Navbar = (() => {
         font-size: 12px;
         line-height: 1;
         display: block;
-        color: #64748b;
+        color: #94A3B8;
         transition: color 0.2s ease;
       }
       .ntm-pill-item.active .ntm-pill-icon i {
@@ -254,7 +254,7 @@ const Navbar = (() => {
         font-weight: 600;
         letter-spacing: 0.3px;
         text-transform: uppercase;
-        color: #4B5563;
+        color: #94A3B8;
         line-height: 1;
         transition: color 0.2s ease;
         pointer-events: none;

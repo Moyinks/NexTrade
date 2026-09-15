@@ -394,3 +394,31 @@
   text-align: right;
   font-family: var(--font-mono);
 }
+
+
+/* Remote market artwork is enhancement-only. Symbols remain readable when
+   CoinGecko image hosts are unavailable, blocked or slow. */
+.market-coin-icon-shell {
+  position: relative;
+  border-radius: 50%;
+  background: var(--color-surface-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.market-coin-fallback {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--color-text-secondary);
+  line-height: 1;
+}
+.market-coin-remote-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--color-surface-elevated);
+}

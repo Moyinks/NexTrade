@@ -7,5 +7,5 @@ npm-debug.log*
 .DS_Store
 *.local
 
-# Generated at build time from the exact pinned npm dependency
-vendor/supabase/
+# Generated at build time from exact pinned npm dependencies
+vendor/
