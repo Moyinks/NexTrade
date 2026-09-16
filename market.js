@@ -30,7 +30,10 @@ const Market = (() => {
   }
 
   function coinIconMarkup(url, symbol) {
-    const safeUrl = safeHttpsUrl(url);
+    const normalized = window.API && typeof API.proxiedCoinImageUrl === 'function'
+      ? API.proxiedCoinImageUrl(url)
+      : url;
+    const safeUrl = safeHttpsUrl(normalized);
     const fallback = safeText(coinFallbackSymbol(symbol));
 
     // No remote URL: show the symbol immediately.
@@ -1413,11 +1416,18 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
     const coinIcon = document.createElement('div');
     coinIcon.style.cssText = 'width:36px;height:36px;border-radius:50%;background:var(--color-surface-elevated);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;';
-    if (coin.image && coin.image.startsWith('https://')) {
+    const detailImageUrl = window.API && typeof API.proxiedCoinImageUrl === 'function'
+      ? API.proxiedCoinImageUrl(coin.image)
+      : safeHttpsUrl(coin.image);
+    if (detailImageUrl) {
       const img = document.createElement('img');
-      img.src = coin.image; img.referrerPolicy = 'no-referrer';
+      img.referrerPolicy = 'no-referrer';
       img.style.cssText = 'width:100%;height:100%;';
-      img.onerror = () => { coinIcon.textContent = coin.symbol.substring(0,2); };
+      img.addEventListener('error', () => {
+        img.remove();
+        coinIcon.textContent = coin.symbol.substring(0,2);
+      }, { once: true });
+      img.src = detailImageUrl;
       coinIcon.appendChild(img);
     } else {
       coinIcon.textContent = coin.symbol.substring(0,2);

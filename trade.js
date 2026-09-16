@@ -649,9 +649,12 @@ const Trade = (() => {
 
     const headerRow = document.createElement('div');
     headerRow.style.cssText = 'display:flex;align-items:center;gap:16px;padding-bottom:16px;border-bottom:1px solid var(--color-border);';
-    if (coin.image) {
+    const tradeCoinImageUrl = window.API && typeof API.proxiedCoinImageUrl === 'function'
+      ? API.proxiedCoinImageUrl(coin.image)
+      : '';
+    if (tradeCoinImageUrl) {
       const img = document.createElement('img');
-      img.src = coin.image; img.alt = coin.name;
+      img.src = tradeCoinImageUrl; img.alt = coin.name;
       img.style.cssText = 'width:48px;height:48px;border-radius:50%;background:var(--color-surface-elevated);';
       img.onerror = () => img.style.display = 'none';
       headerRow.appendChild(img);

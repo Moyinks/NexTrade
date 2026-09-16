@@ -17,7 +17,7 @@ PASS  Bundled Font Awesome CSS present
 PASS  Bundled Font Awesome solid font present
 PASS  Bundled Font Awesome regular font present
 PASS  Bundled Lightweight Charts runtime present
-PASS  JavaScript syntax (40 files)
+PASS  JavaScript syntax (41 files)
 PASS  JSON parses: package.json
 PASS  JSON parses: manifest.json
 PASS  JSON parses: vercel.json
@@ -26,9 +26,10 @@ PASS  No duplicate DOM IDs: login.html
 PASS  All local HTML asset references resolve
 PASS  Service-worker precache resolves (49 assets)
 PASS  RPC/schema contract (13 runtime RPCs)
+PASS  Coin artwork uses bounded same-origin allowlisted proxy
 PASS  No private sibling branding
 PASS  No obvious browser writes to protected financial/KYC tables
 PASS  Public financial features fail closed by default
 PASS  No obvious committed privileged secret material
 
-18 checks passed; 0 failures.
+19 checks passed; 0 failures.

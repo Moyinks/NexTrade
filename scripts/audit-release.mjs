@@ -92,13 +92,30 @@ const missingRpcs = [...rpcCalls].filter((name) => !schemaFns.has(name));
 if (missingRpcs.length) fail(`Runtime RPCs missing from SCHEMA.sql: ${missingRpcs.join(', ')}`);
 else pass(`RPC/schema contract (${rpcCalls.size} runtime RPCs)`);
 
-// 6) Public release must not leak private sibling branding.
+// 6) Coin artwork must use the same-origin allowlisted proxy.
+const apiSource = read('api.js');
+const coinImageApi = read('api/coin-image.js');
+const rawCoinImageAssignments = [
+  /image:\s*coin\.image/,
+  /image:\s*data\.image(?:\?|\.)/,
+  /thumb:\s*coin\.thumb/,
+  /thumb:\s*item\.item\.thumb/,
+];
+if (!/\/api\/coin-image\?url=/.test(apiSource)) fail('Browser market data does not normalize coin artwork through /api/coin-image');
+else if (rawCoinImageAssignments.some((pattern) => pattern.test(apiSource))) fail('Raw CoinGecko artwork URL still enters browser state');
+else if (!/assets\.coingecko\.com/.test(coinImageApi) || !/coin-images\.coingecko\.com/.test(coinImageApi)) fail('Coin image proxy allowlist is incomplete');
+else if (!/redirect:\s*['"]manual['"]/.test(coinImageApi)) fail('Coin image proxy does not validate redirects');
+else if (/image\/svg\+xml/.test(coinImageApi)) fail('Coin image proxy permits active SVG content');
+else if (!/MAX_IMAGE_BYTES/.test(coinImageApi) || !/readBodyWithLimit/.test(coinImageApi)) fail('Coin image proxy lacks bounded response handling');
+else pass('Coin artwork uses bounded same-origin allowlisted proxy');
+
+// 7) Public release must not leak private sibling branding.
 for (const file of allFiles.filter((f) => /\.(?:js|mjs|html|css|sql|json|md|example)$/i.test(f))) {
   if (/\bYelda\b/i.test(read(file))) fail(`Private sibling brand leaked in ${file}`);
 }
 if (!failures.some((x) => x.startsWith('Private sibling'))) pass('No private sibling branding');
 
-// 7) Heuristic: browser code must not directly mutate protected financial tables.
+// 8) Heuristic: browser code must not directly mutate protected financial tables.
 const protectedTables = ['transactions','investments','profiles','kyc_documents'];
 for (const file of allFiles.filter((f) => f.endsWith('.js') && !f.startsWith('api/') && !f.startsWith('scripts/'))) {
   const src = read(file);
@@ -109,14 +126,14 @@ for (const file of allFiles.filter((f) => f.endsWith('.js') && !f.startsWith('ap
 }
 if (!failures.some((x) => x.startsWith('Direct browser mutation'))) pass('No obvious browser writes to protected financial/KYC tables');
 
-// 8) Public configuration must remain portfolio/fail-closed.
+// 9) Public configuration must remain portfolio/fail-closed.
 const config = read('config.js');
 if (!/environment:\s*['"]portfolio['"]/.test(config)) fail('config.js is not explicitly portfolio environment');
 if (!/realDeposit:\s*false/.test(config)) fail('Public config does not fail closed for real deposits');
 if (!/hdWallet:\s*false/.test(config)) fail('Public config does not fail closed for HD wallet generation');
 if (!failures.some((x) => x.includes('Public config') || x.includes('portfolio environment'))) pass('Public financial features fail closed by default');
 
-// 9) No obvious privileged secret material in committed text.
+// 10) No obvious privileged secret material in committed text.
 const secretPatterns = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
   /\bxprv[A-Za-z0-9]+/,

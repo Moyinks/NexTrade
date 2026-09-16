@@ -30,6 +30,12 @@
     return node;
   }
 
+  function coinImageUrl(value) {
+    return window.API && typeof API.proxiedCoinImageUrl === 'function'
+      ? API.proxiedCoinImageUrl(value)
+      : '';
+  }
+
   function state() {
     if (!window.AppState) {
       return {
@@ -628,14 +634,19 @@
     assets.slice(0, 3).forEach(asset => {
       const row = el('div', 'display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);min-width:0;');
       const icon = el('div', 'width:30px;height:30px;border-radius:999px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:rgba(255,255,255,0.06);color:#fff;font-size:12px;font-weight:900;');
-      if (asset.image) {
+      const assetImageUrl = coinImageUrl(asset.image);
+      if (assetImageUrl) {
         const img = document.createElement('img');
-        img.src = asset.image;
         img.alt = asset.symbol;
         img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+        img.addEventListener('error', () => {
+          img.remove();
+          icon.textContent = asset.symbol.slice(0, 3);
+        }, { once: true });
+        img.src = assetImageUrl;
         icon.appendChild(img);
       } else {
-        icon.textContent = asset.symbol.charAt(0);
+        icon.textContent = asset.symbol.slice(0, 3);
       }
       row.appendChild(icon);
       const copy = el('div', 'min-width:0;flex:1;');
@@ -650,14 +661,19 @@
     if (mover) {
       const row = el('div', 'display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg, rgba(59,130,246,0.12), rgba(16,185,129,0.06));border:1px solid rgba(59,130,246,0.18);min-width:0;');
       const icon = el('div', 'width:30px;height:30px;border-radius:999px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:rgba(255,255,255,0.08);color:#fff;font-size:12px;font-weight:900;');
-      if (mover.image) {
+      const moverImageUrl = coinImageUrl(mover.image);
+      if (moverImageUrl) {
         const img = document.createElement('img');
-        img.src = mover.image;
         img.alt = mover.symbol;
         img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+        img.addEventListener('error', () => {
+          img.remove();
+          icon.textContent = mover.symbol.slice(0, 3);
+        }, { once: true });
+        img.src = moverImageUrl;
         icon.appendChild(img);
       } else {
-        icon.textContent = mover.symbol.charAt(0);
+        icon.textContent = mover.symbol.slice(0, 3);
       }
       row.appendChild(icon);
       const copy = el('div', 'min-width:0;flex:1;');

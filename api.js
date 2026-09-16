@@ -21,6 +21,27 @@ const API = (() => {
   const BINANCE_WS_URL = 'wss://stream.binance.com:9443/ws';
   const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
   const FEAR_GREED_URL = 'https://api.alternative.me/fng/';
+  const COIN_IMAGE_HOSTS = new Set(['assets.coingecko.com', 'coin-images.coingecko.com']);
+
+  function proxiedCoinImageUrl(value) {
+    try {
+      const source = new URL(String(value || ''), window.location.origin);
+
+      // Idempotent: already normalized same-origin proxy URLs stay unchanged.
+      if (source.origin === window.location.origin && source.pathname === '/api/coin-image') {
+        return source.href;
+      }
+
+      if (source.protocol !== 'https:' || source.username || source.password || source.port) return '';
+      if (!COIN_IMAGE_HOSTS.has(source.hostname.toLowerCase())) return '';
+      if (!source.pathname.startsWith('/coins/images/')) return '';
+
+      return new URL('/api/coin-image?url=' + encodeURIComponent(source.href), window.location.origin).href;
+    } catch (_) {
+      return '';
+    }
+  }
+
   const CACHE_DURATION = 60000; // 1 minute
 
   // Map App IDs to Binance Symbols for Real-Time Feeds
@@ -270,7 +291,7 @@ const API = (() => {
         id: coin.id,
         symbol: coin.symbol.toUpperCase(),
         name: coin.name,
-        image: coin.image,
+        image: proxiedCoinImageUrl(coin.image),
         current_price: coin.current_price || 0,
         market_cap: coin.market_cap || 0,
         market_cap_rank: coin.market_cap_rank || 0,
@@ -331,7 +352,7 @@ const API = (() => {
         id: data.id,
         symbol: data.symbol.toUpperCase(),
         name: data.name,
-        image: data.image?.large || data.image?.small || null,
+        image: proxiedCoinImageUrl(data.image?.large || data.image?.small || null),
         current_price: data.market_data?.current_price?.usd || 0,
         market_cap: data.market_data?.market_cap?.usd || 0,
         market_cap_rank: data.market_cap_rank || 0,
@@ -384,7 +405,7 @@ const API = (() => {
         id: coin.id,
         symbol: coin.symbol.toUpperCase(),
         name: coin.name,
-        thumb: coin.thumb,
+        thumb: proxiedCoinImageUrl(coin.thumb),
         market_cap_rank: coin.market_cap_rank
       }));
 
@@ -422,7 +443,7 @@ const API = (() => {
         id: data.id,
         symbol: data.symbol.toUpperCase(),
         name: data.name,
-        image: data.image.large,
+        image: proxiedCoinImageUrl(data.image?.large || data.image?.small || null),
         description: data.description.en || 'No description available.',
         market_cap_rank: data.market_cap_rank,
         current_price: data.market_data.current_price.usd,
@@ -492,7 +513,7 @@ const API = (() => {
         id: item.item.id,
         symbol: item.item.symbol.toUpperCase(),
         name: item.item.name,
-        thumb: item.item.thumb,
+        thumb: proxiedCoinImageUrl(item.item.thumb),
         market_cap_rank: item.item.market_cap_rank,
         price_btc: item.item.price_btc,
         score: item.item.score || 0
@@ -721,6 +742,7 @@ const API = (() => {
     getPrices,
     getTrendingCoins,
     getFearGreedIndex,
+    proxiedCoinImageUrl,
     
     // Database Sync
     loadUserData,

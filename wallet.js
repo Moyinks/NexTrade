@@ -119,6 +119,12 @@ const Wallet = (() => {
 
   const safeText = (value) => window.SafeDOM && SafeDOM.text ? SafeDOM.text(value) : String(value == null ? '' : value);
   const safeHttpsUrl = (value) => window.SafeDOM && SafeDOM.httpsUrl ? SafeDOM.httpsUrl(value) : '';
+  const coinImageUrl = (value) => {
+    const normalized = window.API && typeof API.proxiedCoinImageUrl === 'function'
+      ? API.proxiedCoinImageUrl(value)
+      : value;
+    return safeHttpsUrl(normalized);
+  };
 
   /* ═══════════════════════════════════════════════════════════════════════════
      DATA AGGREGATION
@@ -643,7 +649,7 @@ const Wallet = (() => {
       item.innerHTML = `
         <div style="display:flex; align-items:center; gap:10px;">
           <div style="width:38px; height:38px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden;">
-            ${safeHttpsUrl(asset.image) ? `<img src="${safeHttpsUrl(asset.image)}" style="width:100%; height:100%;" referrerpolicy="no-referrer" alt="">` : `<span style="font-size:13px; font-weight:700;">${safeText(String(asset.symbol || "?")[0])}</span>`}
+            ${coinImageUrl(asset.image) ? `<img src="${coinImageUrl(asset.image)}" style="width:100%; height:100%;" referrerpolicy="no-referrer" alt="">` : `<span style="font-size:13px; font-weight:700;">${safeText(String(asset.symbol || "?")[0])}</span>`}
           </div>
           <div>
             <div style="font-size:14px; font-weight:700; color:var(--color-text-primary);">${safeText(asset.name)}</div>
@@ -693,7 +699,7 @@ const Wallet = (() => {
     content.innerHTML = `
       <div style="text-align:center; margin-bottom:20px;">
         <div style="width:64px; height:64px; margin:0 auto 14px; border-radius:50%; background:var(--color-surface-elevated); display:flex; align-items:center; justify-content:center; overflow:hidden;">
-          ${safeHttpsUrl(asset.image) ? `<img src="${safeHttpsUrl(asset.image)}" style="width:100%; height:100%;" referrerpolicy="no-referrer" alt="">` : `<span style="font-size:24px; font-weight:700;">${safeText(String(asset.symbol || "?")[0])}</span>`}
+          ${coinImageUrl(asset.image) ? `<img src="${coinImageUrl(asset.image)}" style="width:100%; height:100%;" referrerpolicy="no-referrer" alt="">` : `<span style="font-size:24px; font-weight:700;">${safeText(String(asset.symbol || "?")[0])}</span>`}
         </div>
         <h3 style="font-size:18px; font-weight:700; color:var(--color-text-primary); margin-bottom:4px;">${safeText(asset.name)}</h3>
         <div style="font-size:13px; color:var(--color-text-secondary);">${safeText(String(asset.symbol || "").toUpperCase())}</div>
