@@ -108,7 +108,12 @@ const Trade = (() => {
       return;
     }
 
-    if (!window.APP_CONFIG || !APP_CONFIG.features || !APP_CONFIG.features.realDeposit) {
+    const isSepoliaTest = Boolean(
+      window.APP_CONFIG && APP_CONFIG.features && APP_CONFIG.features.sepoliaTestDeposit
+    );
+
+    if (!window.APP_CONFIG || !APP_CONFIG.features ||
+        (!APP_CONFIG.features.realDeposit && !isSepoliaTest)) {
       if (window.App) App.showError('Deposits are not currently available. Please contact support.');
       return;
     }
@@ -169,10 +174,19 @@ const Trade = (() => {
         wrap.appendChild(uniqueBadge);
       }
 
+      if (coin.isTestnet) {
+        const testBadge = document.createElement('div');
+        testBadge.style.cssText = 'margin-top:8px;font-size:11px;color:#10b981;display:flex;align-items:center;justify-content:center;gap:5px;';
+        testBadge.innerHTML = '<i class="fas fa-flask"></i> Testnet only — no real-value funds';
+        wrap.appendChild(testBadge);
+      }
+
       const warning = document.createElement('div');
       warning.style.cssText = 'margin-top:8px;font-size:11px;color:#f59e0b;display:flex;align-items:center;gap:6px;';
       warning.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
-      warning.appendChild(document.createTextNode('Only send ' + coin.label.split('(')[0].trim() + ' to this address'));
+      warning.appendChild(document.createTextNode(
+        coin.warningText || ('Only send ' + coin.label.split('(')[0].trim() + ' to this address')
+      ));
       wrap.appendChild(warning);
 
       return wrap;
@@ -245,6 +259,47 @@ const Trade = (() => {
       }
     }
 
+    // ── Fetch fixed Sepolia test address from Vercel API ─────────────────────
+    async function fetchSepoliaTestAddress(container) {
+      container.innerHTML = '';
+      container.appendChild(buildLoadingBlock());
+
+      try {
+        const { data: { session } } = await window.supabaseClient.auth.getSession();
+        if (!session || !session.access_token) throw new Error('Session expired');
+
+        const apiUrl = (APP_CONFIG.apis && APP_CONFIG.apis.sepoliaDepositAddress) || '/api/sepolia-deposit-address';
+        const resp = await fetch(apiUrl, {
+          method: 'GET',
+          headers: { 'Authorization': 'Bearer ' + session.access_token }
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || 'API returned ' + resp.status);
+        }
+
+        const payload = await resp.json();
+        if (!payload || !payload.address) throw new Error('No Sepolia address returned from server');
+
+        currentAddress = payload.address;
+        container.innerHTML = '';
+        container.appendChild(buildAddressBlock(payload.address, {
+          label: 'Test ETH',
+          network: 'Sepolia testnet (chain 11155111)',
+          icon: 'fa-ethereum',
+          color: '#627eea',
+          isTestnet: true,
+          warningText: 'Sepolia test ETH only. Never send real ETH or tokens to this test flow.'
+        }));
+      } catch (err) {
+        console.error('[TRADE] Sepolia test address fetch failed:', err);
+        container.innerHTML = '';
+        container.appendChild(buildErrorBlock(err.message));
+        currentAddress = null;
+      }
+    }
+
     // ── Modal content ────────────────────────────────────────────────────────
     const content = document.createElement('div');
     content.style.cssText = 'display:flex;flex-direction:column;gap:16px;';
@@ -273,7 +328,9 @@ const Trade = (() => {
     refRow.appendChild(copyRefBtn);
     const refNote = document.createElement('div');
     refNote.style.cssText = 'font-size:11px;color:var(--color-text-secondary);margin-top:6px;line-height:1.5;';
-    refNote.textContent = 'Include this code in your transfer memo. Admin uses it to match your payment to your account.';
+    refNote.textContent = isSepoliaTest
+      ? 'Test mode: this reference stays in NexTrade. The Sepolia transaction hash is used as the on-chain proof.'
+      : 'Include this code in your transfer memo. Admin uses it to match your payment to your account.';
     refBanner.appendChild(refTitle);
     refBanner.appendChild(refRow);
     refBanner.appendChild(refNote);
@@ -281,13 +338,16 @@ const Trade = (() => {
 
     // Coin selector tabs
     const tabRow = document.createElement('div');
-    tabRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;';
 
-    const COIN_TABS = [
-      { key: 'ETH_ERC20',  label: 'ERC-20',  sublabel: 'ETH / USDT', icon: 'fa-ethereum' },
-      { key: 'USDT_TRC20', label: 'TRC-20',  sublabel: 'USDT Tron',  icon: 'fa-coins'    },
-      { key: 'BTC',        label: 'Bitcoin', sublabel: 'BTC',         icon: 'fa-bitcoin'  }
-    ];
+    const COIN_TABS = isSepoliaTest
+      ? [{ key: 'ETH_ERC20', label: 'Sepolia', sublabel: 'Test ETH', icon: 'fa-ethereum' }]
+      : [
+          { key: 'ETH_ERC20',  label: 'ERC-20',  sublabel: 'ETH / USDT', icon: 'fa-ethereum' },
+          { key: 'USDT_TRC20', label: 'TRC-20',  sublabel: 'USDT Tron',  icon: 'fa-coins'    },
+          { key: 'BTC',        label: 'Bitcoin', sublabel: 'BTC',         icon: 'fa-bitcoin'  }
+        ];
+
+    tabRow.style.cssText = 'display:grid;grid-template-columns:repeat(' + COIN_TABS.length + ',minmax(0,1fr));gap:6px;';
 
     const tabBtns = {};
     COIN_TABS.forEach(tab => {
@@ -331,7 +391,7 @@ const Trade = (() => {
     amtGroup.className = 'input-group';
     const amtLabel = document.createElement('label');
     amtLabel.className    = 'input-label';
-    amtLabel.textContent  = 'Amount Sent (USD equivalent)';
+    amtLabel.textContent  = isSepoliaTest ? 'Demo credit amount (USD)' : 'Amount Sent (USD equivalent)';
     const amtInput = document.createElement('input');
     amtInput.type        = 'number';
     amtInput.id          = 'dep-amount';
@@ -340,20 +400,50 @@ const Trade = (() => {
     amtInput.min         = '10';
     const amtNote = document.createElement('div');
     amtNote.style.cssText = 'font-size:11px;color:var(--color-text-secondary);margin-top:6px;';
-    amtNote.innerHTML = '<i class="fas fa-info-circle"></i> Balance updates after admin confirms your transfer.';
+    amtNote.innerHTML = isSepoliaTest
+      ? '<i class="fas fa-info-circle"></i> This is a demo ledger credit. The Sepolia transfer only proves the testnet deposit path.'
+      : '<i class="fas fa-info-circle"></i> Balance updates after admin confirms your transfer.';
     amtGroup.appendChild(amtLabel);
     amtGroup.appendChild(amtInput);
     amtGroup.appendChild(amtNote);
     content.appendChild(amtGroup);
 
+    const txHashGroup = document.createElement('div');
+    let txHashInput = null;
+    if (isSepoliaTest) {
+      txHashGroup.className = 'input-group';
+      const txHashLabel = document.createElement('label');
+      txHashLabel.className = 'input-label';
+      txHashLabel.textContent = 'Sepolia transaction hash';
+      txHashInput = document.createElement('input');
+      txHashInput.type = 'text';
+      txHashInput.className = 'input-field';
+      txHashInput.placeholder = '0x…';
+      txHashInput.autocomplete = 'off';
+      txHashInput.spellcheck = false;
+      const txHashNote = document.createElement('div');
+      txHashNote.style.cssText = 'font-size:11px;color:var(--color-text-secondary);margin-top:6px;line-height:1.45;';
+      txHashNote.textContent = 'Paste the transaction hash after sending a tiny amount of Sepolia test ETH to the address above.';
+      txHashGroup.appendChild(txHashLabel);
+      txHashGroup.appendChild(txHashInput);
+      txHashGroup.appendChild(txHashNote);
+      content.appendChild(txHashGroup);
+    }
+
     // Submit button
     const confirmDepBtn = document.createElement('button');
     confirmDepBtn.className   = 'btn btn-primary btn-full';
     confirmDepBtn.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-    confirmDepBtn.textContent = 'I Have Made The Transfer';
+    confirmDepBtn.textContent = isSepoliaTest ? 'Verify Sepolia Test Deposit' : 'I Have Made The Transfer';
     confirmDepBtn.addEventListener('click', async () => {
       const { valid, num, msg } = validateAmount(amtInput.value);
       if (!valid) { if (window.App) App.showError(msg); return; }
+
+      const sepoliaTxHash = isSepoliaTest && txHashInput ? txHashInput.value.trim() : '';
+      if (isSepoliaTest && !/^0x[0-9a-fA-F]{64}$/.test(sepoliaTxHash)) {
+        if (window.App) App.showError('Enter a valid Sepolia transaction hash.');
+        return;
+      }
 
       const { user: freshUser } = getUserState();
       if (!freshUser || !freshUser.id) { if (window.App) App.showError('Session not found. Please refresh.'); return; }
@@ -365,20 +455,27 @@ const Trade = (() => {
       }
 
       confirmDepBtn.disabled = true;
-      confirmDepBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>Submitting...';
+      confirmDepBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>' +
+        (isSepoliaTest ? 'Verifying Sepolia…' : 'Submitting...');
 
       try {
         if (!window.supabaseClient) throw new Error('Secure deposit service unavailable');
+        let depositTxId = null;
+        let depositCreatedAt = new Date().toISOString();
+        let depositDescription = '';
+        let depositKey = null;
         {
           const COIN_LABELS = {
             'ETH_ERC20':  'ETH / USDT (ERC-20)',
             'USDT_TRC20': 'USDT (TRC-20)',
             'BTC':        'Bitcoin (BTC)'
           };
-          const coinLabel = COIN_LABELS[selectedCoin] || selectedCoin;
+          const coinLabel = isSepoliaTest
+            ? 'Sepolia test ETH'
+            : (COIN_LABELS[selectedCoin] || selectedCoin);
 
           const depositFingerprint = `${selectedCoin}|${num.toFixed(8)}|${depositRef}`;
-          const depositKey = getIdempotencyKey('deposit', depositFingerprint);
+          depositKey = getIdempotencyKey('deposit', depositFingerprint);
           const { data, error } = await window.supabaseClient
             .rpc('request_deposit', {
               p_amount: num,
@@ -387,26 +484,92 @@ const Trade = (() => {
             });
           if (error) throw error;
           if (!data || !data[0] || !data[0].tx_id) throw new Error('Deposit authority returned an invalid response');
+          depositTxId = data[0].tx_id;
+          depositDescription = 'Deposit (' + coinLabel + ') — Ref: ' + depositRef;
+          depositCreatedAt = data[0].created_at || depositCreatedAt;
+
+          if (!isSepoliaTest) {
+            RequestId.clear('deposit', depositKey);
+            if (window.AppState) {
+              AppState.addTransaction({
+                id:          depositTxId,
+                type:        'deposit',
+                amount:      num,
+                status:      'pending',
+                description: depositDescription,
+                created_at:  depositCreatedAt
+              });
+            }
+          }
+        }
+
+        if (isSepoliaTest) {
+          const { data: { session } } = await window.supabaseClient.auth.getSession();
+          if (!session || !session.access_token) throw new Error('Session expired');
+
+          const verifyUrl = (APP_CONFIG.apis && APP_CONFIG.apis.verifySepoliaDeposit) || '/api/verify-sepolia-deposit';
+          const verifyResp = await fetch(verifyUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + session.access_token
+            },
+            body: JSON.stringify({
+              depositTxId,
+              txHash: sepoliaTxHash
+            })
+          });
+
+          const verifyPayload = await verifyResp.json().catch(() => ({}));
+          if (!verifyResp.ok) {
+            if (window.AppState && depositTxId) {
+              AppState.addTransaction({
+                id: depositTxId,
+                type: 'deposit',
+                amount: num,
+                status: 'pending',
+                description: depositDescription,
+                created_at: depositCreatedAt
+              });
+            }
+            throw new Error(verifyPayload.error || 'Sepolia verification failed');
+          }
+
           RequestId.clear('deposit', depositKey);
           if (window.AppState) {
-            AppState.addTransaction({
-              id:          data[0].tx_id,
-              type:        'deposit',
-              amount:      num,
-              status:      'pending',
-              description: 'Deposit (' + coinLabel + ') — Ref: ' + depositRef,
-              created_at:  new Date().toISOString()
-            });
+            const existingTransactions = AppState.get('transactions') || [];
+            const approvedTx = {
+              id: depositTxId,
+              type: 'deposit',
+              amount: num,
+              status: 'approved',
+              description: depositDescription,
+              created_at: depositCreatedAt
+            };
+            const existingIndex = existingTransactions.findIndex((tx) => tx && tx.id === depositTxId);
+            if (existingIndex >= 0) {
+              existingTransactions[existingIndex] = { ...existingTransactions[existingIndex], ...approvedTx };
+              AppState.set('transactions', existingTransactions);
+            } else {
+              AppState.addTransaction(approvedTx);
+            }
+            if (verifyPayload && Number.isFinite(Number(verifyPayload.spotBalance))) {
+              AppState.updateBalances({ spot: Number(verifyPayload.spotBalance) });
+            }
           }
         }
 
         if (window.Modal) Modal.close();
-        if (window.App)   App.showSuccess('Transfer submitted. Reference: ' + depositRef);
+        if (window.App) {
+          App.showSuccess(isSepoliaTest
+            ? 'Sepolia test deposit verified and credited.'
+            : 'Transfer submitted. Reference: ' + depositRef);
+        }
 
       } catch (err) {
         if (window.App) App.showError(err.message || 'Submission failed');
         confirmDepBtn.disabled   = false;
-        confirmDepBtn.textContent = 'I Have Made The Transfer';
+        confirmDepBtn.textContent = isSepoliaTest ? 'Verify Sepolia Test Deposit' : 'I Have Made The Transfer';
       }
     });
     content.appendChild(confirmDepBtn);
@@ -422,6 +585,11 @@ const Trade = (() => {
         tabBtns[k].style.background = isActive ? 'var(--color-primary)' : 'var(--color-surface-elevated)';
         tabBtns[k].style.color      = isActive ? '#fff' : 'var(--color-text-secondary)';
       });
+
+      if (key === 'ETH_ERC20' && isSepoliaTest) {
+        await fetchSepoliaTestAddress(addressPanel);
+        return;
+      }
 
       // ERC-20 can use a per-user server-derived address when the private
       // deployment explicitly enables the HD-wallet adapter. Other networks use
@@ -448,7 +616,11 @@ const Trade = (() => {
     });
 
     // Open modal then trigger initial ETH tab load
-    if (window.Modal) Modal.open({ title: 'Deposit Funds', content, maxWidth: '480px' });
+    if (window.Modal) Modal.open({
+      title: isSepoliaTest ? 'Sepolia Test Deposit' : 'Deposit Funds',
+      content,
+      maxWidth: '480px'
+    });
     switchCoin('ETH_ERC20');
   }
 

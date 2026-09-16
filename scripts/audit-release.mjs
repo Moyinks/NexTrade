@@ -86,11 +86,33 @@ for (const file of runtimeSources) {
   const src = read(file);
   for (const m of src.matchAll(/\.rpc\(\s*["']([A-Za-z0-9_]+)["']/g)) rpcCalls.add(m[1]);
 }
-const schema = read('SCHEMA.sql');
-const schemaFns = new Set([...schema.matchAll(/create\s+or\s+replace\s+function\s+public\.([A-Za-z0-9_]+)\s*\(/gi)].map((m) => m[1]));
-const missingRpcs = [...rpcCalls].filter((name) => !schemaFns.has(name));
-if (missingRpcs.length) fail(`Runtime RPCs missing from SCHEMA.sql: ${missingRpcs.join(', ')}`);
-else pass(`RPC/schema contract (${rpcCalls.size} runtime RPCs)`);
+const schemaSources = ['SCHEMA.sql'];
+
+if (fs.existsSync(path.join(root, 'SEPOLIA_TEST_DEPOSIT.sql'))) {
+  schemaSources.push('SEPOLIA_TEST_DEPOSIT.sql');
+}
+
+const schemaText = schemaSources.map((file) => read(file)).join('\n');
+
+const schemaFns = new Set(
+  [...schemaText.matchAll(
+    /create\s+or\s+replace\s+function\s+public\.([A-Za-z0-9_]+)\s*\(/gi
+  )].map((m) => m[1])
+);
+
+const missingRpcs = [...rpcCalls].filter(
+  (name) => !schemaFns.has(name)
+);
+
+if (missingRpcs.length) {
+  fail(
+    `Runtime RPCs missing from declared schema sources: ${missingRpcs.join(', ')}`
+  );
+} else {
+  pass(
+    `RPC/schema contract (${rpcCalls.size} runtime RPCs; ${schemaSources.length} schema source${schemaSources.length === 1 ? '' : 's'})`
+  );
+}
 
 // 6) Coin artwork must use the same-origin allowlisted proxy.
 const apiSource = read('api.js');

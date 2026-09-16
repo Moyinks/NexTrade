@@ -77,12 +77,16 @@ const APP_CONFIG = {
     // after configuring the server-side wallet and operational controls.
     realDeposit: false,
     emailVerification: false,
-    hdWallet: false
+    hdWallet: false,
+    // Preview-only smoke-test gate. Never enable this on the production branch.
+    sepoliaTestDeposit: true
   },
 
   apis: {
     coingecko: 'https://api.coingecko.com/api/v3',
     generateAddress: '/api/generate-address',
+    sepoliaDepositAddress: '/api/sepolia-deposit-address',
+    verifySepoliaDeposit: '/api/verify-sepolia-deposit',
     executeTrade: '/api/execute-trade'
   },
 
