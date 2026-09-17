@@ -75,7 +75,7 @@ const APP_CONFIG = {
   features: {
     // Public repository ships fail-closed. Enable only in a private deployment
     // after configuring the server-side wallet and operational controls.
-    realDeposit: false,
+    realDeposit: true,
     emailVerification: false,
     hdWallet: false
   },
@@ -98,23 +98,23 @@ const APP_CONFIG = {
   // Never commit real receiving addresses to a public portfolio repository.
   depositAddresses: {
     ETH_ERC20: {
-      address: 'YourAddressHere_ETH_ERC20',
-      label: 'USDT / ETH (ERC-20)',
-      network: 'Ethereum Network',
+      address: 'TEST_ONLY_DO_NOT_SEND_REAL_FUNDS_ERC20',
+      label: 'TEST ONLY — ERC-20',
+      network: 'Manual deposit smoke test — no real transfer',
       icon: 'fa-ethereum',
       color: '#627eea'
     },
     USDT_TRC20: {
-      address: 'YourAddressHere_USDT_TRC20',
-      label: 'USDT (TRC-20 / Tron)',
-      network: 'Tron Network',
+      address: 'TEST_ONLY_DO_NOT_SEND_REAL_FUNDS_TRC20',
+      label: 'TEST ONLY — TRC-20',
+      network: 'Manual deposit smoke test — no real transfer',
       icon: 'fa-coins',
       color: '#ef0027'
     },
     BTC: {
-      address: 'YourAddressHere_BTC',
-      label: 'Bitcoin (BTC)',
-      network: 'Bitcoin Network',
+      address: 'TEST_ONLY_DO_NOT_SEND_REAL_FUNDS_BTC',
+      label: 'TEST ONLY — BTC',
+      network: 'Manual deposit smoke test — no real transfer',
       icon: 'fa-bitcoin',
       color: '#f7931a'
     }
