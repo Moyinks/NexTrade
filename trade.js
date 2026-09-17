@@ -108,7 +108,7 @@ const Trade = (() => {
       return;
     }
 
-    if (!window.APP_CONFIG || !APP_CONFIG.features || !APP_CONFIG.features.realDeposit) {
+    if (!window.APP_CONFIG || !APP_CONFIG.features || !(APP_CONFIG.features.realDeposit || APP_CONFIG.features.manualDepositTest)) {
       if (window.App) App.showError('Deposits are not currently available. Please contact support.');
       return;
     }
@@ -379,23 +379,87 @@ const Trade = (() => {
 
           const depositFingerprint = `${selectedCoin}|${num.toFixed(8)}|${depositRef}`;
           const depositKey = getIdempotencyKey('deposit', depositFingerprint);
-          const { data, error } = await window.supabaseClient
-            .rpc('request_deposit', {
-              p_amount: num,
-              p_description: 'Deposit (' + coinLabel + ') — Ref: ' + depositRef,
-              p_idempotency_key: depositKey
-            });
-          if (error) throw error;
-          if (!data || !data[0] || !data[0].tx_id) throw new Error('Deposit authority returned an invalid response');
+          const description = 'Deposit (' + coinLabel + ') — Ref: ' + depositRef;
+          let txId;
+          let createdAt;
+
+          if (APP_CONFIG.features && APP_CONFIG.features.manualDepositTest) {
+            const { data: sessionData, error: sessionError } =
+              await window.supabaseClient.auth.getSession();
+
+            if (sessionError) throw sessionError;
+
+            const session = sessionData && sessionData.session;
+
+            if (!session || !session.access_token) {
+              throw new Error('Session expired. Sign in again.');
+            }
+
+            const response = await fetch(
+              (APP_CONFIG.apis && APP_CONFIG.apis.requestManualDeposit)
+                || '/api/test-manual-deposit',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer ' + session.access_token
+                },
+                body: JSON.stringify({
+                  amount: num,
+                  idempotencyKey: depositKey,
+                  depositReference: depositRef,
+                  rail: selectedCoin
+                })
+              }
+            );
+
+            const payload = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+              throw new Error(
+                payload.error || 'Manual deposit test service failed'
+              );
+            }
+
+            txId = payload.tx_id;
+            createdAt = payload.created_at;
+
+          } else {
+            const { data, error } = await window.supabaseClient
+              .rpc('request_deposit', {
+                p_amount: num,
+                p_description: description,
+                p_idempotency_key: depositKey
+              });
+
+            if (error) throw error;
+
+            if (!data || !data[0] || !data[0].tx_id) {
+              throw new Error(
+                'Deposit authority returned an invalid response'
+              );
+            }
+
+            txId = data[0].tx_id;
+            createdAt = data[0].created_at;
+          }
+
+          if (!txId) {
+            throw new Error(
+              'Deposit authority returned an invalid response'
+            );
+          }
+
           RequestId.clear('deposit', depositKey);
+
           if (window.AppState) {
             AppState.addTransaction({
-              id:          data[0].tx_id,
+              id:          txId,
               type:        'deposit',
               amount:      num,
               status:      'pending',
-              description: 'Deposit (' + coinLabel + ') — Ref: ' + depositRef,
-              created_at:  new Date().toISOString()
+              description,
+              created_at:  createdAt || new Date().toISOString()
             });
           }
         }

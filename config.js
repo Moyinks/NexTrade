@@ -75,7 +75,8 @@ const APP_CONFIG = {
   features: {
     // Public repository ships fail-closed. Enable only in a private deployment
     // after configuring the server-side wallet and operational controls.
-    realDeposit: true,
+    realDeposit: false,
+    manualDepositTest: true,
     emailVerification: false,
     hdWallet: false
   },
@@ -83,7 +84,8 @@ const APP_CONFIG = {
   apis: {
     coingecko: 'https://api.coingecko.com/api/v3',
     generateAddress: '/api/generate-address',
-    executeTrade: '/api/execute-trade'
+    executeTrade: '/api/execute-trade',
+    requestManualDeposit: '/api/test-manual-deposit'
   },
 
   defaults: {
