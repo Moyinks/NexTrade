@@ -216,21 +216,47 @@ module.exports = async function handler(req, res) {
     });
   }
 
+  /*
+   * A valid Auth user may pre-date a database/profile rebuild.
+   * Repair the read-cache profile server-side instead of rejecting
+   * an otherwise valid authenticated test user.
+   */
+  const rawName =
+    user.user_metadata &&
+    typeof user.user_metadata.full_name === 'string'
+      ? user.user_metadata.full_name
+      : '';
+
+  const fullName =
+    rawName.trim().slice(0, 120);
+
   const {
-    data: profile,
     error: profileError
   } = await supabase
     .from('profiles')
-    .select('id')
-    .eq('id', user.id)
-    .maybeSingle();
+    .upsert(
+      {
+        id: user.id,
+        email: user.email || null,
+        full_name: fullName
+      },
+      {
+        onConflict: 'id',
+        ignoreDuplicates: true
+      }
+    );
 
-  if (
-    profileError ||
-    !profile
-  ) {
-    return send(res, 403, {
-      error: 'Profile not found'
+  if (profileError) {
+    console.error(
+      '[test-manual-deposit] profile bootstrap failed',
+      {
+        code: profileError.code,
+        message: profileError.message
+      }
+    );
+
+    return send(res, 500, {
+      error: 'Profile bootstrap failed'
     });
   }
 
