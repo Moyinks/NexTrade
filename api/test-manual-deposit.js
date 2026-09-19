@@ -183,25 +183,44 @@ module.exports = async function handler(req, res) {
   const description =
     `Deposit (${railLabel}) — Ref: ${depositReference}`;
 
-  const supabase = createClient(
+  /*
+   * Keep user-token verification completely separate from the
+   * privileged database client.
+   *
+   * A service/secret client must never inherit a user's JWT for
+   * privileged writes or RLS will apply as that user.
+   */
+  const authClient = createClient(
     supabaseUrl,
     serviceKey,
     {
       auth: {
         persistSession: false,
-        autoRefreshToken: false
+        autoRefreshToken: false,
+        detectSessionInUrl: false
       }
     }
   );
 
-  /*
-   * The browser supplies its normal Supabase access token.
-   * We verify it server-side before using service-role authority.
-   */
   const {
     data: userData,
     error: userError
-  } = await supabase.auth.getUser(token);
+  } = await authClient.auth.getUser(token);
+
+  /*
+   * Fresh admin client. No user JWT is ever attached to this client.
+   */
+  const adminClient = createClient(
+    supabaseUrl,
+    serviceKey,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      }
+    }
+  );
 
   const user =
     userData && userData.user;
@@ -232,7 +251,7 @@ module.exports = async function handler(req, res) {
 
   const {
     error: profileError
-  } = await supabase
+  } = await adminClient
     .from('profiles')
     .upsert(
       {
@@ -261,7 +280,7 @@ module.exports = async function handler(req, res) {
   }
 
   const selectExisting = () =>
-    supabase
+    adminClient
       .from('transactions')
       .select(
         'id,type,amount,status,description,metadata,created_at'
@@ -316,7 +335,7 @@ module.exports = async function handler(req, res) {
   const {
     data: inserted,
     error: insertError
-  } = await supabase
+  } = await adminClient
     .from('transactions')
     .insert({
       user_id: user.id,
