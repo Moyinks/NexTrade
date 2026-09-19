@@ -97,6 +97,42 @@ module.exports = async function handler(req, res) {
   const serviceKey =
     process.env.SUPABASE_SERVICE_KEY;
 
+  function safeKeyDiagnostic(key) {
+    if (!key) return { type: 'missing', jwtRole: null };
+
+    if (key.startsWith('sb_secret_')) {
+      return { type: 'sb_secret', jwtRole: 'service_role' };
+    }
+
+    if (key.startsWith('sb_publishable_')) {
+      return { type: 'sb_publishable', jwtRole: 'anon' };
+    }
+
+    const parts = key.split('.');
+
+    if (parts.length === 3) {
+      try {
+        const payload = JSON.parse(
+          Buffer.from(parts[1], 'base64url').toString('utf8')
+        );
+
+        return {
+          type: 'legacy_jwt',
+          jwtRole: payload.role || null
+        };
+      } catch (_) {
+        return { type: 'unknown_jwt', jwtRole: null };
+      }
+    }
+
+    return { type: 'unknown', jwtRole: null };
+  }
+
+  console.error(
+    '[test-manual-deposit] service key diagnostic',
+    safeKeyDiagnostic(serviceKey)
+  );
+
   if (!supabaseUrl || !serviceKey) {
     return send(res, 503, {
       error: 'Deposit test service unavailable'
