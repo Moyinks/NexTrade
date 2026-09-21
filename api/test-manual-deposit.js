@@ -97,114 +97,6 @@ module.exports = async function handler(req, res) {
   const serviceKey =
     process.env.SUPABASE_SERVICE_KEY;
 
-  function safeKeyDiagnostic(key) {
-    if (!key) return { type: 'missing', jwtRole: null };
-
-    if (key.startsWith('sb_secret_')) {
-      return { type: 'sb_secret', jwtRole: 'service_role' };
-    }
-
-    if (key.startsWith('sb_publishable_')) {
-      return { type: 'sb_publishable', jwtRole: 'anon' };
-    }
-
-    const parts = key.split('.');
-
-    if (parts.length === 3) {
-      try {
-        const payload = JSON.parse(
-          Buffer.from(parts[1], 'base64url').toString('utf8')
-        );
-
-        return {
-          type: 'legacy_jwt',
-          jwtRole: payload.role || null
-        };
-      } catch (_) {
-        return { type: 'unknown_jwt', jwtRole: null };
-      }
-    }
-
-    return { type: 'unknown', jwtRole: null };
-  }
-
-  console.error(
-    '[test-manual-deposit] service key diagnostic',
-    safeKeyDiagnostic(serviceKey)
-  );
-
-  function safeKeyDiagnostic(key) {
-    if (!key) return { type: 'missing', jwtRole: null };
-
-    if (key.startsWith('sb_secret_')) {
-      return { type: 'sb_secret', jwtRole: 'service_role' };
-    }
-
-    if (key.startsWith('sb_publishable_')) {
-      return { type: 'sb_publishable', jwtRole: 'anon' };
-    }
-
-    const parts = key.split('.');
-
-    if (parts.length === 3) {
-      try {
-        const payload = JSON.parse(
-          Buffer.from(parts[1], 'base64url').toString('utf8')
-        );
-
-        return {
-          type: 'legacy_jwt',
-          jwtRole: payload.role || null
-        };
-      } catch (_) {
-        return { type: 'unknown_jwt', jwtRole: null };
-      }
-    }
-
-    return { type: 'unknown', jwtRole: null };
-  }
-
-  console.error(
-    '[test-manual-deposit] service key diagnostic',
-    safeKeyDiagnostic(serviceKey)
-  );
-
-  function safeKeyDiagnostic(key) {
-    if (!key) return { type: 'missing', jwtRole: null };
-
-    if (key.startsWith('sb_secret_')) {
-      return { type: 'sb_secret', jwtRole: 'service_role' };
-    }
-
-    if (key.startsWith('sb_publishable_')) {
-      return { type: 'sb_publishable', jwtRole: 'anon' };
-    }
-
-    const parts = key.split('.');
-
-    if (parts.length === 3) {
-      try {
-        const payload = JSON.parse(
-          Buffer.from(parts[1], 'base64url').toString('utf8')
-        );
-
-        return {
-          type: 'legacy_jwt',
-          jwtRole: payload.role || null
-        };
-      } catch (_) {
-        return { type: 'unknown_jwt', jwtRole: null };
-      }
-    }
-
-    return { type: 'unknown', jwtRole: null };
-  }
-
-  console.error(
-    '[test-manual-deposit] service key diagnostic',
-    safeKeyDiagnostic(serviceKey)
-  );
-
   if (!supabaseUrl || !serviceKey) {
     return send(res, 503, {
       error: 'Deposit test service unavailable'
@@ -316,12 +208,20 @@ module.exports = async function handler(req, res) {
   } = await authClient.auth.getUser(token);
 
   /*
-   * Fresh admin client. No user JWT is ever attached to this client.
+   * Fresh privileged client.
+   *
+   * Explicitly pin Authorization to the server credential so no browser
+   * session JWT can ever replace the service-role identity used by PostgREST.
    */
   const adminClient = createClient(
     supabaseUrl,
     serviceKey,
     {
+      global: {
+        headers: {
+          Authorization: `Bearer ${serviceKey}`
+        }
+      },
       auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -329,6 +229,32 @@ module.exports = async function handler(req, res) {
       }
     }
   );
+
+  /*
+   * Fail closed before any privileged table access.
+   * This checks the role Postgres actually sees.
+   */
+  const {
+    data: isServiceRole,
+    error: roleCheckError
+  } = await adminClient.rpc('is_service_role');
+
+  if (
+    roleCheckError ||
+    isServiceRole !== true
+  ) {
+    console.error(
+      '[test-manual-deposit] privileged role check failed',
+      {
+        code: roleCheckError && roleCheckError.code,
+        message: roleCheckError && roleCheckError.message
+      }
+    );
+
+    return send(res, 503, {
+      error: 'Privileged database access unavailable'
+    });
+  }
 
   const user =
     userData && userData.user;

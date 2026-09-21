@@ -909,6 +909,12 @@ with check (
 
 revoke all on public.profiles,public.transactions,public.strategies,public.investments,public.kyc_documents,public.deposit_addresses,public.app_settings from anon,authenticated;
 
+-- Trusted backend endpoints need PostgreSQL table privileges in addition to
+-- service_role's RLS bypass. Browser roles remain restricted.
+grant select,insert,update
+  on public.profiles,public.transactions
+  to service_role;
+
 -- Expose only the profile fields the browser needs. Withdrawal passphrase
 -- hashes, lock counters and verification timestamps never leave Postgres.
 grant select (id,email,full_name,avatar_url,role,kyc_status,holdings,created_at,updated_at)
@@ -931,6 +937,14 @@ revoke all on function public.guard_profile_sensitive_write() from public,anon,a
 revoke all on function public.guard_server_managed_write() from public,anon,authenticated;
 revoke all on function public.guard_transaction_immutability() from public,anon,authenticated;
 revoke all on function public.sync_kyc_status() from public,anon,authenticated;
+
+-- Direct service-role writes need these helpers for constraints/write guards.
+grant execute on function public.is_service_role()
+  to service_role;
+grant execute on function public.valid_holdings(jsonb)
+  to service_role;
+grant execute on function public.financial_write_allowed()
+  to service_role;
 
 revoke all on function public.derive_spot_balance(uuid) from public,anon,authenticated;
 revoke all on function public.derive_vault_cash(uuid) from public,anon,authenticated;
