@@ -1,0 +1,85 @@
+:root {
+  --nt-motion-press-in: 72ms;
+  --nt-motion-release: 185ms;
+  --nt-ease-press: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --nt-ease-release: cubic-bezier(0.18, 1.28, 0.32, 1);
+  --nt-press-control: 0.976;
+  --nt-press-card: 0.988;
+  --nt-press-icon: 0.964;
+}
+
+:where(button, .btn, [role="button"]) {
+  touch-action: manipulation;
+  transform-origin: center;
+}
+
+:where(button, .btn, [role="button"]):not(:disabled) {
+  transition-property: transform, background-color, border-color, color, opacity;
+  transition-duration: var(--nt-motion-release);
+  transition-timing-function: var(--nt-ease-release);
+}
+
+:where(button, .btn, [role="button"]):not(:disabled):active {
+  transform: translateY(1px) scale(var(--nt-press-control));
+  transition-duration: var(--nt-motion-press-in);
+  transition-timing-function: var(--nt-ease-press);
+}
+
+:where(.tx-card, .ui-action, .theme-choice, .demo-pending-context, .demo-method-trigger, .demo-sheet-option):not(:disabled):active {
+  transform: translateY(1px) scale(var(--nt-press-card));
+}
+
+:where(.demo-deposit-back, .transaction-detail-topbar__back, .transaction-detail-topbar__share, #profile-menu-btn):not(:disabled):active {
+  transform: translateY(1px) scale(var(--nt-press-icon));
+}
+
+.ntm-pill-item:active {
+  transform: translateY(1px) scale(var(--nt-press-control)) !important;
+}
+
+.virtual-scroller {
+  position: relative;
+  overflow: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scroll-behavior: auto;
+}
+
+.virtual-scroller__spacer {
+  position: relative;
+}
+
+.virtual-scroller__viewport {
+  position: absolute;
+  inset: 0 0 auto 0;
+  will-change: transform;
+}
+
+.virtual-scroller__item {
+  margin-bottom: 8px;
+}
+
+.overview-tab,
+.assets-tab,
+.activity-tab,
+#activity-scroll-container {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scroll-behavior: auto;
+}
+
+.wallet-page {
+  overflow-anchor: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button, .btn, [role="button"]) {
+    transition-duration: 0.01ms !important;
+  }
+
+  :where(button, .btn, [role="button"]):active {
+    transform: none !important;
+  }
+}

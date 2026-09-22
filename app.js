@@ -35,6 +35,76 @@
     exiting:     false   // set true before intentional signOut to suppress listener re-navigation
   };
 
+  // ORIGIN-AWARE NAVIGATION
+  const navigationState = {
+    stack: []
+  };
+
+  function getRouteScrollSurface(route) {
+    if (route === 'deposit') {
+      return document.querySelector('.demo-deposit-page');
+    }
+
+    if (route === 'transactiondetail') {
+      return document.querySelector('.transaction-detail-page');
+    }
+
+    return document.querySelector('.app-main');
+  }
+
+  function captureRouteSnapshot(route) {
+    const surface = getRouteScrollSurface(route);
+
+    return {
+      route,
+      scrollTop:
+        surface && Number.isFinite(surface.scrollTop)
+          ? surface.scrollTop
+          : 0,
+      moduleState:
+        route === 'wallet' &&
+        window.Wallet &&
+        typeof Wallet.getNavigationState === 'function'
+          ? Wallet.getNavigationState()
+          : null
+    };
+  }
+
+  function restoreRouteSnapshot(snapshot) {
+    if (!snapshot) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (
+          snapshot.route === 'wallet' &&
+          snapshot.moduleState &&
+          window.Wallet &&
+          typeof Wallet.restoreNavigationState === 'function'
+        ) {
+          Wallet.restoreNavigationState(snapshot.moduleState);
+          return;
+        }
+
+        const surface = getRouteScrollSurface(snapshot.route);
+        if (surface) surface.scrollTop = Number(snapshot.scrollTop) || 0;
+      });
+    });
+  }
+
+  async function back(fallback = 'home') {
+    const snapshot = navigationState.stack.pop();
+
+    if (snapshot && snapshot.route) {
+      await navigate(snapshot.route, {
+        fromBack: true,
+        restoreSnapshot: snapshot
+      });
+      return;
+    }
+
+    await navigate(fallback, { fromBack: true });
+  }
+
   // ============================================
   // 1. AUTHORITATIVE BALANCE DERIVATION
   // ============================================
@@ -312,34 +382,16 @@
         }
 
         const currentRoute = window.Router ? Router.getCurrentPage() : null;
-        if (currentRoute === 'deposit') {
-          window.history.pushState({ ntx: 1 }, '');
-          navigate('wallet');
-          return;
-        }
-        if (currentRoute === 'adminreview') {
-          window.history.pushState({ ntx: 1 }, '');
-          navigate('home');
-          return;
-        }
 
-        if (
-          currentRoute === 'transactiondetail' &&
-          window.Transactiondetail &&
-          Transactiondetail.back
-        ) {
+        if (currentRoute && AUXILIARY_ROUTES.has(currentRoute)) {
           window.history.pushState({ ntx: 1 }, '');
-          Transactiondetail.back();
-          return;
-        }
 
-        if (
-          currentRoute === 'settings' &&
-          window.Settings &&
-          Settings.back
-        ) {
-          window.history.pushState({ ntx: 1 }, '');
-          Settings.back();
+          const fallback =
+            currentRoute === 'deposit' || currentRoute === 'transactiondetail'
+              ? 'wallet'
+              : 'home';
+
+          back(fallback);
           return;
         }
 
@@ -401,11 +453,14 @@
             AppState.set('balanceSyncStatus', 'ready');
           }
           const currentPage = window.Router ? Router.getCurrentPage() : null;
-          if (currentPage === 'wallet' && window.Wallet && typeof Wallet.render === 'function') {
-            const walletContainer = document.querySelector('.wallet-page');
-            if (walletContainer) Wallet.render(walletContainer);
-          }
-          if (currentPage === 'home' && window.Home && typeof Home.refresh === 'function') {
+
+          // Wallet subscribes to AppState and refreshes without reconstructing
+          // the active scroll surface while the user owns the motion.
+          if (
+            currentPage === 'home' &&
+            window.Home &&
+            typeof Home.refresh === 'function'
+          ) {
             Home.refresh();
           }
           console.log('[APP] \u{1F504} Background poll complete');
@@ -506,8 +561,20 @@
   // 4. UTILITIES
   // ============================================
 
-  async function navigate(pageId) {
+  async function navigate(pageId, options = {}) {
     if (!pageId) return;
+
+    const currentRoute = window.Router ? Router.getCurrentPage() : null;
+    const fromBack = options && options.fromBack === true;
+
+    if (!fromBack && currentRoute && currentRoute !== pageId && AUXILIARY_ROUTES.has(pageId)) {
+      navigationState.stack.push(captureRouteSnapshot(currentRoute));
+    }
+
+    if (!fromBack && currentRoute && AUXILIARY_ROUTES.has(currentRoute) && PRIMARY_PAGES.has(pageId)) {
+      navigationState.stack = [];
+    }
+
     console.log(`[APP] 🧭 Navigate: ${pageId}`);
     document.body.classList.toggle(
       'route-immersive',
@@ -519,6 +586,10 @@
     if (window.Storage && PRIMARY_PAGES.has(pageId)) Storage.setLastPage(pageId);
     if (window.ExperienceOrchestrator && ExperienceOrchestrator.noteNavigation) {
       ExperienceOrchestrator.noteNavigation(pageId);
+    }
+
+    if (options && options.restoreSnapshot) {
+      restoreRouteSnapshot(options.restoreSnapshot);
     }
   }
 
@@ -753,6 +824,7 @@
   window.App = {
     init,
     navigate,
+    back,
     deriveSpotBalance,
     deriveVaultCash,
 

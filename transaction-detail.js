@@ -28,12 +28,18 @@ const Transactiondetail = (() => {
   function railLabel(value) {
     return { ETH_ERC20: 'ERC-20 Simulation', USDT_TRC20: 'TRC-20 Simulation', BTC: 'Bitcoin Simulation' }[value] || value || null;
   }
-  function open(id, source = 'wallet') {
+  function open(id) {
     transactionId = id;
-    if (source && source !== 'transactiondetail') returnRoute = source;
     if (window.App && App.navigate) App.navigate('transactiondetail');
   }
-  function back() { if (window.App && App.navigate) App.navigate(returnRoute || 'wallet'); }
+
+  function back() {
+    if (window.App && typeof App.back === 'function') {
+      App.back('wallet');
+      return;
+    }
+    if (window.App && App.navigate) App.navigate(returnRoute || 'wallet');
+  }
   function recordRow(key, value, mono = false) {
     const row = node('div', 'transaction-record-row');
     row.append(node('div', 'transaction-record-row__key', key));

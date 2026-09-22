@@ -14,6 +14,10 @@ const Settings = (() => {
     return element;
   }
   function back() {
+    if (window.App && typeof App.back === 'function') {
+      App.back('home');
+      return;
+    }
     if (window.App && App.navigate) App.navigate(returnRoute || 'home');
   }
   function open() {

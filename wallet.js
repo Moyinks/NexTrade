@@ -70,7 +70,11 @@ const Wallet = (() => {
      ═══════════════════════════════════════════════════════════════════════════ */
   let container = null;
   let tickerInterval = null;
-  let unsubTx = null; // AppState 'transactions' subscription — cleaned up on re-render
+  let unsubTx = null;
+  let unsubBalances = null;
+  let unsubHoldings = null;
+  let refreshTimer = null;
+  let interactionUntil = 0;
   let virtualScrollers = {};
 
   const state = {
@@ -1297,12 +1301,112 @@ const Wallet = (() => {
     }, CONFIG.TICKER_INTERVAL);
   }
 
+  function activeScrollSurface() {
+    if (
+      state.ui.activeTab === 'activity' &&
+      virtualScrollers.activity &&
+      virtualScrollers.activity.container
+    ) {
+      return virtualScrollers.activity.container;
+    }
+
+    if (!container) return null;
+
+    return (
+      container.querySelector('.' + state.ui.activeTab + '-tab') ||
+      container.querySelector('#tab-content-container')
+    );
+  }
+
+  function markInteraction() {
+    interactionUntil = performance.now() + 180;
+  }
+
+  function bindInteractionTracking() {
+    if (!container || container.dataset.walletMotionBound === 'true') return;
+
+    container.dataset.walletMotionBound = 'true';
+    container.addEventListener('pointerdown', markInteraction, { passive: true });
+    container.addEventListener('touchmove', markInteraction, { passive: true });
+    container.addEventListener('scroll', markInteraction, { passive: true, capture: true });
+  }
+
+  function refreshActiveTabPreservingScroll() {
+    if (!container || !document.body.contains(container)) return;
+
+    if (state.ui.activeTab === 'activity' && virtualScrollers.activity) {
+      const filtered = filterAndSortTransactions(state.transactions, state.ui.filters);
+      virtualScrollers.activity.update(filtered);
+      return;
+    }
+
+    const surface = activeScrollSurface();
+    const scrollTop = surface ? surface.scrollTop : 0;
+    const contentEl = container.querySelector('#tab-content-container');
+    if (!contentEl) return;
+
+    const oldScroller = virtualScrollers[state.ui.activeTab];
+    if (oldScroller && oldScroller.destroy) {
+      oldScroller.destroy();
+      delete virtualScrollers[state.ui.activeTab];
+    }
+
+    contentEl.replaceChildren(renderTabContent(state.ui.activeTab));
+
+    requestAnimationFrame(() => {
+      const next = activeScrollSurface();
+      if (next) next.scrollTop = scrollTop;
+    });
+  }
+
+  function scheduleActiveRefresh() {
+    if (refreshTimer) clearTimeout(refreshTimer);
+
+    const waitForMotion = Math.max(0, interactionUntil - performance.now());
+
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+
+      if (performance.now() < interactionUntil) {
+        scheduleActiveRefresh();
+        return;
+      }
+
+      refreshActiveTabPreservingScroll();
+    }, Math.max(80, waitForMotion + 36));
+  }
+
+  function getNavigationState() {
+    const surface = activeScrollSurface();
+    return {
+      activeTab: state.ui.activeTab,
+      scrollTop: surface ? surface.scrollTop : 0
+    };
+  }
+
+  function restoreNavigationState(snapshot) {
+    if (!snapshot) return;
+
+    const tab = snapshot.activeTab || 'overview';
+    if (tab !== state.ui.activeTab) switchTab(tab);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const surface = activeScrollSurface();
+        if (surface) surface.scrollTop = Number(snapshot.scrollTop) || 0;
+      });
+    });
+  }
+
   /* ═══════════════════════════════════════════════════════════════════════════
      RENDER
      ═══════════════════════════════════════════════════════════════════════════ */
   function render(element) {
     if (tickerInterval) clearInterval(tickerInterval);
+    if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
     if (unsubTx) { unsubTx(); unsubTx = null; }
+    if (unsubBalances) { unsubBalances(); unsubBalances = null; }
+    if (unsubHoldings) { unsubHoldings(); unsubHoldings = null; }
     Object.values(virtualScrollers).forEach(scroller => {
       if (scroller && scroller.destroy) scroller.destroy();
     });
@@ -1312,6 +1416,7 @@ const Wallet = (() => {
     
     container = element;
     container.className = 'wallet-page';
+    bindInteractionTracking();
     container.style.cssText = 'display:flex; flex-direction:column; height:100%; overflow:hidden;';
     
     if (window.AppState) {
@@ -1334,40 +1439,24 @@ const Wallet = (() => {
     
     startLiveTicker();
 
-    // Re-render the active tab whenever a transaction is added (e.g. pending
-    // deposit). AppState.addTransaction() emits 'transactions' — subscribing
-    // here means the wallet page updates instantly without navigation.
+    // Data can change while a user is scrolling. Coalesce AppState changes
+    // and refresh only after user-owned motion settles. Activity updates its
+    // existing virtualizer in place so its scroll anchor stays stable.
     if (window.AppState) {
       unsubTx = AppState.subscribe('transactions', (txs) => {
         state.transactions = txs || [];
-        const contentEl = document.getElementById('tab-content-container');
-        if (contentEl) {
-          contentEl.innerHTML = '';
-          contentEl.appendChild(renderTabContent(state.ui.activeTab));
-        }
+        scheduleActiveRefresh();
       });
 
-      // Re-render when balances or holdings change (e.g. after a trade).
-      // Without these, the wallet page shows stale numbers until the user
-      // navigates away and back — state.balances is only seeded at render()
-      // time and never updated by the transactions subscription alone.
-      AppState.subscribe('balances', (bals) => {
+      unsubBalances = AppState.subscribe('balances', (bals) => {
         state.balances = bals || { spot: 0, vault: 0 };
         state.holdings = AppState.get('holdings') || {};
-        const contentEl = document.getElementById('tab-content-container');
-        if (contentEl) {
-          contentEl.innerHTML = '';
-          contentEl.appendChild(renderTabContent(state.ui.activeTab));
-        }
+        scheduleActiveRefresh();
       });
 
-      AppState.subscribe('holdings', (holdings) => {
+      unsubHoldings = AppState.subscribe('holdings', (holdings) => {
         state.holdings = holdings || {};
-        const contentEl = document.getElementById('tab-content-container');
-        if (contentEl) {
-          contentEl.innerHTML = '';
-          contentEl.appendChild(renderTabContent(state.ui.activeTab));
-        }
+        scheduleActiveRefresh();
       });
     }
 
@@ -1378,10 +1467,12 @@ const Wallet = (() => {
     switchTab('activity');
   }
 
-  return { 
-    render, 
+  return {
+    render,
     switchToActivity,
-    showAssetDetails  // Export for external use
+    getNavigationState,
+    restoreNavigationState,
+    showAssetDetails
   };
 })();
 

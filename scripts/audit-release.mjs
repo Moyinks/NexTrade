@@ -305,6 +305,78 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
   pass('Theme/transaction architecture');
 }
 
+
+// Interaction quality system.
+{
+  const interactionCss = read('interaction-system.css');
+  const appSource = read('app.js');
+  const walletSource = read('wallet.js');
+  const depositSource = read('demo-deposit.js');
+  const virtualScrollerSource = read('virtual-scroller.js');
+  const architectureSource = read('ARCHITECTURE_RULES.md');
+
+  if (!interactionCss.includes('--nt-motion-press-in')) {
+    fail('Interaction motion tokens missing');
+  }
+
+  if (!appSource.includes('async function back(')) {
+    fail('Origin-aware App.back authority missing');
+  }
+
+  if (!appSource.includes('captureRouteSnapshot')) {
+    fail('Navigation does not capture route origin/state');
+  }
+
+  if (/currentPage === 'wallet'[\s\S]{0,220}Wallet\.render/.test(appSource)) {
+    fail('Background polling still reconstructs Wallet');
+  }
+
+  if (!walletSource.includes('scheduleActiveRefresh')) {
+    fail('Wallet has no motion-safe refresh scheduler');
+  }
+
+  if (!walletSource.includes('getNavigationState')) {
+    fail('Wallet cannot preserve tab/scroll navigation state');
+  }
+
+  if (!virtualScrollerSource.includes('lastStartIndex')) {
+    fail('VirtualScroller still rebuilds the same render window every scroll frame');
+  }
+
+  if (!depositSource.includes('demo-method-trigger')) {
+    fail('Deposit payment method is not progressively disclosed');
+  }
+
+  if (!depositSource.includes('demo-sheet-layer')) {
+    fail('Deposit payment method sheet missing');
+  }
+
+  for (const principle of [
+    'Persistent screen space must be earned by persistent relevance.',
+    'Never interrupt user-owned motion with application-owned rendering.',
+    'Back means origin, not destination.'
+  ]) {
+    if (!architectureSource.includes(principle)) {
+      fail(`Architecture constitution missing: ${principle}`);
+    }
+  }
+
+  if (!failures.some((x) =>
+    x.includes('Interaction motion') ||
+    x.includes('Origin-aware') ||
+    x.includes('Navigation does not capture') ||
+    x.includes('reconstructs Wallet') ||
+    x.includes('motion-safe refresh') ||
+    x.includes('preserve tab/scroll') ||
+    x.includes('same render window') ||
+    x.includes('progressively disclosed') ||
+    x.includes('method sheet') ||
+    x.includes('Architecture constitution missing')
+  )) {
+    pass('Touch/navigation quality system');
+  }
+}
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);

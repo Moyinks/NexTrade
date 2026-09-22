@@ -20,3 +20,6 @@ These rules are product constraints, not aspirations.
 10. **The happy path is not enough.** Consider first use, return use, pending, failure, duplicate submission, offline/reconnect, refresh, back navigation, and future extension.
 11. **Theme is semantic, not page-specific.** Screens consume semantic tokens. Dark and Light provide different values without forking page implementations.
 12. **A financial event remains inspectable after the workflow ends.** Every transaction can open a durable Transaction Detail record. Workflow pages never become the permanent record.
+13. **Persistent screen space must be earned by persistent relevance.** Selected values stay visible; alternatives and explanations use progressive disclosure.
+14. **Never interrupt user-owned motion with application-owned rendering.** Live data may arrive while someone scrolls, but refreshes must preserve the active surface and scroll anchor.
+15. **Back means origin, not destination.** Back navigation restores the route and meaningful local UI state the user came from.
