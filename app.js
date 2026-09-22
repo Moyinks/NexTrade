@@ -21,6 +21,9 @@
     LOGIN_PAGE: 'login.html'
   };
 
+  const PRIMARY_PAGES = new Set(['home','market','vault','wallet']);
+  const AUXILIARY_ROUTES = new Set(['deposit','adminreview']);
+
   const state = {
     initialized: false,
     pollTimer:   null,
@@ -262,9 +265,12 @@
       console.log('[APP] Step 5/6: Router...');
       if (!window.Router) throw new Error('Router module not loaded');
       await Router.init();
-      const lastPage = (window.Storage && Storage.getLastPage()) || 'home';
+      const routeParam = new URLSearchParams(window.location.search).get('route');
+      const requestedRoute = AUXILIARY_ROUTES.has(routeParam) ? routeParam : null;
+      const lastPage = requestedRoute || (window.Storage && Storage.getLastPage()) || 'home';
       console.log(`[APP] 📍 Navigating to: ${lastPage}`);
       await navigate(lastPage);
+      if (requestedRoute) window.history.replaceState(window.history.state, '', window.location.pathname);
       console.log('[APP] ✅ Router ready');
 
       // STEP 6: Navbar
@@ -294,7 +300,19 @@
           return;
         }
 
-        // No modal open — ask if the user wants to exit.
+        const currentRoute = window.Router ? Router.getCurrentPage() : null;
+        if (currentRoute === 'deposit') {
+          window.history.pushState({ ntx: 1 }, '');
+          navigate('wallet');
+          return;
+        }
+        if (currentRoute === 'adminreview') {
+          window.history.pushState({ ntx: 1 }, '');
+          navigate('home');
+          return;
+        }
+
+        // No modal or auxiliary route open — ask if the user wants to exit.
         // Do NOT re-push here yet: if user confirms exit we must NOT have an
         // extra history entry queued, otherwise the browser navigates back into
         // the app immediately after location.href = LOGIN_PAGE fires.
@@ -382,7 +400,8 @@
             async (payload) => {
               console.log('[APP] \u{1F514} Transaction change detected:', payload.eventType, payload.new?.status);
               const relevant = payload.eventType === 'INSERT' ||
-                (payload.new && (payload.new.status === 'completed' || payload.new.status === 'approved'));
+                payload.eventType === 'UPDATE' ||
+                payload.eventType === 'DELETE';
               if (relevant) await backgroundPoll();
             }
           )
@@ -459,10 +478,11 @@
   async function navigate(pageId) {
     if (!pageId) return;
     console.log(`[APP] 🧭 Navigate: ${pageId}`);
+    document.body.classList.toggle('route-immersive', pageId === 'deposit');
     if (window.AppState) AppState.set('ui.currentPage', pageId);
     if (window.Router)   await window.Router.navigate(pageId);
     if (window.Navbar)   Navbar.setActive(pageId);
-    if (window.Storage)  Storage.setLastPage(pageId);
+    if (window.Storage && PRIMARY_PAGES.has(pageId)) Storage.setLastPage(pageId);
   }
 
   // ── TOAST SYSTEM ────────────────────────────────────────────────────────────

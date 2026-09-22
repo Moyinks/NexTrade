@@ -1,0 +1,190 @@
+{
+  "generatedBy": "scripts/design-debt.mjs",
+  "files": {
+    "admin-review.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "api.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "app-actions.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "app.js": {
+      "styleAssignments": 11,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 18
+    },
+    "auth.js": {
+      "styleAssignments": 21,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "bootstraps.js": {
+      "styleAssignments": 7,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "cache-manager.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "card.js": {
+      "styleAssignments": 3,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "config.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 3
+    },
+    "demo-deposit.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "feed.js": {
+      "styleAssignments": 11,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "finance.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "format.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "home.js": {
+      "styleAssignments": 6,
+      "inlineStyleMarkup": 1,
+      "hardcodedColors": 104
+    },
+    "index-entry.js": {
+      "styleAssignments": 4,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 2
+    },
+    "index-pwa.js": {
+      "styleAssignments": 4,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "kyc.js": {
+      "styleAssignments": 47,
+      "inlineStyleMarkup": 3,
+      "hardcodedColors": 16
+    },
+    "loader.js": {
+      "styleAssignments": 12,
+      "inlineStyleMarkup": 1,
+      "hardcodedColors": 3
+    },
+    "login-page.js": {
+      "styleAssignments": 6,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "market.js": {
+      "styleAssignments": 67,
+      "inlineStyleMarkup": 55,
+      "hardcodedColors": 51
+    },
+    "modals.js": {
+      "styleAssignments": 2,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 37
+    },
+    "navbar.js": {
+      "styleAssignments": 9,
+      "inlineStyleMarkup": 6,
+      "hardcodedColors": 48
+    },
+    "request-id.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "router.js": {
+      "styleAssignments": 13,
+      "inlineStyleMarkup": 23,
+      "hardcodedColors": 1
+    },
+    "safe-dom.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "session-manager.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "state.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "storage.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "supabase.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "sw.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 1,
+      "hardcodedColors": 2
+    },
+    "trade.js": {
+      "styleAssignments": 24,
+      "inlineStyleMarkup": 15,
+      "hardcodedColors": 6
+    },
+    "transaction-ui.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "validation.js": {
+      "styleAssignments": 0,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "vault.js": {
+      "styleAssignments": 98,
+      "inlineStyleMarkup": 15,
+      "hardcodedColors": 177
+    },
+    "virtual-scroller.js": {
+      "styleAssignments": 8,
+      "inlineStyleMarkup": 0,
+      "hardcodedColors": 0
+    },
+    "wallet.js": {
+      "styleAssignments": 41,
+      "inlineStyleMarkup": 97,
+      "hardcodedColors": 39
+    },
+    "withdrawal-auth.js": {
+      "styleAssignments": 22,
+      "inlineStyleMarkup": 2,
+      "hardcodedColors": 1
+    }
+  }
+}

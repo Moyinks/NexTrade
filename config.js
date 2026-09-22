@@ -76,7 +76,8 @@ const APP_CONFIG = {
     // Public repository ships fail-closed. Enable only in a private deployment
     // after configuring the server-side wallet and operational controls.
     realDeposit: false,
-    manualDepositTest: true,
+    demoDeposit: true,
+    manualDepositTest: false,
     emailVerification: false,
     hdWallet: false
   },
@@ -85,7 +86,9 @@ const APP_CONFIG = {
     coingecko: 'https://api.coingecko.com/api/v3',
     generateAddress: '/api/generate-address',
     executeTrade: '/api/execute-trade',
-    requestManualDeposit: '/api/test-manual-deposit'
+    demoDeposit: '/api/demo-deposit',
+    adminDepositReviews: '/api/admin-deposit-reviews',
+    adminPush: '/api/admin-push'
   },
 
   defaults: {
@@ -101,22 +104,22 @@ const APP_CONFIG = {
   depositAddresses: {
     ETH_ERC20: {
       address: 'TEST_ONLY_DO_NOT_SEND_REAL_FUNDS_ERC20',
-      label: 'TEST ONLY — ERC-20',
-      network: 'Manual deposit smoke test — no real transfer',
+      label: 'ERC-20 Simulation',
+      network: 'NexTrade Sandbox · no network transfer',
       icon: 'fa-ethereum',
       color: '#627eea'
     },
     USDT_TRC20: {
       address: 'TEST_ONLY_DO_NOT_SEND_REAL_FUNDS_TRC20',
-      label: 'TEST ONLY — TRC-20',
-      network: 'Manual deposit smoke test — no real transfer',
+      label: 'TRC-20 Simulation',
+      network: 'NexTrade Sandbox · no network transfer',
       icon: 'fa-coins',
       color: '#ef0027'
     },
     BTC: {
       address: 'TEST_ONLY_DO_NOT_SEND_REAL_FUNDS_BTC',
-      label: 'TEST ONLY — BTC',
-      network: 'Manual deposit smoke test — no real transfer',
+      label: 'Bitcoin Simulation',
+      network: 'NexTrade Sandbox · no network transfer',
       icon: 'fa-bitcoin',
       color: '#f7931a'
     }

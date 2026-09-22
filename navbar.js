@@ -40,6 +40,11 @@ const Navbar = (() => {
     wallet: { label: 'Wallet', icon: 'fa-wallet',      color: '#3B82F6' },
   };
 
+  const AUX_PAGES = {
+    deposit: { label: 'Demo Deposit', icon: 'fa-arrow-down', color: 'var(--color-primary)' },
+    adminreview: { label: 'Review Queue', icon: 'fa-inbox', color: 'var(--color-warning)' }
+  };
+
   // ── USER HELPERS ───────────────────────────────────────────────────────
 
   function toTitleCase(s) {
@@ -321,10 +326,12 @@ const Navbar = (() => {
 
   function updateHeader(pageId) {
     if (!headerEl) return;
-    const cfg         = PAGES[pageId] || PAGES.home;
+    const cfg         = PAGES[pageId] || AUX_PAGES[pageId] || PAGES.home;
     const displayName = resolveDisplayName();
     const userEmail   = resolveEmail();
     const isVerified  = resolveVerified();
+    const currentProfile = window.AppState ? AppState.get('profile') : null;
+    const isAdmin = Boolean(currentProfile && currentProfile.role === 'admin');
     const initials    = buildInitials(displayName);
     const esc = window.SafeDOM && SafeDOM.text ? SafeDOM.text : (v => String(v == null ? '' : v));
     const safeDisplayName = esc(displayName);
@@ -358,6 +365,12 @@ const Navbar = (() => {
             <span>${isVerified ? 'Verified Account' : 'Action Required: Verify Identity'}</span>
           </div>
           <div class="profile-menu">
+            ${isAdmin ? `
+            <button class="profile-menu-item" data-app-action="navbar-review-queue">
+              <div class="menu-icon"><i class="fa-solid fa-inbox"></i></div><span>Review Queue</span><span class="profile-admin-chip">Admin</span>
+            </button>
+            <div class="profile-menu-divider"></div>
+            ` : ''}
             <button class="profile-menu-item" data-app-action="navbar-settings">
               <div class="menu-icon"><i class="fa-solid fa-gear"></i></div><span>Settings</span>
             </button>
@@ -430,11 +443,17 @@ const Navbar = (() => {
       .profile-menu-item.danger{color:#EF4444;}
       .profile-menu-item.danger .menu-icon{background:rgba(239,68,68,0.10);color:#EF4444;}
       .profile-menu-divider{height:1px;background:rgba(255,255,255,0.06);margin:4px 0;}
+      .profile-admin-chip{margin-left:auto;padding:3px 6px;border-radius:999px;background:rgba(59,130,246,0.10);color:#60A5FA;font-size:8px;font-weight:750;letter-spacing:0.06em;text-transform:uppercase;}
     `;
     document.head.appendChild(s);
   }
 
   // ── MENU ACTIONS ──────────────────────────────────────────────────────
+
+  function handleReviewQueue() {
+    closeDropdown();
+    if (window.App && typeof App.navigate === 'function') App.navigate('adminreview');
+  }
 
   function handleSettings() {
     closeDropdown();
@@ -465,7 +484,7 @@ const Navbar = (() => {
     }
   }
 
-  return { init, setActive, handleSettings, handleHelp, handleSignOut };
+  return { init, setActive, handleReviewQueue, handleSettings, handleHelp, handleSignOut };
 })();
 
 if (typeof window !== 'undefined') window.Navbar = Navbar;

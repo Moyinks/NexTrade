@@ -11,7 +11,7 @@
  * Bump CACHE_VERSION whenever you deploy changes so users get fresh files.
  */
 
-const CACHE_VERSION  = 'nextrade-institutional-system-v1';
+const CACHE_VERSION  = 'nextrade-demo-settlement-v1';
 const OFFLINE_URL    = '/login.html';
 
 // ── FILES TO PRECACHE ON INSTALL ──────────────────────────────────────────────
@@ -27,6 +27,8 @@ const PRECACHE_URLS = [
   '/core.css',
   '/components.css',
   '/design-system.css',
+  '/demo-deposit.css',
+  '/admin-review.css',
   '/hero-card.css',
   '/layout.css',
   '/pages.css',
@@ -45,6 +47,8 @@ const PRECACHE_URLS = [
   '/app-actions.js',
   '/format.js',
   '/transaction-ui.js',
+  '/demo-deposit.js',
+  '/admin-review.js',
   '/validation.js',
   '/safe-dom.js',
   '/storage.js',
@@ -293,3 +297,29 @@ async function networkFirstWithOfflineFallback(request) {
     );
   }
 }
+
+
+// ADMIN WEB PUSH — demo-review queue only.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; }
+  catch (_) { data = { body: event.data ? event.data.text() : '' }; }
+  const title = data.title || 'NexTrade Review';
+  const options = {
+    body: data.body || 'A demo settlement needs review.',
+    icon: '/pwa1.png', badge: '/pwa1.png',
+    tag: data.tag || 'nextrade-demo-review', renotify: true,
+    data: { url: data.url || '/index.html?route=adminreview' }
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/index.html?route=adminreview';
+  event.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(async (clients) => {
+    for (const client of clients) {
+      if ('navigate' in client) { await client.navigate(target); return client.focus(); }
+    }
+    return self.clients.openWindow(target);
+  }));
+});

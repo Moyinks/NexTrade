@@ -4,6 +4,7 @@
   const actions = Object.freeze({
     'market-refresh': () => window.Market && window.Market.refresh(),
     'market-refresh-trending': () => window.Market && window.Market.refreshTrending(),
+    'navbar-review-queue': () => window.Navbar && window.Navbar.handleReviewQueue(),
     'navbar-settings': () => window.Navbar && window.Navbar.handleSettings(),
     'navbar-help': () => window.Navbar && window.Navbar.handleHelp(),
     'navbar-signout': () => window.Navbar && window.Navbar.handleSignOut(),

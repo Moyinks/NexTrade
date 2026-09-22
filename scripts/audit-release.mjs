@@ -225,6 +225,39 @@ if (
   pass('Shared institutional design/transaction system');
 }
 
+
+// 12) Demo settlement architecture: safe, centralized, and operational.
+const demoRequired = [
+  'demo-deposit.css','demo-deposit.js','admin-review.css','admin-review.js',
+  'api/demo-deposit.js','api/admin-deposit-reviews.js','api/admin-push.js',
+  'server/supabase-server.js','server/admin-push.js','MIGRATION_DEMO_SETTLEMENT.sql',
+  'scripts/design-debt.mjs','DESIGN_DEBT_BASELINE.json'
+];
+for (const file of demoRequired) if (!fs.existsSync(path.join(root,file))) fail(`Missing demo settlement component: ${file}`);
+const demoConfig = read('config.js');
+const demoPage = read('demo-deposit.js');
+const adminPage = read('admin-review.js');
+const appController = read('app.js');
+const canonicalSchema = read('SCHEMA.sql');
+if (!/realDeposit:\s*false/.test(demoConfig)) fail('Demo settlement does not keep realDeposit false');
+if (!/demoDeposit:\s*true/.test(demoConfig)) fail('Demo settlement feature is not enabled');
+if (!/demoDeposit:\s*['"]\/api\/demo-deposit['"]/.test(demoConfig)) fail('Browser demo deposit route is not canonical');
+if (/test-manual-deposit/.test(demoConfig)) fail('Legacy preview-only deposit route remains in browser config');
+if (fs.existsSync(path.join(root,'api/test-manual-deposit.js'))) fail('Legacy preview-only manual-deposit API still exists');
+for (const [file,source] of [['demo-deposit.js',demoPage],['admin-review.js',adminPage]]) {
+  if (/\.style(?:\.cssText|\.[A-Za-z_$][\w$]*)\s*=/.test(source)) fail(`${file} contains imperative presentation styling`);
+  if (/\bstyle\s*=\s*["'`]/.test(source)) fail(`${file} contains inline style markup`);
+  if (/#[0-9a-fA-F]{3,8}\b|rgba?\(/.test(source)) fail(`${file} contains hard-coded presentation colors`);
+}
+for (const required of ['deposit_review_requests','create_demo_deposit_request','process_demo_deposit_review','admin_push_subscriptions','demo_deposits_enabled','supabase_realtime add table public.transactions']) {
+  if (!canonicalSchema.includes(required)) fail(`SCHEMA.sql missing demo settlement contract: ${required}`);
+}
+if (!/payload\.eventType === 'UPDATE'/.test(appController)) fail('Realtime listener does not refresh transaction updates');
+if (!/self\.addEventListener\('push'/.test(sw)) fail('Service worker does not handle admin push alerts');
+const debt = spawnSync(process.execPath,['scripts/design-debt.mjs'],{cwd:root,encoding:'utf8'});
+if (debt.status !== 0) fail(`Design-debt ratchet: ${(debt.stderr || debt.stdout || '').trim()}`); else pass('Design debt ratchet did not increase');
+if (!failures.some((x) => x.includes('demo settlement') || x.includes('Demo settlement') || x.includes('presentation styling') || x.includes('hard-coded presentation') || x.includes('Realtime listener') || x.includes('push alerts'))) pass('Demo settlement architecture');
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);
