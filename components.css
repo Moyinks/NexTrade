@@ -15,7 +15,7 @@
   justify-content: center;
   gap: var(--space-2);
   padding: 0 var(--space-4); /* Horizontal padding */
-  height: 44px; /* Fixed height for touch consistency */
+  height: var(--nt-control-base); /* canonical touch control */
   
   font-family: var(--font-ui);
   font-size: var(--text-sm);
@@ -23,7 +23,7 @@
   letter-spacing: var(--tracking-wide);
   
   border: 1px solid transparent;
-  border-radius: var(--radius-base); /* Moving towards rounding */
+  border-radius: var(--nt-radius-control);
   cursor: pointer;
   
   /* The "Tactile" Feel */
@@ -115,14 +115,22 @@
 
 /* Sizes */
 .btn-sm {
-  height: 40px;
+  height: var(--nt-control-compact);
   padding: 0 var(--space-3);
   font-size: var(--text-xs);
   border-radius: var(--radius-sm);
 }
 
+
+.btn-emphasis {
+  height: var(--nt-control-emphasis);
+  padding: 0 var(--space-6);
+  font-size: var(--text-sm);
+  border-radius: var(--nt-radius-control);
+}
+
 .btn-lg {
-  height: 56px;
+  height: var(--nt-control-hero);
   padding: 0 var(--space-8);
   font-size: var(--text-base);
   border-radius: var(--radius-lg);
@@ -137,7 +145,7 @@
   width: 44px;
   height: 44px;
   padding: 0;
-  border-radius: 50%; /* Circle */
+  border-radius: var(--nt-radius-pill); /* Circle */
 }
 
 /* ============================================
@@ -147,7 +155,7 @@
 .card {
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--nt-radius-card);
   padding: var(--space-5);
   position: relative;
   box-shadow: var(--shadow-highlight);
@@ -238,6 +246,7 @@
 .input-field {
   width: 100%;
   height: 48px;
+  min-height: 48px;
   padding: 0 var(--space-4);
   
   font-family: var(--font-ui);

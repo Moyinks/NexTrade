@@ -11,7 +11,7 @@
  * Bump CACHE_VERSION whenever you deploy changes so users get fresh files.
  */
 
-const CACHE_VERSION  = 'nextrade-manual-deposit-test-v1';
+const CACHE_VERSION  = 'nextrade-institutional-system-v1';
 const OFFLINE_URL    = '/login.html';
 
 // ── FILES TO PRECACHE ON INSTALL ──────────────────────────────────────────────
@@ -23,8 +23,10 @@ const PRECACHE_URLS = [
   '/login.html',
   '/index.html',
   // Stylesheets
+  '/brand-system.css',
   '/core.css',
   '/components.css',
+  '/design-system.css',
   '/hero-card.css',
   '/layout.css',
   '/pages.css',
@@ -42,6 +44,7 @@ const PRECACHE_URLS = [
   '/index-entry.js',
   '/app-actions.js',
   '/format.js',
+  '/transaction-ui.js',
   '/validation.js',
   '/safe-dom.js',
   '/storage.js',

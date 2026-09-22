@@ -617,9 +617,11 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
   function createFilters() {
     const filters = document.createElement('div');
-    filters.className = 'market-filters';
-    filters.style.cssText = 'display:flex; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding:0 16px 2px 16px; width:100%; box-sizing:border-box;';
+    filters.className = 'market-filters ui-filter-row';
     filters.id = 'market-filters';
+    filters.style.cssText =
+      'padding:0 16px 2px 16px;' +
+      'width:100%;box-sizing:border-box;';
 
     const filterOptions = [
       { id: 'all', label: 'All', icon: 'fa-list' },
@@ -630,33 +632,19 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
     filterOptions.forEach(option => {
       const btn = document.createElement('button');
-      btn.className = 'market-filter-btn';
-      
       const isActive = option.id === currentFilter;
-      
-      btn.style.cssText = `
-        flex-shrink:0;
-        padding:8px 16px;
-        border-radius:20px;
-        font-size:12px;
-        font-weight:600;
-        border:none;
-        cursor:pointer;
-        transition: all 0.2s;
-        display:flex;
-        align-items:center;
-        gap:6px;
-        background:${isActive ? 'var(--color-primary)' : 'var(--color-surface)'};
-        color:${isActive ? '#fff' : 'var(--color-text-primary)'};
-        border: 1px solid ${isActive ? 'var(--color-primary)' : 'var(--color-border)'};
-      `;
+
+      btn.className = 'market-filter-btn ui-filter-chip';
+      btn.dataset.filter = option.id;
+      btn.setAttribute(
+        'aria-pressed',
+        String(isActive)
+      );
 
       btn.innerHTML = `
-        <i class="fas ${option.icon}" style="font-size:10px;"></i>
+        <i class="fas ${option.icon}" aria-hidden="true"></i>
         <span>${option.label}</span>
       `;
-
-      btn.setAttribute('data-filter', option.id);
 
       btn.addEventListener('click', () => {
         handleFilterChange(option.id);
@@ -884,14 +872,17 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
   function handleFilterChange(filterId) {
     currentFilter = filterId;
 
-    const filterBtns = document.querySelectorAll('.market-filter-btn');
+    const filterBtns =
+      document.querySelectorAll('.market-filter-btn');
+
     filterBtns.forEach(btn => {
-      const btnFilterId = btn.getAttribute('data-filter');
-      const isActive = btnFilterId === filterId;
-      
-      btn.style.background = isActive ? 'var(--color-primary)' : 'var(--color-surface)';
-      btn.style.color = isActive ? '#fff' : 'var(--color-text-primary)';
-      btn.style.borderColor = isActive ? 'var(--color-primary)' : 'var(--color-border)';
+      btn.setAttribute(
+        'aria-pressed',
+        String(
+          btn.getAttribute('data-filter') ===
+          filterId
+        )
+      );
     });
 
     let filtered = applyFilter(marketData, filterId);

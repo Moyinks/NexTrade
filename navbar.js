@@ -183,7 +183,7 @@ const Navbar = (() => {
         align-items: center;
         background: ${SURFACE};
         border: 1px solid rgba(255,255,255,0.10);
-        border-radius: 22px;
+        border-radius: var(--nt-radius-sheet);
         box-shadow:
           inset 0 1px 0 rgba(255,255,255,0.07),
           0 8px 32px rgba(0,0,0,0.75),
@@ -206,13 +206,13 @@ const Navbar = (() => {
         justify-content: center;
         gap: 4px;
         padding: 9px 4px 8px;
-        border-radius: 17px;
+        border-radius: var(--nt-radius-card);
         border: none;
         background: transparent;
         cursor: pointer;
         -webkit-tap-highlight-color: transparent;
         user-select: none;
-        transition: background 0.2s ease, transform 0.15s ease;
+        transition: background var(--nt-motion-state) var(--nt-ease-standard), transform var(--nt-motion-press) var(--nt-ease-standard);
         position: relative;
         min-width: 0;
       }
@@ -227,11 +227,11 @@ const Navbar = (() => {
       .ntm-pill-icon {
         width: 26px;
         height: 26px;
-        border-radius: 8px;
+        border-radius: var(--nt-radius-compact);
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background 0.2s ease;
+        transition: background var(--nt-motion-state) var(--nt-ease-standard);
       }
       .ntm-pill-item.active .ntm-pill-icon {
         background: var(--ntm-color-a, rgba(59,130,246,0.16));
@@ -240,8 +240,8 @@ const Navbar = (() => {
         font-size: 12px;
         line-height: 1;
         display: block;
-        color: #94A3B8;
-        transition: color 0.2s ease;
+        color: var(--color-text-secondary);
+        transition: color var(--nt-motion-state) var(--nt-ease-standard);
       }
       .ntm-pill-item.active .ntm-pill-icon i {
         color: var(--ntm-color, #3B82F6);
@@ -254,9 +254,9 @@ const Navbar = (() => {
         font-weight: 600;
         letter-spacing: 0.3px;
         text-transform: uppercase;
-        color: #94A3B8;
+        color: var(--color-text-secondary);
         line-height: 1;
-        transition: color 0.2s ease;
+        transition: color var(--nt-motion-state) var(--nt-ease-standard);
         pointer-events: none;
         white-space: nowrap;
       }

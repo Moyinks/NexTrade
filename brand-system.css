@@ -1,0 +1,67 @@
+/**
+ * NexTrade — Brand Foundation
+ *
+ * This file contains cross-theme facts.
+ *
+ * Editorial landing and institutional app are intentionally visually
+ * different. They still share one brand/action scale, semantic state
+ * language, geometry system, control sizing and motion physics.
+ */
+
+:root {
+  /* Brand action scale */
+  --nt-blue-500: #3B82F6;
+  --nt-blue-600: #2563EB;
+  --nt-blue-700: #1D4ED8;
+
+  /* Semantic state scale */
+  --nt-success-500: #10B981;
+  --nt-warning-500: #F59E0B;
+  --nt-danger-500: #EF4444;
+
+  /* Editorial variants chosen for contrast against warm paper */
+  --nt-editorial-success: #007A4C;
+  --nt-editorial-warning: #8B5200;
+  --nt-editorial-danger: #9B1C1C;
+
+  /*
+   * Geometry contract
+   *
+   * 8   compact controls / icon wells
+   * 12  ordinary controls
+   * 16  cards
+   * 24  large surfaces / sheets
+   * pill only for true pills/chips
+   */
+  --nt-radius-compact: 8px;
+  --nt-radius-control: 12px;
+  --nt-radius-card: 16px;
+  --nt-radius-sheet: 24px;
+  --nt-radius-pill: 999px;
+
+  /*
+   * Interaction sizing
+   *
+   * The hierarchy intentionally follows acquisition importance:
+   * small utility < normal control < important action < hero action.
+   */
+  --nt-control-compact: 40px;
+  --nt-control-base: 44px;
+  --nt-control-emphasis: 52px;
+  --nt-control-hero: 56px;
+
+  /*
+   * Motion physics
+   *
+   * More displacement receives slightly more time.
+   * State changes should never feel as heavy as a travelling sheet.
+   */
+  --nt-motion-press: 100ms;
+  --nt-motion-state: 150ms;
+  --nt-motion-content: 220ms;
+  --nt-motion-page: 260ms;
+  --nt-motion-sheet: 320ms;
+
+  --nt-ease-standard: cubic-bezier(0.25, 0, 0.15, 1);
+  --nt-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}

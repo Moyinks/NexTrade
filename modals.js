@@ -58,7 +58,7 @@ const Modal = (() => {
         max-height: 90vh;
         display: flex; flex-direction: column;
         background: #111621;
-        border-radius: 24px 24px 0 0;
+        border-radius: var(--nt-radius-sheet) var(--nt-radius-sheet) 0 0;
         border: 1px solid rgba(255,255,255,0.09);
         border-bottom: none;
         box-shadow:
@@ -68,7 +68,7 @@ const Modal = (() => {
         overflow: hidden;
         pointer-events: all;
         transform: translateY(100%);
-        transition: transform 0.34s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+        transition: transform var(--nt-motion-sheet) var(--nt-ease-out), opacity var(--nt-motion-content) var(--nt-ease-standard);
       }
       .ntm-overlay.ntm-open .ntm-card {
         transform: translateY(0);
@@ -84,7 +84,7 @@ const Modal = (() => {
       @media (min-width: 560px) {
         .ntm-overlay { align-items: center; padding: 24px; }
         .ntm-card {
-          border-radius: 24px;
+          border-radius: var(--nt-radius-sheet);
           border-bottom: 1px solid rgba(255,255,255,0.09);
           transform: translateY(16px) scale(0.97);
           opacity: 0;
@@ -98,7 +98,7 @@ const Modal = (() => {
 
       .ntm-card.ntm-confirm { max-width: 340px; }
       @media (max-width: 559px) {
-        .ntm-card.ntm-confirm { border-radius: 24px 24px 0 0; }
+        .ntm-card.ntm-confirm { border-radius: var(--nt-radius-sheet) var(--nt-radius-sheet) 0 0; }
       }
 
       .ntm-body { padding: 20px 24px 0; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
@@ -107,7 +107,7 @@ const Modal = (() => {
       .ntm-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0; }
       .ntm-title { font-family: var(--font-ui); font-size: 16px; font-weight: 700; color: #F8FAFC; letter-spacing: -0.2px; }
       .ntm-close-btn {
-        width: 40px; height: 40px; border-radius: 10px;
+        width: 40px; height: 40px; border-radius: var(--nt-radius-control);
         background: rgba(255,255,255,0.07); border: none; color: #94A3B8;
         display: flex; align-items: center; justify-content: center;
         cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s; font-size: 13px;

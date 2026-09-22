@@ -24,6 +24,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Barlow:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+<link rel="stylesheet" href="brand-system.css">
 
 <style>
 
@@ -51,18 +52,18 @@
 
   /* Action — blue for primary CTAs and interactive focus. Same brand blue
      as the app's --color-primary, but used here against warm paper. */
-  --action:       #2563EB;
-  --action-hover: #1D4ED8;
+  --action:       var(--nt-blue-600);
+  --action-hover: var(--nt-blue-700);
   --action-glow:  rgba(37, 99, 235, 0.15);
 
   /* Accent — used sparingly */
-  --live:         #007A4C;
+  --live:         var(--nt-editorial-success);
   --live-bg:      rgba(0,122,76,0.08);
   --live-border:  rgba(0,122,76,0.25);
-  --warn:         #8B5200;
+  --warn:         var(--nt-editorial-warning);
   --warn-bg:      rgba(139,82,0,0.08);
   --warn-border:  rgba(139,82,0,0.25);
-  --danger:       #9B1C1C;
+  --danger:       var(--nt-editorial-danger);
   --danger-bg:    rgba(155,28,28,0.08);
 
   /* Type */
@@ -1170,13 +1171,13 @@ img { display: block; max-width: 100%; }
   --auth-text:        #F8FAFC;
   --auth-text-2:      #94A3B8;
   --auth-text-3:      #64748B;
-  --auth-blue:        #3B82F6;
-  --auth-blue-dark:   #2563EB;
+  --auth-blue:        var(--nt-blue-500);
+  --auth-blue-dark:   var(--nt-blue-600);
   --auth-blue-glow:   rgba(59, 130, 246, 0.18);
   --auth-mono:        'IBM Plex Mono', 'Roboto Mono', monospace;
   --auth-ui:          'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --auth-success:     #10B981;
-  --auth-danger:      #EF4444;
+  --auth-success:     var(--nt-success-500);
+  --auth-danger:      var(--nt-danger-500);
   --auth-danger-bg:   rgba(239, 68, 68, 0.10);
 
   position: absolute; inset: 0;
@@ -1303,7 +1304,8 @@ img { display: block; max-width: 100%; }
   width: 100%;
   background: #050709;
   border: 1px solid var(--auth-border);
-  border-radius: 10px;
+  border-radius: var(--nt-radius-control);
+  min-height: var(--nt-control-emphasis);
   padding: 14px 14px;
   font-size: 16px;
   font-family: var(--auth-ui);
@@ -1373,11 +1375,11 @@ img { display: block; max-width: 100%; }
 /* ── Submit button — dark context ── */
 #auth .btn-submit {
   width: 100%;
-  height: 52px;
+  height: var(--nt-control-emphasis);
   background: var(--auth-blue);
   color: #fff;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--nt-radius-control);
   font-family: var(--auth-ui);
   font-size: 15px;
   font-weight: 600;

@@ -64,8 +64,31 @@ const Feed = (() => {
       const amount = document.createElement('div');
       amount.className = 'activity-amount financial-data';
       
-      const prefix = activity.type === 'BUY' || activity.type === 'DEPOSIT' ? '+' : '';
-      amount.textContent = prefix + Format.currency(activity.amount);
+      const view =
+        window.TransactionUI &&
+        typeof TransactionUI.present === 'function'
+          ? TransactionUI.present({
+              ...activity,
+              type: String(activity.type || '').toLowerCase(),
+              status: activity.status || 'completed'
+            })
+          : null;
+
+      const prefix = view
+        ? view.amountPrefix
+        : (
+            activity.type === 'BUY' ||
+            activity.type === 'DEPOSIT'
+              ? '+'
+              : ''
+          );
+
+      if (view) {
+        amount.dataset.tone = view.tone;
+      }
+
+      amount.textContent =
+        prefix + Format.currency(activity.amount);
       
       meta.appendChild(amount);
     }

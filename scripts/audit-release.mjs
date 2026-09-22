@@ -145,6 +145,86 @@ for (const file of allFiles.filter((f) => /\.(?:js|mjs|html|css|sql|json|md|exam
 }
 if (!failures.some((x) => x.startsWith('Possible privileged secret'))) pass('No obvious committed privileged secret material');
 
+
+// 11) Shared visual operating system must stay wired globally.
+for (const asset of [
+  'brand-system.css',
+  'design-system.css',
+  'transaction-ui.js'
+]) {
+  if (!fs.existsSync(path.join(root, asset))) {
+    fail(`Missing design-system asset: ${asset}`);
+  }
+}
+
+const indexSource = read('index.html');
+const loginSource = read('login.html');
+const walletSource = read('wallet.js');
+const homeSource = read('home.js');
+const feedSource = read('feed.js');
+const transactionUiSource = read('transaction-ui.js');
+
+for (const ref of [
+  'brand-system.css',
+  'design-system.css',
+  'transaction-ui.js'
+]) {
+  if (!indexSource.includes(ref)) {
+    fail(`index.html does not load ${ref}`);
+  }
+}
+
+if (!loginSource.includes('brand-system.css')) {
+  fail('Landing/auth does not consume shared brand foundation');
+}
+
+for (const [file, source] of [
+  ['wallet.js', walletSource],
+  ['home.js', homeSource],
+  ['feed.js', feedSource]
+]) {
+  if (!source.includes('TransactionUI.present')) {
+    fail(`${file} bypasses shared transaction presentation`);
+  }
+}
+
+if (walletSource.includes('const TX_META')) {
+  fail('wallet.js reintroduced local transaction semantics');
+}
+
+if (homeSource.includes('function typeMeta(tx)')) {
+  fail('home.js reintroduced local transaction semantics');
+}
+
+if (walletSource.includes('#475569')) {
+  fail('Wallet tabs reintroduced known low-contrast inactive text');
+}
+
+for (const requiredState of [
+  'pending',
+  'approved',
+  'completed',
+  'rejected',
+  'failed',
+  'cancelled'
+]) {
+  if (!transactionUiSource.includes(requiredState)) {
+    fail(`TransactionUI missing state: ${requiredState}`);
+  }
+}
+
+if (
+  !failures.some((x) =>
+    x.includes('design-system') ||
+    x.includes('shared transaction') ||
+    x.includes('local transaction') ||
+    x.includes('low-contrast') ||
+    x.includes('TransactionUI')
+  )
+) {
+  pass('Shared institutional design/transaction system');
+}
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);

@@ -236,7 +236,9 @@ const Wallet = (() => {
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       filtered = filtered.filter(tx => {
-        const label = TX_META[tx.type]?.label || tx.type || '';
+        const label = window.TransactionUI
+          ? TransactionUI.present(tx).label
+          : (tx.type || '');
         return label.toLowerCase().includes(searchLower) ||
                tx.type?.toLowerCase().includes(searchLower) ||
                tx.status?.toLowerCase().includes(searchLower) ||
@@ -277,84 +279,80 @@ const Wallet = (() => {
      ═══════════════════════════════════════════════════════════════════════════ */
   function createTabNavigation() {
     const nav = document.createElement('div');
-    nav.style.cssText = `
-      display: flex;
-      background: #0f172a;
-      padding: 4px;
-      border-radius: 12px;
-      margin: 0 0 16px 0;
-      border: 1px solid rgba(255,255,255,0.05);
-      flex-shrink: 0;
-    `;
-    
+    nav.className = 'ui-segmented wallet-segmented';
+    nav.setAttribute('role', 'tablist');
+    nav.setAttribute('aria-label', 'Wallet sections');
+
     const tabs = [
       { id: 'overview', label: 'Overview', icon: 'fa-home' },
       { id: 'assets', label: 'Assets', icon: 'fa-coins' },
       { id: 'activity', label: 'Activity', icon: 'fa-list' }
     ];
-    
+
     tabs.forEach(tab => {
       const btn = document.createElement('button');
-      btn.className = 'wallet-tab-btn';
-      btn.dataset.tab = tab.id;
       const isActive = tab.id === state.ui.activeTab;
-      
-      btn.style.cssText = `
-        flex: 1;
-        padding: 10px 0;
-        border: none;
-        border-radius: 8px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        background: ${isActive ? 'rgba(255,255,255,0.09)' : 'transparent'};
-        color: ${isActive ? '#ffffff' : '#475569'};
-        box-shadow: ${isActive ? '0 1px 3px rgba(0,0,0,0.35)' : 'none'};
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-      `;
-      
-      btn.innerHTML = `<i class="fas ${tab.icon}" style="font-size:11px;"></i><span>${tab.label}</span>`;
+
+      btn.className = 'ui-segmented__item wallet-tab-btn';
+      btn.dataset.tab = tab.id;
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-selected', String(isActive));
+
+      btn.innerHTML =
+        `<i class="fas ${tab.icon}" aria-hidden="true"></i>` +
+        `<span>${tab.label}</span>`;
+
       btn.onclick = () => switchTab(tab.id);
       nav.appendChild(btn);
     });
-    
+
     return nav;
   }
 
   function switchTab(tabId) {
-    if (virtualScrollers[state.ui.activeTab] && virtualScrollers[state.ui.activeTab].container) {
-      state.ui.scrollPositions[state.ui.activeTab] = virtualScrollers[state.ui.activeTab].container.scrollTop;
+    if (
+      virtualScrollers[state.ui.activeTab] &&
+      virtualScrollers[state.ui.activeTab].container
+    ) {
+      state.ui.scrollPositions[state.ui.activeTab] =
+        virtualScrollers[state.ui.activeTab].container.scrollTop;
     }
-    
+
     state.ui.activeTab = tabId;
-    
+
     document.querySelectorAll('.wallet-tab-btn').forEach(btn => {
-      const isActive = btn.dataset.tab === tabId;
-      btn.style.background = isActive ? 'rgba(255,255,255,0.09)' : 'transparent';
-      btn.style.color = isActive ? '#ffffff' : '#475569';
-      btn.style.boxShadow = isActive ? '0 1px 3px rgba(0,0,0,0.35)' : 'none';
+      btn.setAttribute(
+        'aria-selected',
+        String(btn.dataset.tab === tabId)
+      );
     });
-    
-    const contentContainer = container.querySelector('#tab-content-container');
+
+    const contentContainer =
+      container.querySelector('#tab-content-container');
+
     if (contentContainer) {
       Object.values(virtualScrollers).forEach(scroller => {
         if (scroller && scroller.destroy) scroller.destroy();
       });
+
       virtualScrollers = {};
-      
+
       const newContent = renderTabContent(tabId);
       contentContainer.innerHTML = '';
       contentContainer.appendChild(newContent);
-      
+
       requestAnimationFrame(() => {
-        if (state.ui.scrollPositions[tabId] && virtualScrollers[tabId]) {
+        if (
+          state.ui.scrollPositions[tabId] &&
+          virtualScrollers[tabId]
+        ) {
           requestAnimationFrame(() => {
-            if (virtualScrollers[tabId] && virtualScrollers[tabId].container) {
-              virtualScrollers[tabId].container.scrollTop = state.ui.scrollPositions[tabId];
+            if (
+              virtualScrollers[tabId] &&
+              virtualScrollers[tabId].container
+            ) {
+              virtualScrollers[tabId].container.scrollTop =
+                state.ui.scrollPositions[tabId];
             }
           });
         }
@@ -516,67 +514,82 @@ const Wallet = (() => {
 
   function createQuickActions() {
     const section = document.createElement('div');
-    section.style.cssText = 'display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:16px; padding:0;';
-    
+    section.className = 'ui-action-grid';
+
     const actions = [
-      { label: 'Deposit', icon: 'fa-arrow-down', color: '#10b981', action: () => window.Trade && Trade.openDeposit() },
-      { label: 'Withdraw', icon: 'fa-arrow-up', color: '#ef4444', action: () => window.Trade && Trade.openWithdraw() },
-      { label: 'Transfer', icon: 'fa-exchange-alt', color: '#8b5cf6', action: () => openTransferModal() }
+      {
+        label: 'Deposit',
+        icon: 'fa-arrow-down',
+        tone: 'success',
+        action: () => window.Trade && Trade.openDeposit()
+      },
+      {
+        label: 'Withdraw',
+        icon: 'fa-arrow-up',
+        tone: 'danger',
+        action: () => window.Trade && Trade.openWithdraw()
+      },
+      {
+        label: 'Transfer',
+        icon: 'fa-exchange-alt',
+        tone: 'brand',
+        action: () => openTransferModal()
+      }
     ];
-    
+
     actions.forEach(actionData => {
       const btn = document.createElement('button');
-      btn.style.cssText = `
-        background:var(--color-surface); border:1px solid var(--color-border);
-        border-radius:10px; padding:12px 8px; height:auto;
-        display:flex; flex-direction:column; align-items:center; justify-content:center;
-        gap:5px; cursor:pointer; transition:all 0.2s;
-      `;
-      
+
+      btn.className = 'ui-action';
+      btn.dataset.tone = actionData.tone;
+
       btn.innerHTML = `
-        <div style="width:28px; height:28px; border-radius:7px; background:${actionData.color}15; color:${actionData.color}; display:flex; align-items:center; justify-content:center;">
-          <i class="fas ${actionData.icon}" style="font-size:12px;"></i>
-        </div>
-        <span style="font-size:11px; font-weight:600; color:var(--color-text-primary);">${actionData.label}</span>
+        <span class="ui-action__icon" aria-hidden="true">
+          <i class="fas ${actionData.icon}"></i>
+        </span>
+        <span class="ui-action__label">${actionData.label}</span>
       `;
-      
-      btn.onmouseenter = () => {
-        btn.style.borderColor = actionData.color;
-        btn.style.background = `${actionData.color}08`;
-      };
-      btn.onmouseleave = () => {
-        btn.style.borderColor = 'var(--color-border)';
-        btn.style.background = 'var(--color-surface)';
-      };
-      
+
       btn.onclick = actionData.action;
-      
       section.appendChild(btn);
     });
-    
+
     return section;
   }
 
   function createRecentActivity() {
     const section = document.createElement('div');
-    section.style.cssText = 'margin-bottom:20px; padding:0;';
-    
-    section.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h3 style="font-size:14px; font-weight:700; color:var(--color-text-primary); margin:0;">Recent Activity</h3>
-        <button data-app-action="wallet-activity" style="background:none; border:none; color:var(--color-primary); font-size:11px; font-weight:600; cursor:pointer;">View All →</button>
-      </div>
-    `;
-    
+    section.style.marginBottom = '20px';
+
+    const header = document.createElement('div');
+    header.style.cssText =
+      'display:flex;justify-content:space-between;' +
+      'align-items:center;margin-bottom:12px;';
+
+    const title = document.createElement('h3');
+    title.textContent = 'Recent Activity';
+    title.style.cssText =
+      'font-size:14px;font-weight:700;' +
+      'color:var(--color-text-primary);margin:0;';
+
+    const allBtn = document.createElement('button');
+    allBtn.dataset.appAction = 'wallet-activity';
+    allBtn.className = 'btn btn-ghost btn-sm';
+    allBtn.textContent = 'View All →';
+
+    header.appendChild(title);
+    header.appendChild(allBtn);
+    section.appendChild(header);
+
     const list = document.createElement('div');
-    list.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
-    
-    const recent = state.transactions.slice(0, 5);
-    
-    recent.forEach(tx => {
-      list.appendChild(createTransactionCard(tx));
-    });
-    
+    list.className = 'tx-list';
+
+    state.transactions
+      .slice(0, 5)
+      .forEach(tx => {
+        list.appendChild(createTransactionCard(tx));
+      });
+
     section.appendChild(list);
     return section;
   }
@@ -907,42 +920,26 @@ const Wallet = (() => {
     }
   }
 
-  /* ─── transaction type metadata ─── */
-  const TX_META = {
-    deposit:      { label: 'Deposit',          icon: 'fa-arrow-down',        iconBg: 'rgba(16,185,129,0.15)',  iconColor: '#10b981', isCredit: true  },
-    withdraw:     { label: 'Withdrawal',       icon: 'fa-arrow-up',          iconBg: 'rgba(239,68,68,0.15)',   iconColor: '#ef4444', isCredit: false },
-    buy:          { label: 'Buy Order',        icon: 'fa-arrow-trend-up',    iconBg: 'rgba(59,130,246,0.15)',  iconColor: '#3b82f6', isCredit: false },
-    sell:         { label: 'Sell Order',       icon: 'fa-arrow-trend-down',  iconBg: 'rgba(245,158,11,0.15)', iconColor: '#f59e0b', isCredit: true  },
-    investment:   { label: 'Strategy Entry',   icon: 'fa-layer-group',       iconBg: 'rgba(139,92,246,0.15)', iconColor: '#8b5cf6', isCredit: false },
-    claim:        { label: 'Cycle Return',     icon: 'fa-coins',             iconBg: 'rgba(16,185,129,0.15)', iconColor: '#10b981', isCredit: true  },
-    transfer_in:  { label: 'Transfer In',      icon: 'fa-arrows-left-right', iconBg: 'rgba(99,102,241,0.15)', iconColor: '#6366f1', isCredit: true  },
-    transfer_out: { label: 'Transfer Out',     icon: 'fa-arrows-left-right', iconBg: 'rgba(99,102,241,0.15)', iconColor: '#6366f1', isCredit: false },
-  };
+  /* ─── transaction presentation ─── */
 
-  const TX_CONTEXT = {
-    deposit:      { pending: 'Awaiting admin confirmation', completed: 'Credited to Spot Wallet', approved: 'Credited to Spot Wallet', failed: 'Deposit rejected' },
-    withdraw:     { pending: 'Processing — funds locked',  completed: 'Sent from Spot Wallet',   approved: 'Sent from Spot Wallet',  failed: 'Withdrawal failed' },
-    buy:          { pending: 'Order pending',              completed: 'Crypto bought via Spot',  approved: 'Crypto bought via Spot', failed: 'Order cancelled' },
-    sell:         { pending: 'Order pending',              completed: 'Proceeds to Spot Wallet', approved: 'Proceeds to Spot Wallet',failed: 'Sell failed' },
-    investment:   { pending: 'Entering strategy…',        completed: 'Capital deployed in Vault', approved: 'Capital deployed in Vault', failed: 'Entry failed' },
-    claim:        { pending: 'Cycle return processing',    completed: 'Principal + cycle return to Spot Wallet', approved: 'Principal + cycle return to Spot Wallet', failed: 'Claim failed' },
-    transfer_in:  { pending: 'Transferring…',             completed: 'Vault \u2192 Spot Wallet', approved: 'Vault \u2192 Spot Wallet', failed: 'Transfer failed' },
-    transfer_out: { pending: 'Transferring…',             completed: 'Spot Wallet \u2192 Vault', approved: 'Spot Wallet \u2192 Vault', failed: 'Transfer failed' },
-  };
-
-  function getTxLabel(tx) {
-    const meta = TX_META[tx.type];
-    return meta ? meta.label : (tx.type || 'Transaction').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  }
-
-  function getTxSubline(tx) {
-    // Prefer an explicit description from the DB record
-    if (tx.description && tx.description.length > 2 && tx.description.toLowerCase() !== tx.type) {
-      return tx.description;
+  function transactionView(tx) {
+    if (
+      window.TransactionUI &&
+      typeof TransactionUI.present === 'function'
+    ) {
+      return TransactionUI.present(tx);
     }
-    const ctx = TX_CONTEXT[tx.type];
-    if (ctx) return ctx[tx.status] || ctx.completed || '';
-    return tx.status ? tx.status.charAt(0).toUpperCase() + tx.status.slice(1) : '';
+
+    return {
+      label: 'Transaction',
+      icon: 'fa-circle-dot',
+      direction: 'neutral',
+      tone: 'neutral',
+      amountPrefix: '',
+      status: String(tx.status || 'unknown'),
+      statusLabel: String(tx.status || 'Unknown'),
+      context: String(tx.description || '')
+    };
   }
 
   function formatTxDate(dateStr) {
@@ -950,76 +947,80 @@ const Wallet = (() => {
     const now = new Date();
     const diffMs = now - d;
     const dayMs = 86400000;
-    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (diffMs < dayMs) return timeStr + ' · Today';
-    if (diffMs < 2 * dayMs) return timeStr + ' · Yesterday';
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' + timeStr;
+
+    const timeStr = d.toLocaleTimeString(
+      [],
+      { hour: '2-digit', minute: '2-digit' }
+    );
+
+    if (diffMs < dayMs) {
+      return timeStr + ' · Today';
+    }
+
+    if (diffMs < 2 * dayMs) {
+      return timeStr + ' · Yesterday';
+    }
+
+    return d.toLocaleDateString(
+      [],
+      { month: 'short', day: 'numeric' }
+    ) + ' · ' + timeStr;
   }
 
   function createTransactionCard(tx) {
+    const view = transactionView(tx);
+
     const card = document.createElement('div');
-    card.style.cssText = [
-      'display:flex; align-items:center; justify-content:space-between;',
-      'padding:12px; background:var(--color-surface); border:1px solid var(--color-border);',
-      'border-radius:10px; gap:10px;'
-    ].join('');
+    card.className = 'tx-card';
+    card.dataset.status = view.status;
+    card.dataset.tone = view.tone;
+    card.dataset.direction = view.direction;
 
-    const meta = TX_META[tx.type] || {
-      label: (tx.type || 'Transaction').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      icon: 'fa-circle-dot', iconBg: 'rgba(148,163,184,0.12)', iconColor: '#94a3b8', isCredit: false
-    };
+    const icon = document.createElement('div');
+    icon.className = 'tx-card__icon';
 
-    const isPending  = tx.status === 'pending';
-    const isFailed   = tx.status === 'failed';
-    const isCredit   = meta.isCredit;
+    const iconGlyph = document.createElement('i');
+    iconGlyph.className = 'fas ' + view.icon;
+    iconGlyph.setAttribute('aria-hidden', 'true');
+    icon.appendChild(iconGlyph);
 
-    // Override icon color for status
-    let dotColor = meta.iconColor;
-    if (isPending) dotColor = '#f59e0b';
-    if (isFailed)  dotColor = '#ef4444';
+    const body = document.createElement('div');
+    body.className = 'tx-card__body';
 
-    const statusBadgeColor = { completed:'#10b981', approved:'#10b981', pending:'#f59e0b', failed:'#ef4444', cancelled:'#94a3b8' }[tx.status] || '#94a3b8';
+    const title = document.createElement('div');
+    title.className = 'tx-card__title';
+    title.textContent = view.label;
 
-    const amountColor = isFailed ? '#ef4444' : (isCredit ? '#10b981' : 'var(--color-text-primary)');
-    const amountSign  = isFailed ? '' : (isCredit ? '+' : '-');
+    const description = document.createElement('div');
+    description.className = 'tx-card__description';
+    description.textContent = view.context;
 
-    const label   = safeText(getTxLabel(tx));
-    const subline = safeText(getTxSubline(tx));
-    const dateStr = safeText(formatTxDate(tx.created_at));
-    const safeStatus = safeText(tx.status || 'unknown');
+    const meta = document.createElement('div');
+    meta.className = 'tx-card__meta';
 
-    card.innerHTML = `
-      <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
-        <div style="width:36px; height:36px; border-radius:50%; flex-shrink:0;
-                    background:${meta.iconBg}; color:${dotColor};
-                    border:1px solid ${dotColor}22;
-                    display:flex; align-items:center; justify-content:center;">
-          <i class="fas ${meta.icon}" style="font-size:12px;"></i>
-        </div>
-        <div style="flex:1; min-width:0;">
-          <div style="font-size:13px; font-weight:600; color:var(--color-text-primary);
-                      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-            ${label}
-          </div>
-          <div style="font-size:11px; color:var(--color-text-secondary); margin-top:2px;
-                      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-            ${subline}
-          </div>
-          <div style="font-size:9px; color:rgba(148,163,184,0.7); margin-top:3px; display:flex; align-items:center; gap:5px;">
-            <span>${dateStr}</span>
-            <span style="display:inline-block; padding:1px 5px; border-radius:3px;
-                         font-weight:700; text-transform:uppercase; letter-spacing:0.3px;
-                         background:${statusBadgeColor}18; color:${statusBadgeColor};">
-              ${safeStatus}
-            </span>
-          </div>
-        </div>
-      </div>
-      <div style="font-family:var(--font-mono); font-size:14px; font-weight:700;
-                  color:${amountColor}; flex-shrink:0; text-align:right;">
-        ${amountSign}${formatMoney(tx.amount)}
-      </div>
-    `;
+    const date = document.createElement('span');
+    date.textContent = formatTxDate(tx.created_at);
+
+    const badge = document.createElement('span');
+    badge.className = 'status-badge';
+    badge.dataset.tone = view.tone;
+    badge.textContent = view.statusLabel;
+
+    meta.appendChild(date);
+    meta.appendChild(badge);
+
+    body.appendChild(title);
+    body.appendChild(description);
+    body.appendChild(meta);
+
+    const amount = document.createElement('div');
+    amount.className = 'tx-card__amount';
+    amount.textContent =
+      view.amountPrefix + formatMoney(tx.amount);
+
+    card.appendChild(icon);
+    card.appendChild(body);
+    card.appendChild(amount);
 
     return card;
   }

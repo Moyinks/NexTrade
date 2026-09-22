@@ -39,9 +39,9 @@
   --color-border-active: rgba(255, 255, 255, 0.25);
   
   /* Primary Brand (Electric Blue) */
-  --color-primary: #3B82F6;          /* Vibrant, trustworthy blue */
-  --color-primary-hover: #2563EB;    /* Deepening on interaction */
-  --color-primary-active: #1D4ED8;
+  --color-primary: var(--nt-blue-500);          /* Vibrant, trustworthy blue */
+  --color-primary-hover: var(--nt-blue-600);    /* Deepening on interaction */
+  --color-primary-active: var(--nt-blue-700);
   --color-primary-glow: rgba(59, 130, 246, 0.15); /* For blurred effects */
   
   /* Text & Content */
@@ -53,13 +53,13 @@
   /* Functional Status Colors */
   /* Semantic Status Colors — four roles, no others:
      success/profit = green | caution/pending = amber | destructive/fail = red | action = blue (primary above) */
-  --color-success: #10B981;
+  --color-success: var(--nt-success-500);
   --color-success-bg: rgba(16, 185, 129, 0.12);
   --color-success-border: rgba(16, 185, 129, 0.22);
-  --color-warning: #F59E0B;
+  --color-warning: var(--nt-warning-500);
   --color-warning-bg: rgba(245, 158, 11, 0.12);
   --color-warning-border: rgba(245, 158, 11, 0.22);
-  --color-danger: #EF4444;
+  --color-danger: var(--nt-danger-500);
   --color-danger-bg: rgba(239, 68, 68, 0.12);
   --color-danger-border: rgba(239, 68, 68, 0.22);
 
@@ -113,11 +113,11 @@
      SHAPES & DEPTH
      ---------------------------------- */
      
-  --radius-sm:   8px;   /* Chips, badges, small inputs */
-  --radius-base: 12px;  /* Buttons, inputs, small cards */
-  --radius-lg:   16px;  /* Standard cards */
-  --radius-xl:   22px;  /* Modals, hero card bottom */
-  --radius-pill: 9999px;
+  --radius-sm:   var(--nt-radius-compact);   /* Chips, badges, small inputs */
+  --radius-base: var(--nt-radius-control);  /* Buttons, inputs, small cards */
+  --radius-lg:   var(--nt-radius-card);  /* Standard cards */
+  --radius-xl:   var(--nt-radius-sheet);  /* Modals, hero card bottom */
+  --radius-pill: var(--nt-radius-pill);
 
   /* Shadows (Atmospheric) */
   --shadow-sm:   0 1px 2px 0 rgba(0, 0, 0, 0.35);
@@ -130,9 +130,9 @@
   --color-text-disabled: #475569;   /* For disabled buttons / inputs */
 
   /* Animations — deceleration curve for enters, acceleration for exits */
-  --transition-fast:   150ms cubic-bezier(0.25, 0, 0.15, 1);
-  --transition-base:   240ms cubic-bezier(0.25, 0, 0.15, 1);
-  --transition-slow:   380ms cubic-bezier(0.25, 0, 0.15, 1);
+  --transition-fast:   var(--nt-motion-state) var(--nt-ease-standard);
+  --transition-base:   var(--nt-motion-content) var(--nt-ease-standard);
+  --transition-slow:   var(--nt-motion-page) var(--nt-ease-standard);
   --transition-bounce: 400ms cubic-bezier(0.34, 1.4, 0.64, 1);
   
   /* Layout Constaints */

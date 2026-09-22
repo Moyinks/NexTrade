@@ -218,16 +218,24 @@
     return txs.sort((a, b) => new Date(b.created_at || b.timestamp || 0) - new Date(a.created_at || a.timestamp || 0)).slice(0, 5);
   }
 
-  function typeMeta(tx) {
-    const raw = String(tx?.type || tx?.status || '').toLowerCase();
-    if (raw.includes('deposit')) return { label: 'Deposit', icon: '↓', tone: 'positive' };
-    if (raw.includes('withdraw')) return { label: 'Withdrawal', icon: '↑', tone: 'negative' };
-    if (raw.includes('claim')) return { label: 'Returns Claimed', icon: '✓', tone: 'positive' };
-    if (raw.includes('invest')) return { label: 'Strategy Entry', icon: '⬡', tone: 'neutral' };
-    if (raw.includes('sell')) return { label: 'Sell', icon: '↗', tone: 'negative' };
-    if (raw.includes('buy')) return { label: 'Trade', icon: '↘', tone: 'neutral' };
-    if (raw.includes('transfer')) return { label: 'Transfer', icon: '⇄', tone: 'neutral' };
-    return { label: safeText(tx?.type, 'Activity'), icon: '•', tone: 'neutral' };
+  function transactionView(tx) {
+    if (
+      window.TransactionUI &&
+      typeof TransactionUI.present === 'function'
+    ) {
+      return TransactionUI.present(tx);
+    }
+
+    return {
+      label: 'Transaction',
+      icon: 'fa-circle-dot',
+      direction: 'neutral',
+      tone: 'neutral',
+      amountPrefix: '',
+      status: String(tx?.status || 'unknown'),
+      statusLabel: String(tx?.status || 'Unknown'),
+      context: String(tx?.description || '')
+    };
   }
 
   function ownedAssets(snapshot) {
@@ -582,30 +590,87 @@
 
     const list = el('div', 'display:flex;flex-direction:column;gap:8px;');
     items.forEach(tx => {
-      const meta = typeMeta(tx);
-      const row = el('button', 'width:100%;text-align:left;border-radius:14px;padding:12px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);cursor:pointer;display:flex;align-items:center;gap:12px;min-width:0;');
+      const view = transactionView(tx);
+
+      const row = document.createElement('button');
+      row.className = 'tx-card tx-card--button tx-card--compact';
       row.type = 'button';
+      row.dataset.status = view.status;
+      row.dataset.tone = view.tone;
+      row.dataset.direction = view.direction;
+
       row.addEventListener('click', () => {
-        if (window.App && typeof App.navigate === 'function') App.navigate('wallet');
-        setTimeout(() => { if (window.Wallet && typeof Wallet.switchToActivity === 'function') Wallet.switchToActivity(); }, 120);
+        if (
+          window.App &&
+          typeof App.navigate === 'function'
+        ) {
+          App.navigate('wallet');
+        }
+
+        setTimeout(() => {
+          if (
+            window.Wallet &&
+            typeof Wallet.switchToActivity === 'function'
+          ) {
+            Wallet.switchToActivity();
+          }
+        }, 120);
       });
 
-      const icon = el('div', 'width:32px;height:32px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:' + (meta.tone === 'positive' ? 'rgba(16,185,129,0.12)' : meta.tone === 'negative' ? 'rgba(239,68,68,0.12)' : 'rgba(59,130,246,0.12)') + ';color:' + (meta.tone === 'positive' ? '#34d399' : meta.tone === 'negative' ? '#f87171' : '#93c5fd') + ';font-size:13px;font-weight:900;');
-      icon.textContent = meta.icon;
+      const icon = document.createElement('div');
+      icon.className = 'tx-card__icon';
+
+      const glyph = document.createElement('i');
+      glyph.className = 'fas ' + view.icon;
+      glyph.setAttribute('aria-hidden', 'true');
+      icon.appendChild(glyph);
+
+      const body = document.createElement('div');
+      body.className = 'tx-card__body';
+
+      const title = document.createElement('div');
+      title.className = 'tx-card__title';
+      title.textContent = view.label;
+
+      const description = document.createElement('div');
+      description.className = 'tx-card__description';
+      description.textContent = view.context;
+
+      const meta = document.createElement('div');
+      meta.className = 'tx-card__meta';
+
+      const when = document.createElement('span');
+      when.textContent = formatRelativeTime(
+        tx.created_at ||
+        tx.timestamp ||
+        Date.now()
+      );
+
+      const badge = document.createElement('span');
+      badge.className = 'status-badge';
+      badge.dataset.tone = view.tone;
+      badge.textContent = view.statusLabel;
+
+      meta.appendChild(when);
+      meta.appendChild(badge);
+
+      body.appendChild(title);
+      body.appendChild(description);
+      body.appendChild(meta);
+
+      const numericAmount = Number(tx.amount);
+      const amount = document.createElement('div');
+      amount.className = 'tx-card__amount';
+
+      amount.textContent =
+        Number.isFinite(numericAmount)
+          ? view.amountPrefix + formatMoney(numericAmount)
+          : '—';
+
       row.appendChild(icon);
+      row.appendChild(body);
+      row.appendChild(amount);
 
-      const copy = el('div', 'min-width:0;flex:1;');
-      copy.appendChild(el('div', 'font-size:13px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', meta.label + ' · ' + safeText(tx.description || tx.title || '')));
-      copy.appendChild(el('div', 'font-size:11px;color:rgba(255,255,255,0.6);margin-top:4px;', formatRelativeTime(tx.created_at || tx.timestamp || Date.now())));
-      row.appendChild(copy);
-
-      const amount = Number(tx.amount);
-      if (Number.isFinite(amount)) {
-        const right = el('div', 'text-align:right;flex-shrink:0;');
-        const isPositive = meta.tone === 'positive' || String(tx.type || '').toLowerCase().includes('deposit') || String(tx.type || '').toLowerCase().includes('claim');
-        right.appendChild(el('div', 'font-size:13px;font-weight:800;color:' + (isPositive ? '#34d399' : '#fca5a5') + ';', (isPositive ? '+' : '-') + formatMoney(amount)));
-        row.appendChild(right);
-      }
       list.appendChild(row);
     });
 
