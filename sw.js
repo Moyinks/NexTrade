@@ -11,7 +11,7 @@
  * Bump CACHE_VERSION whenever you deploy changes so users get fresh files.
  */
 
-const CACHE_VERSION  = 'nextrade-demo-settlement-v1';
+const CACHE_VERSION  = 'nextrade-theme-transaction-v1';
 const OFFLINE_URL    = '/login.html';
 
 // ── FILES TO PRECACHE ON INSTALL ──────────────────────────────────────────────
@@ -47,6 +47,17 @@ const PRECACHE_URLS = [
   '/app-actions.js',
   '/format.js',
   '/transaction-ui.js',
+  '/theme-bootstrap.js',
+  '/preferences.js',
+  '/theme.js',
+  '/experience.js',
+  '/themes.css',
+  '/legacy-theme-bridge.css',
+  '/experience.css',
+  '/settings.js',
+  '/settings.css',
+  '/transaction-detail.js',
+  '/transaction-detail.css',
   '/demo-deposit.js',
   '/admin-review.js',
   '/validation.js',

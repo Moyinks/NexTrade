@@ -970,7 +970,8 @@ const Wallet = (() => {
   function createTransactionCard(tx) {
     const view = transactionView(tx);
 
-    const card = document.createElement('div');
+    const card = document.createElement('button');
+    card.type = 'button';
     card.className = 'tx-card';
     card.dataset.status = view.status;
     card.dataset.tone = view.tone;
@@ -1021,6 +1022,12 @@ const Wallet = (() => {
     card.appendChild(icon);
     card.appendChild(body);
     card.appendChild(amount);
+
+    card.addEventListener('click', () => {
+      if (window.Transactiondetail && Transactiondetail.open) {
+        Transactiondetail.open(tx.id, 'wallet');
+      }
+    });
 
     return card;
   }

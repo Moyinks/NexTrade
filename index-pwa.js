@@ -32,6 +32,12 @@ if ('serviceWorker' in navigator) {
   
 
   const PWA_DISMISSED_KEY = 'nextrade_pwa_dismissed';
+
+  function reportInstallState(patch) {
+    if (window.ExperienceOrchestrator && ExperienceOrchestrator.setInstallState) {
+      ExperienceOrchestrator.setInstallState(patch);
+    }
+  }
   let androidInstallEvent = null;
 
   // Don't show banners if already installed or dismissed in last 7 days
@@ -48,6 +54,7 @@ if ('serviceWorker' in navigator) {
 
   function dismissPWABanner() {
     localStorage.setItem(PWA_DISMISSED_KEY, String(Date.now()));
+    reportInstallState({ eligible: false, visible: false, dismissed: true });
     const ios     = document.getElementById('pwa-ios-banner');
     const android = document.getElementById('pwa-android-banner');
     if (ios)     { ios.classList.remove('show'); }
@@ -65,13 +72,20 @@ if ('serviceWorker' in navigator) {
     // Prevent the default mini-infobar from Chrome (we show our own)
     e.preventDefault();
     androidInstallEvent = e;
+    reportInstallState({ eligible: true, visible: false });
 
-    if (!shouldShowBanner()) return;
+    if (!shouldShowBanner()) {
+      reportInstallState({ eligible: false, visible: false });
+      return;
+    }
 
     // Show our custom Android banner after a short delay (user has had a moment to see the page)
     setTimeout(() => {
       const banner = document.getElementById('pwa-android-banner');
-      if (banner) banner.style.display = 'flex';
+      if (banner) {
+        banner.style.display = 'flex';
+        reportInstallState({ eligible: true, visible: true });
+      }
     }, 2500);
   });
 
@@ -89,6 +103,7 @@ if ('serviceWorker' in navigator) {
     console.log('[PWA] App installed.');
     dismissPWABanner();
     androidInstallEvent = null;
+    reportInstallState({ eligible: false, visible: false, installed: true });
   });
 
 
@@ -105,10 +120,14 @@ if ('serviceWorker' in navigator) {
   }
 
   if (isIosSafari() && shouldShowBanner()) {
+    reportInstallState({ eligible: true, visible: false });
     // Wait 2.5 seconds so user can see the page first
     setTimeout(() => {
       const banner = document.getElementById('pwa-ios-banner');
-      if (banner) banner.classList.add('show');
+      if (banner) {
+        banner.classList.add('show');
+        reportInstallState({ eligible: true, visible: true });
+      }
     }, 2500);
   }
 

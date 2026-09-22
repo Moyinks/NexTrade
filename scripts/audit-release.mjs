@@ -258,6 +258,53 @@ const debt = spawnSync(process.execPath,['scripts/design-debt.mjs'],{cwd:root,en
 if (debt.status !== 0) fail(`Design-debt ratchet: ${(debt.stderr || debt.stdout || '').trim()}`); else pass('Design debt ratchet did not increase');
 if (!failures.some((x) => x.includes('demo settlement') || x.includes('Demo settlement') || x.includes('presentation styling') || x.includes('hard-coded presentation') || x.includes('Realtime listener') || x.includes('push alerts'))) pass('Demo settlement architecture');
 
+
+// 13) Theme, attention arbitration, and durable transaction-record architecture.
+const architectureFiles = [
+  'ARCHITECTURE_RULES.md', 'theme-bootstrap.js', 'preferences.js', 'theme.js',
+  'experience.js', 'themes.css', 'legacy-theme-bridge.css', 'experience.css', 'settings.js', 'settings.css',
+  'transaction-detail.js', 'transaction-detail.css'
+];
+for (const file of architectureFiles) {
+  if (!fs.existsSync(path.join(root, file))) fail(`Missing architecture component: ${file}`);
+}
+const themeIndex = read('index.html');
+const appController2 = read('app.js');
+const walletModule2 = read('wallet.js');
+const homeModule2 = read('home.js');
+const depositModule2 = read('demo-deposit.js');
+const pwaModule2 = read('index-pwa.js');
+const themeBootstrap2 = read('theme-bootstrap.js');
+const themeCss2 = read('themes.css');
+const transactionDetail2 = read('transaction-detail.js');
+const architectureRules2 = read('ARCHITECTURE_RULES.md');
+for (const asset of ['theme-bootstrap.js','preferences.js','theme.js','experience.js','themes.css','legacy-theme-bridge.css','experience.css','settings.js','settings.css','transaction-detail.js','transaction-detail.css']) {
+  if (!themeIndex.includes(asset)) fail(`index.html does not load ${asset}`);
+}
+if (!themeBootstrap2.includes("preference = 'dark'")) fail('First-entry theme is not explicitly Dark');
+if (!themeCss2.includes('html[data-theme="light"]')) fail('Light theme token layer missing');
+if (!themeCss2.includes('html[data-theme="dark"]')) fail('Dark theme token layer missing');
+if (!pwaModule2.includes('reportInstallState')) fail('Install prompt does not participate in attention arbitration');
+if (!appController2.includes('ExperienceOrchestrator.noteNavigation')) fail('Navigation does not inform experience arbitration');
+if (!appController2.includes('ExperienceOrchestrator.markAppReady')) fail('App readiness does not inform experience arbitration');
+if (!walletModule2.includes("Transactiondetail.open(tx.id, 'wallet')")) fail('Wallet transactions do not open durable records');
+if (!homeModule2.includes("Transactiondetail.open(tx.id, 'home')")) fail('Home transactions do not open durable records');
+if (/if\s*\(\s*pending\s*\)\s*\{\s*flow\.stage\s*=\s*['"]status['"]/.test(depositModule2)) fail('Pending deposit still hijacks the Deposit creation route');
+if (!depositModule2.includes("Transactiondetail.open(tx.id, source)")) fail('Deposit pending context cannot open its durable transaction record');
+for (const file of ['theme-bootstrap.js','preferences.js','theme.js','experience.js','settings.js','transaction-detail.js','demo-deposit.js']) {
+  const source = read(file);
+  if (/\.style(?:\.cssText|\.[A-Za-z_$][\w$]*)\s*=/.test(source)) fail(`${file} contains imperative presentation styling`);
+  if (/\bstyle\s*=\s*["'`]/.test(source)) fail(`${file} contains inline style markup`);
+}
+for (const principle of ['Design the seam for the future without paying the complexity cost today.','Different surfaces may have different personalities. They must not have different laws.']) {
+  if (!architectureRules2.includes(principle)) fail(`Architecture constitution missing principle: ${principle}`);
+}
+if (!transactionDetail2.includes('window.print()')) fail('Transaction receipt has no print/PDF path');
+if (!transactionDetail2.includes('navigator.share')) fail('Transaction receipt has no native-share path');
+if (!failures.some((x) => x.includes('architecture component') || x.includes('First-entry theme') || x.includes('Light theme') || x.includes('Dark theme') || x.includes('attention arbitration') || x.includes('durable records') || x.includes('Deposit creation route') || x.includes('presentation styling') || x.includes('Architecture constitution') || x.includes('receipt'))) {
+  pass('Theme/transaction architecture');
+}
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);

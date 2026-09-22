@@ -1,43 +1,161 @@
-/** NexTrade — portfolio-safe, human-reviewed Demo Deposit page. */
-const Deposit=(()=>{
-'use strict';
-const RAILS=Object.freeze([
-{id:'ETH_ERC20',title:'ERC-20',subtitle:'Ethereum simulation rail',icon:'fa-ethereum'},
-{id:'USDT_TRC20',title:'TRC-20',subtitle:'Tron simulation rail',icon:'fa-coins'},
-{id:'BTC',title:'Bitcoin',subtitle:'Bitcoin simulation rail',icon:'fa-bitcoin'}
-]);
-let container=null,unsubscribeTransactions=null;
-const flow={stage:'configure',rail:'ETH_ERC20',amount:'',reference:'',txId:null,submitting:false};
-function el(tag,className,text){const n=document.createElement(tag);if(className)n.className=className;if(text!==undefined)n.textContent=text;return n}
-function money(value){if(window.Format&&typeof Format.currency==='function')return Format.currency(Number(value||0));return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(value||0))}
-function rail(id){return RAILS.find(x=>x.id===id)||RAILS[0]}
-function user(){return window.AppState?AppState.get('user'):null}
-function txs(){return window.AppState?(AppState.get('transactions')||[]):[]}
-function generateReference(){const u=user();const prefix=u&&u.id?u.id.slice(0,8).toUpperCase():'ANON0000';return 'NXT-'+prefix+'-'+Date.now().toString(36).toUpperCase()}
-function isDemo(tx){const m=tx&&tx.metadata;return Boolean(tx&&tx.type==='deposit'&&m&&(m.demo_deposit===true||m.manual_deposit_test===true))}
-function latestPending(){return txs().find(tx=>isDemo(tx)&&tx.status==='pending')||null}
-function currentTx(){return flow.txId?txs().find(tx=>tx&&tx.id===flow.txId)||null:null}
-function setImmersive(on){document.body.classList.toggle('route-immersive',Boolean(on))}
-function goWallet(){if(window.App&&typeof App.navigate==='function')return App.navigate('wallet');if(window.Router&&typeof Router.navigate==='function')return Router.navigate('wallet')}
-function shell(){const page=el('section','demo-deposit-page');const top=el('header','demo-deposit-topbar');const back=el('button','demo-deposit-back');back.type='button';back.setAttribute('aria-label','Back to Wallet');const bi=el('i');bi.className='fas fa-arrow-left';back.appendChild(bi);back.addEventListener('click',goWallet);const brand=el('div','demo-deposit-brand');brand.appendChild(el('div','demo-deposit-brand__name','NexTrade'));brand.appendChild(el('div','demo-deposit-brand__sub','Demo settlement'));const badge=el('div','demo-sim-badge');const flask=el('i');flask.className='fas fa-flask';badge.appendChild(flask);badge.appendChild(el('span','', 'Simulation'));top.append(back,brand,badge);
-const main=el('main','demo-deposit-main');const hero=el('section','demo-deposit-hero');hero.appendChild(el('div','demo-deposit-eyebrow','Human-reviewed settlement'));hero.appendChild(el('h1','demo-deposit-title','Test the ledger, not your money.'));const copy=el('p','demo-deposit-copy');copy.appendChild(document.createTextNode('Choose a simulated payment rail, submit a demo transfer, and watch NexTrade move it through '));copy.appendChild(el('strong','', 'pending → reviewed → settled'));copy.appendChild(document.createTextNode('. No real assets are accepted.'));hero.appendChild(copy);
-const stepper=el('div','demo-stepper');[['01','Configure'],['02','Review'],['03','Decision']].forEach(([num,label],i)=>{const step=el('div','demo-step');step.dataset.step=String(i+1);step.appendChild(el('div','demo-step__num',num));step.appendChild(el('div','demo-step__label',label));stepper.appendChild(step)});const host=el('div','demo-panel-host');main.append(hero,stepper,host);page.append(top,main);return page}
-function host(){return container?container.querySelector('.demo-panel-host'):null}
-function updateStepper(){if(!container)return;const active=flow.stage==='configure'?1:flow.stage==='review'?2:3;container.querySelectorAll('.demo-step').forEach(step=>{const n=Number(step.dataset.step);step.dataset.state=n<active?'done':n===active?'active':'idle'})}
-function assurance(title,copyText,icon='fa-shield-halved'){const wrap=el('div','demo-assurance');const iconWrap=el('div','demo-assurance__icon');const i=el('i');i.className='fas '+icon;iconWrap.appendChild(i);const body=el('div');body.appendChild(el('div','demo-assurance__title',title));body.appendChild(el('div','demo-assurance__copy',copyText));wrap.append(iconWrap,body);return wrap}
-function renderConfigure(){const h=host();if(!h)return;h.innerHTML='';const panel=el('section','demo-panel');panel.appendChild(el('div','demo-section-label','Demo amount'));const amountShell=el('label','demo-amount-shell');amountShell.appendChild(el('span','demo-amount-currency','$'));const input=el('input','demo-amount-input');input.type='number';input.inputMode='decimal';input.min='10';input.max='100000';input.step='0.01';input.placeholder='0.00';input.value=flow.amount;input.setAttribute('aria-label','Demo deposit amount');input.addEventListener('input',()=>{flow.amount=input.value});amountShell.appendChild(input);panel.appendChild(amountShell);panel.appendChild(el('div','demo-field-note','Simulation range: $10–$100,000. Nothing leaves your device or wallet.'));const label=el('div','demo-section-label demo-section-label--spaced','Payment rail');panel.appendChild(label);const grid=el('div','demo-rail-grid');RAILS.forEach(r=>{const btn=el('button','demo-rail');btn.type='button';btn.dataset.rail=r.id;btn.setAttribute('aria-pressed',String(flow.rail===r.id));const icon=el('span','demo-rail__icon');const gi=el('i');gi.className='fas '+r.icon;icon.appendChild(gi);const body=el('span');body.appendChild(el('span','demo-rail__title',r.title));body.appendChild(el('span','demo-rail__sub',r.subtitle));const check=el('span','demo-rail__check');const ci=el('i');ci.className='fas fa-check';check.appendChild(ci);btn.append(icon,body,check);btn.addEventListener('click',()=>{flow.rail=r.id;grid.querySelectorAll('.demo-rail').forEach(item=>item.setAttribute('aria-pressed',String(item.dataset.rail===flow.rail)))});grid.appendChild(btn)});panel.appendChild(grid);panel.appendChild(assurance('Portfolio simulation only','The destination shown next is intentionally non-routable. NexTrade creates only a pending demo-ledger request for human review.'));const actions=el('div','demo-panel-actions');const next=el('button','btn btn-primary btn-emphasis','Review demo transfer');next.type='button';next.addEventListener('click',()=>{const amount=Number(flow.amount);if(!Number.isFinite(amount)||amount<10||amount>100000){if(window.App)App.showError('Enter a demo amount between $10 and $100,000.');input.focus();return}flow.amount=String(Number(amount.toFixed(8)));flow.reference=generateReference();flow.stage='review';renderStage()});actions.appendChild(next);panel.appendChild(actions);h.appendChild(panel);requestAnimationFrame(()=>input.focus())}
-function destination(){const c=window.APP_CONFIG&&APP_CONFIG.depositAddresses&&APP_CONFIG.depositAddresses[flow.rail];return c&&c.address?c.address:'TEST_ONLY_DO_NOT_SEND_REAL_FUNDS'}
-async function copy(value,label){try{if(!navigator.clipboard)throw new Error();await navigator.clipboard.writeText(String(value));if(window.App)App.showSuccess(label+' copied')}catch(_){if(window.App)App.showError('Could not copy automatically')}}
-function detail(key,value,copyLabel){const row=el('div','demo-detail-row');row.appendChild(el('div','demo-detail-key',key));row.appendChild(el('div','demo-detail-value',value));if(copyLabel){const b=el('button','demo-copy-btn');b.type='button';b.setAttribute('aria-label','Copy '+copyLabel);const i=el('i');i.className='fas fa-copy';b.appendChild(i);b.addEventListener('click',()=>copy(value,copyLabel));row.appendChild(b)}else row.appendChild(el('span'));return row}
-function renderReview(){const h=host();if(!h)return;h.innerHTML='';const panel=el('section','demo-panel');const hero=el('div','demo-review-hero');const left=el('div');left.appendChild(el('div','demo-section-label','Declared amount'));left.appendChild(el('div','demo-review-amount',money(flow.amount)));hero.append(left,el('div','demo-review-chip',rail(flow.rail).title));panel.appendChild(hero);const list=el('div','demo-detail-list');list.appendChild(detail('Reference',flow.reference,'Reference'));list.appendChild(detail('Demo destination',destination(),'Demo destination'));list.appendChild(detail('Settlement','Human review',null));panel.appendChild(list);const review=el('div','demo-human-review');const title=el('div','demo-human-review__title');const ui=el('i');ui.className='fas fa-user-check';title.append(ui,document.createTextNode('Human-reviewed demo settlement'));review.appendChild(title);review.appendChild(el('div','demo-human-review__copy','Submitting creates a pending ledger event and places it in the NexTrade review queue. Your Spot balance changes only after approval.'));panel.appendChild(review);panel.appendChild(assurance('Do not send real crypto','This destination cannot receive funds. The action below simulates the declaration step of a deposit workflow.','fa-triangle-exclamation'));const actions=el('div','demo-panel-actions');const back=el('button','btn btn-secondary btn-emphasis','Back');back.type='button';back.addEventListener('click',()=>{flow.stage='configure';renderStage()});const submit=el('button','btn btn-primary btn-emphasis','I completed the demo transfer');submit.type='button';submit.addEventListener('click',()=>submitDemo(submit));actions.append(back,submit);panel.appendChild(actions);h.appendChild(panel)}
-async function token(){if(!window.supabaseClient)throw new Error('Secure session unavailable');const {data,error}=await supabaseClient.auth.getSession();if(error)throw error;if(!data||!data.session||!data.session.access_token)throw new Error('Session expired. Sign in again.');return data.session.access_token}
-async function submitDemo(button){if(flow.submitting)return;const u=user();if(!u||!u.id){if(window.App)App.showError('Session not found. Refresh the app.');return}const amount=Number(flow.amount);if(!Number.isFinite(amount)||amount<10||amount>100000){if(window.App)App.showError('Invalid demo amount');return}flow.submitting=true;button.disabled=true;button.setAttribute('aria-busy','true');button.textContent='Submitting for review…';try{const accessToken=await token();if(!window.RequestId)throw new Error('Secure request identifier unavailable');const fingerprint=[flow.rail,amount.toFixed(8),flow.reference].join('|');const key=RequestId.get('deposit',fingerprint);const api=(window.APP_CONFIG&&APP_CONFIG.apis&&APP_CONFIG.apis.demoDeposit)||'/api/demo-deposit';const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({amount,idempotencyKey:key,depositReference:flow.reference,rail:flow.rail})});const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload.error||'Could not submit demo deposit');if(!payload.tx_id)throw new Error('Demo settlement service returned an invalid response');RequestId.clear('deposit',key);flow.txId=payload.tx_id;flow.stage='status';if(window.AppState){AppState.addTransaction({id:payload.tx_id,user_id:u.id,type:'deposit',amount,status:payload.status||'pending',description:'Demo deposit ('+rail(flow.rail).title+') — Ref: '+flow.reference,metadata:{manual_deposit_test:true,test_only:true,demo_deposit:true,deposit_reference:flow.reference,rail:flow.rail},created_at:payload.created_at||new Date().toISOString()})}renderStage();if(window.App)App.showSuccess('Demo settlement submitted for review')}catch(error){flow.submitting=false;button.disabled=false;button.removeAttribute('aria-busy');button.textContent='I completed the demo transfer';if(window.App)App.showError(error.message||'Submission failed')}}
-function statusModel(tx){const status=String(tx&&tx.status||'pending').toLowerCase();if(status==='approved'||status==='completed')return{tone:'success',icon:'fa-circle-check',title:'Approved',copy:'The demo ledger entry was approved. NexTrade recalculated Spot from the settled ledger.',timeline:['done','done','done']};if(status==='rejected'||status==='failed'||status==='cancelled')return{tone:'danger',icon:'fa-circle-xmark',title:'Declined',copy:'The review was declined. No demo funds were credited and the ledger remains balanced.',timeline:['done','done','done']};return{tone:'warning',icon:'fa-clock',title:'Awaiting review',copy:'Your request is in the review queue. You can leave this page; NexTrade will update the transaction when a reviewer decides.',timeline:['done','active','idle']}}
-function renderStatus(){const h=host();if(!h)return;h.innerHTML='';const tx=currentTx()||latestPending()||{status:'pending',amount:Number(flow.amount),metadata:{deposit_reference:flow.reference,rail:flow.rail}};if(tx.id&&!flow.txId)flow.txId=tx.id;const m=tx.metadata||{};const reference=m.deposit_reference||flow.reference||'Pending reference';const model=statusModel(tx);const panel=el('section','demo-panel demo-status-card');panel.dataset.tone=model.tone;const icon=el('div','demo-status-icon');const gi=el('i');gi.className='fas '+model.icon;icon.appendChild(gi);panel.appendChild(icon);panel.appendChild(el('h2','demo-status-title',model.title));panel.appendChild(el('p','demo-status-copy',model.copy));panel.appendChild(el('div','demo-status-reference',reference));const timeline=el('div','demo-timeline');['Submitted','Human review','Decision'].forEach((label,i)=>{const step=el('div','demo-timeline-step',label);step.dataset.state=model.timeline[i];timeline.appendChild(step)});panel.appendChild(timeline);const actions=el('div','demo-status-actions');const wallet=el('button','btn btn-secondary btn-emphasis','Back to Wallet');wallet.type='button';wallet.addEventListener('click',goWallet);actions.appendChild(wallet);if(tx.status!=='pending'){const another=el('button','btn btn-primary btn-emphasis','New demo deposit');another.type='button';another.addEventListener('click',()=>{flow.stage='configure';flow.amount='';flow.reference='';flow.txId=null;flow.submitting=false;renderStage()});actions.appendChild(another)}panel.appendChild(actions);h.appendChild(panel)}
-function renderStage(){updateStepper();if(flow.stage==='configure')return renderConfigure();if(flow.stage==='review')return renderReview();renderStatus()}
-function subscribe(){if(!window.AppState||unsubscribeTransactions)return;unsubscribeTransactions=AppState.subscribe('transactions',()=>{if(flow.stage==='status'&&flow.txId)renderStatus()})}
-function render(target){container=target;if(!container)return;setImmersive(true);const pending=latestPending();if(pending){flow.stage='status';flow.txId=pending.id;flow.amount=String(pending.amount||'');flow.reference=pending.metadata&&pending.metadata.deposit_reference||'';flow.rail=pending.metadata&&pending.metadata.rail||'ETH_ERC20'}else{flow.stage='configure';flow.txId=null;flow.amount='';flow.reference='';flow.rail='ETH_ERC20';flow.submitting=false}container.innerHTML='';container.appendChild(shell());subscribe();renderStage()}
-function cleanup(){setImmersive(false);if(typeof unsubscribeTransactions==='function')unsubscribeTransactions();unsubscribeTransactions=null;container=null}
-return{render,cleanup};
+const Deposit = (() => {
+  'use strict';
+  const RAILS = Object.freeze([
+    { id: 'ETH_ERC20', title: 'ERC-20', subtitle: 'Ethereum simulation rail', icon: 'fa-ethereum' },
+    { id: 'USDT_TRC20', title: 'TRC-20', subtitle: 'Tron simulation rail', icon: 'fa-coins' },
+    { id: 'BTC', title: 'Bitcoin', subtitle: 'Bitcoin simulation rail', icon: 'fa-bitcoin' }
+  ]);
+  let container = null;
+  const flow = { stage: 'configure', rail: 'ETH_ERC20', amount: '', reference: '', submitting: false };
+  function node(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined) element.textContent = text;
+    return element;
+  }
+  const user = () => window.AppState ? AppState.get('user') : null;
+  const transactions = () => window.AppState ? (AppState.get('transactions') || []) : [];
+  function latestPending() {
+    return transactions().find(tx => {
+      const metadata = tx && tx.metadata;
+      return Boolean(tx && tx.type === 'deposit' && tx.status === 'pending' && metadata && (metadata.demo_deposit === true || metadata.manual_deposit_test === true));
+    }) || null;
+  }
+  function money(value) { return window.Format && Format.currency ? Format.currency(Number(value || 0)) : '$' + Number(value || 0).toFixed(2); }
+  function rail(id) { return RAILS.find(item => item.id === id) || RAILS[0]; }
+  function reference() {
+    const currentUser = user();
+    const prefix = currentUser && currentUser.id ? currentUser.id.slice(0, 8).toUpperCase() : 'ANON0000';
+    return 'NXT-' + prefix + '-' + Date.now().toString(36).toUpperCase();
+  }
+  function goWallet() { if (window.App) App.navigate('wallet'); }
+  function openTransaction(tx, source = 'deposit') {
+    if (tx && tx.id && window.Transactiondetail) Transactiondetail.open(tx.id, source);
+  }
+  function shell() {
+    const page = node('section', 'demo-deposit-page');
+    const topbar = node('header', 'demo-deposit-topbar');
+    const back = node('button', 'demo-deposit-back'); back.type = 'button'; back.setAttribute('aria-label', 'Back to Wallet');
+    const backIcon = node('i'); backIcon.className = 'fas fa-arrow-left'; back.appendChild(backIcon); back.addEventListener('click', goWallet);
+    const brand = node('div', 'demo-deposit-brand'); brand.append(node('div', 'demo-deposit-brand__name', 'NexTrade'), node('div', 'demo-deposit-brand__sub', 'Demo settlement'));
+    const badge = node('div', 'demo-sim-badge'); const flask = node('i'); flask.className = 'fas fa-flask'; badge.append(flask, node('span', '', 'Simulation'));
+    topbar.append(back, brand, badge);
+    const main = node('main', 'demo-deposit-main');
+    const hero = node('section', 'demo-deposit-hero');
+    hero.append(node('div', 'demo-deposit-eyebrow', 'Human-reviewed settlement'));
+    hero.append(node('h1', 'demo-deposit-title', 'Test the ledger, not your money.'));
+    const copy = node('p', 'demo-deposit-copy');
+    copy.append(document.createTextNode('Create a simulated transfer request and let NexTrade move it through '), node('strong', '', 'pending → reviewed → settled'), document.createTextNode('. No real assets are accepted.'));
+    hero.appendChild(copy);
+    const stepper = node('div', 'demo-stepper');
+    [['01','Configure'],['02','Review'],['03','Submit']].forEach(([number,label], index) => {
+      const step = node('div', 'demo-step'); step.dataset.step = String(index + 1); step.append(node('div', 'demo-step__num', number), node('div', 'demo-step__label', label)); stepper.appendChild(step);
+    });
+    const host = node('div', 'demo-panel-host');
+    main.append(hero, stepper, host); page.append(topbar, main); return page;
+  }
+  const host = () => container ? container.querySelector('.demo-panel-host') : null;
+  function updateStepper() {
+    if (!container) return;
+    const active = flow.stage === 'review' ? 2 : 1;
+    container.querySelectorAll('.demo-step').forEach(step => {
+      const number = Number(step.dataset.step);
+      step.dataset.state = number < active ? 'done' : number === active ? 'active' : 'idle';
+    });
+  }
+  function pendingCard(tx) {
+    const card = node('button', 'demo-pending-context'); card.type = 'button';
+    const marker = node('span', 'demo-pending-context__marker'); const markerIcon = node('i'); markerIcon.className = 'fas fa-clock'; marker.appendChild(markerIcon);
+    const body = node('span', 'demo-pending-context__body'); body.append(node('span', 'demo-pending-context__title', 'One deposit is awaiting review'), node('span', 'demo-pending-context__copy', `${money(tx.amount)} · ${rail(tx.metadata && tx.metadata.rail).title}`));
+    const action = node('span', 'demo-pending-context__action', 'View'); const arrow = node('i'); arrow.className = 'fas fa-arrow-right'; action.appendChild(arrow);
+    card.append(marker, body, action); card.addEventListener('click', () => openTransaction(tx, 'deposit')); return card;
+  }
+  function railGrid() {
+    const grid = node('div', 'demo-rail-grid');
+    RAILS.forEach(item => {
+      const button = node('button', 'demo-rail'); button.type = 'button'; button.dataset.rail = item.id; button.setAttribute('aria-pressed', String(flow.rail === item.id));
+      const icon = node('span', 'demo-rail__icon'); const glyph = node('i'); glyph.className = 'fas ' + item.icon; icon.appendChild(glyph);
+      const body = node('span'); body.append(node('span', 'demo-rail__title', item.title), node('span', 'demo-rail__sub', item.subtitle));
+      const check = node('span', 'demo-rail__check'); const checkIcon = node('i'); checkIcon.className = 'fas fa-check'; check.appendChild(checkIcon);
+      button.append(icon, body, check);
+      button.addEventListener('click', () => { flow.rail = item.id; grid.querySelectorAll('.demo-rail').forEach(candidate => candidate.setAttribute('aria-pressed', String(candidate.dataset.rail === flow.rail))); });
+      grid.appendChild(button);
+    });
+    return grid;
+  }
+  function assurance(title, copy, iconName) {
+    const card = node('div', 'demo-assurance'); const icon = node('div', 'demo-assurance__icon'); const glyph = node('i'); glyph.className = 'fas ' + iconName; icon.appendChild(glyph);
+    const body = node('div'); body.append(node('div', 'demo-assurance__title', title), node('div', 'demo-assurance__copy', copy)); card.append(icon, body); return card;
+  }
+  function renderConfigure() {
+    const target = host(); if (!target) return; target.innerHTML = '';
+    const pending = latestPending(); if (pending) target.appendChild(pendingCard(pending));
+    const panel = node('section', 'demo-panel'); panel.append(node('div', 'demo-section-label', 'Demo amount'));
+    const amountShell = node('label', 'demo-amount-shell'); amountShell.append(node('span', 'demo-amount-currency', '$'));
+    const input = node('input', 'demo-amount-input'); input.type = 'number'; input.inputMode = 'decimal'; input.min = '10'; input.max = '100000'; input.step = '0.01'; input.placeholder = '0.00'; input.value = flow.amount; input.setAttribute('aria-label', 'Demo deposit amount'); input.addEventListener('input', () => { flow.amount = input.value; });
+    amountShell.appendChild(input); panel.append(amountShell, node('div', 'demo-field-note', 'Simulation range: $10–$100,000. Nothing leaves your device or wallet.'), node('div', 'demo-section-label', 'Payment rail'), railGrid());
+    panel.appendChild(assurance('Portfolio simulation only', 'The next screen uses a non-routable destination. NexTrade creates a pending demo-ledger request for human review.', 'fa-shield-halved'));
+    const actions = node('div', 'demo-panel-actions'); const continueButton = node('button', 'btn btn-primary btn-emphasis', 'Review demo transfer'); continueButton.type = 'button';
+    continueButton.addEventListener('click', () => {
+      const amount = Number(flow.amount);
+      if (!Number.isFinite(amount) || amount < 10 || amount > 100000) { if (window.App) App.showError('Enter a demo amount between $10 and $100,000.'); input.focus(); return; }
+      flow.amount = String(Number(amount.toFixed(8))); flow.reference = reference(); flow.stage = 'review'; renderStage();
+    });
+    actions.appendChild(continueButton); panel.appendChild(actions); target.appendChild(panel); requestAnimationFrame(() => input.focus());
+  }
+  function destination() {
+    const configured = window.APP_CONFIG && APP_CONFIG.depositAddresses && APP_CONFIG.depositAddresses[flow.rail];
+    return (configured && configured.address) || 'TEST_ONLY_DO_NOT_SEND_REAL_FUNDS';
+  }
+  function detailRow(key, value) { const row = node('div', 'demo-detail-row'); row.append(node('div', 'demo-detail-key', key), node('div', 'demo-detail-value', value), node('span')); return row; }
+  function renderReview() {
+    const target = host(); if (!target) return; target.innerHTML = '';
+    const panel = node('section', 'demo-panel'); const hero = node('div', 'demo-review-hero'); const left = node('div');
+    left.append(node('div', 'demo-section-label', 'Declared amount'), node('div', 'demo-review-amount', money(flow.amount))); hero.append(left, node('div', 'demo-review-chip', rail(flow.rail).title)); panel.appendChild(hero);
+    const details = node('div', 'demo-detail-list'); details.append(detailRow('Reference', flow.reference), detailRow('Demo destination', destination()), detailRow('Settlement', 'Human review')); panel.appendChild(details);
+    panel.appendChild(assurance('Human-reviewed demo settlement', 'Submitting creates a pending ledger event. Your Spot balance changes only after approval.', 'fa-user-check'));
+    panel.appendChild(assurance('Do not send real crypto', 'The destination above cannot receive funds. The action below simulates the declaration step only.', 'fa-triangle-exclamation'));
+    const actions = node('div', 'demo-panel-actions'); const back = node('button', 'btn btn-secondary btn-emphasis', 'Back'); back.type = 'button'; back.addEventListener('click', () => { flow.stage = 'configure'; renderStage(); });
+    const submit = node('button', 'btn btn-primary btn-emphasis', 'I completed the demo transfer'); submit.type = 'button'; submit.addEventListener('click', () => submitDemo(submit)); actions.append(back, submit); panel.appendChild(actions); target.appendChild(panel);
+  }
+  async function token() {
+    if (!window.supabaseClient) throw new Error('Secure session unavailable');
+    const { data, error } = await supabaseClient.auth.getSession(); if (error) throw error;
+    if (!data || !data.session || !data.session.access_token) throw new Error('Session expired. Sign in again.');
+    return data.session.access_token;
+  }
+  async function submitDemo(button) {
+    if (flow.submitting) return;
+    const currentUser = user(); if (!currentUser || !currentUser.id) { if (window.App) App.showError('Session not found. Refresh the app.'); return; }
+    const amount = Number(flow.amount); if (!Number.isFinite(amount) || amount < 10 || amount > 100000) { if (window.App) App.showError('Invalid demo amount'); return; }
+    flow.submitting = true; button.disabled = true; button.setAttribute('aria-busy', 'true'); button.textContent = 'Submitting for review…';
+    try {
+      const accessToken = await token(); if (!window.RequestId) throw new Error('Secure request identifier unavailable');
+      const fingerprint = [flow.rail, amount.toFixed(8), flow.reference].join('|'); const key = RequestId.get('deposit', fingerprint);
+      const api = (window.APP_CONFIG && APP_CONFIG.apis && APP_CONFIG.apis.demoDeposit) || '/api/demo-deposit';
+      const response = await fetch(api, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken }, body: JSON.stringify({ amount, idempotencyKey: key, depositReference: flow.reference, rail: flow.rail }) });
+      const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || 'Could not submit demo deposit'); if (!payload.tx_id) throw new Error('Demo settlement service returned an invalid response');
+      RequestId.clear('deposit', key);
+      const transaction = { id: payload.tx_id, user_id: currentUser.id, type: 'deposit', amount, status: payload.status || 'pending', description: 'Demo deposit (' + rail(flow.rail).title + ') — Ref: ' + flow.reference, metadata: { manual_deposit_test: true, test_only: true, demo_deposit: true, deposit_reference: flow.reference, rail: flow.rail }, created_at: payload.created_at || new Date().toISOString() };
+      if (window.AppState) AppState.addTransaction(transaction);
+      if (window.App) App.showSuccess('Demo settlement submitted for review');
+      openTransaction(transaction, 'wallet');
+    } catch (error) {
+      const pending = latestPending();
+      if (pending && /already awaiting review/i.test(String(error.message || ''))) {
+        if (window.App && App.showWarning) App.showWarning('You already have a deposit awaiting review.');
+        openTransaction(pending, 'deposit'); return;
+      }
+      flow.submitting = false; button.disabled = false; button.removeAttribute('aria-busy'); button.textContent = 'I completed the demo transfer'; if (window.App) App.showError(error.message || 'Submission failed');
+    }
+  }
+  function renderStage() { updateStepper(); if (flow.stage === 'review') renderReview(); else renderConfigure(); }
+  function render(target) {
+    container = target; if (!container) return;
+    flow.stage = 'configure'; flow.amount = ''; flow.reference = ''; flow.rail = 'ETH_ERC20'; flow.submitting = false;
+    container.innerHTML = ''; container.appendChild(shell()); renderStage();
+  }
+  function cleanup() { container = null; }
+  return Object.freeze({ render, cleanup });
 })();
-if(typeof window!=='undefined')window.Deposit=Deposit;
+if (typeof window !== 'undefined') window.Deposit = Deposit;

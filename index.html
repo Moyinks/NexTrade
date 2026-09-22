@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="color-scheme" content="dark light" />
+  <script src="theme-bootstrap.js"></script>
 
 
 
@@ -217,14 +218,19 @@
   <link rel="stylesheet" href="layout.css" />
   <link rel="stylesheet" href="pages.css" />
   <link rel="stylesheet" href="mobile.css" />
+  <link rel="stylesheet" href="themes.css" />
+  <link rel="stylesheet" href="legacy-theme-bridge.css" />
+  <link rel="stylesheet" href="experience.css" />
+  <link rel="stylesheet" href="settings.css" />
+  <link rel="stylesheet" href="transaction-detail.css" />
 
   <style>
     /* Critical Initial Styles */
     html, body {
       margin: 0;
       padding: 0;
-      background: #0a0c10;
-      color: #fff;
+      background: var(--color-background, #0B0E11);
+      color: var(--color-text-primary, #F8FAFC);
       font-family: 'Inter', sans-serif;
       /* We explicitly DO NOT set height here to avoid conflicts with layout.css */
     }
@@ -246,7 +252,7 @@
       align-items: center;
       justify-content: center;
       /* Match manifest background_color exactly */
-      background: #0B0E11;
+      background: var(--color-background, #0B0E11);
       transition: opacity 0.5s ease-out;
     }
 
@@ -337,7 +343,7 @@
     <img id="pwa-ios-icon-img" src="/pwa1.png" alt="NexTrade">
   </div>
   <div class="pwa-ios-body">
-    <div class="pwa-ios-title">Add NexTrade — start earning</div>
+    <div class="pwa-ios-title">Add NexTrade</div>
     <div class="pwa-ios-msg">
       Tap <span class="pwa-ios-share">&#x2191;</span> <strong>Share</strong>,
       then <strong>"Add to Home Screen"</strong> for the full app experience.
@@ -353,7 +359,7 @@
   </div>
   <div class="pwa-android-body">
     <div class="pwa-android-title">NexTrade</div>
-    <div class="pwa-android-sub">Add to home screen</div>
+    <div class="pwa-android-sub">Keep your workspace one tap away</div>
   </div>
   <button id="pwa-android-install" class="pwa-android-btn">Install</button>
   <button id="pwa-android-close" class="pwa-android-close" aria-label="Dismiss">&#x2715;</button>
@@ -392,10 +398,15 @@
   <script src="format.js" defer></script>
   <script src="transaction-ui.js" defer></script>
   <script src="demo-deposit.js" defer></script>
+  <script src="transaction-detail.js" defer></script>
+  <script src="settings.js" defer></script>
   <script src="admin-review.js" defer></script>
   <script src="validation.js" defer></script>
   <script src="safe-dom.js" defer></script>
   <script src="storage.js" defer></script>
+  <script src="preferences.js" defer></script>
+  <script src="theme.js" defer></script>
+  <script src="experience.js" defer></script>
   <script src="finance.js" defer></script>
   <script src="request-id.js" defer></script>
   <script src="state.js" defer></script>

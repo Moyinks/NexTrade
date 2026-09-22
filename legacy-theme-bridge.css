@@ -1,0 +1,74 @@
+/**
+ * NexTrade — Legacy Theme Compatibility Bridge
+ *
+ * Temporary seam for legacy modules that still encode presentation in JS.
+ * New modules MUST NOT depend on this file. The design-debt ratchet guarantees
+ * the legacy surface can only shrink; this bridge can disappear when it reaches 0.
+ */
+
+html[data-theme="light"] .app-main [style*="color:#fff"],
+html[data-theme="light"] .app-main [style*="color: #fff"],
+html[data-theme="light"] .app-main [style*="color:#F8FAFC"],
+html[data-theme="light"] .app-main [style*="color: #F8FAFC"] {
+  color: var(--color-text-primary) !important;
+}
+
+html[data-theme="light"] .app-main [style*="color:rgba(255,255,255,0.62)"],
+html[data-theme="light"] .app-main [style*="color:rgba(255,255,255,0.68)"],
+html[data-theme="light"] .app-main [style*="color:rgba(255,255,255,0.7)"],
+html[data-theme="light"] .app-main [style*="color:rgba(255,255,255,0.72)"],
+html[data-theme="light"] .app-main [style*="color:rgba(255,255,255,0.75)"],
+html[data-theme="light"] .app-main [style*="color:rgba(255,255,255,0.6)"] {
+  color: var(--color-text-secondary) !important;
+}
+
+html[data-theme="light"] .app-main [style*="color:rgba(255,255,255,0.35)"],
+html[data-theme="light"] .app-main [style*="color:rgba(255,255,255,0.4)"],
+html[data-theme="light"] .app-main [style*="color:rgba(255,255,255,0.45)"],
+html[data-theme="light"] .app-main [style*="color:rgba(255,255,255,0.5)"],
+html[data-theme="light"] .app-main [style*="color:rgba(255,255,255,0.55)"] {
+  color: var(--color-text-tertiary) !important;
+}
+
+html[data-theme="light"] .app-main [style*="background:rgba(255,255,255,0.025)"],
+html[data-theme="light"] .app-main [style*="background:rgba(255,255,255,0.03)"],
+html[data-theme="light"] .app-main [style*="background:rgba(255,255,255,0.035)"] {
+  background: var(--color-surface) !important;
+}
+
+html[data-theme="light"] .app-main [style*="background:rgba(255,255,255,0.05)"],
+html[data-theme="light"] .app-main [style*="background:rgba(255,255,255,0.06)"],
+html[data-theme="light"] .app-main [style*="background:rgba(255,255,255,0.07)"],
+html[data-theme="light"] .app-main [style*="background:rgba(255,255,255,0.08)"],
+html[data-theme="light"] .app-main [style*="background:rgba(255,255,255,0.1)"],
+html[data-theme="light"] .app-main [style*="background:rgba(255,255,255,0.11)"] {
+  background: var(--color-surface-elevated) !important;
+}
+
+html[data-theme="light"] .app-main [style*="border:1px solid rgba(255,255,255,0.08)"],
+html[data-theme="light"] .app-main [style*="border: 1px solid rgba(255,255,255,0.08)"],
+html[data-theme="light"] .app-main [style*="border:1px solid rgba(255,255,255,0.1)"],
+html[data-theme="light"] .app-main [style*="border:1px solid rgba(255,255,255,0.10)"] {
+  border-color: var(--color-border) !important;
+}
+
+html[data-theme="light"] .app-main [style*="#34d399"],
+html[data-theme="light"] .app-main [style*="#10b981"] {
+  color: var(--color-success) !important;
+}
+
+html[data-theme="light"] .app-main [style*="#f87171"],
+html[data-theme="light"] .app-main [style*="#ef4444"] {
+  color: var(--color-danger) !important;
+}
+
+html[data-theme="light"] .app-main [style*="#60a5fa"],
+html[data-theme="light"] .app-main [style*="#3b82f6"] {
+  color: var(--color-primary) !important;
+}
+
+/* Primary/semantic controls intentionally keep inverse text over filled colour. */
+html[data-theme="light"] .app-main .btn-primary,
+html[data-theme="light"] .app-main .ui-filter-chip[aria-pressed="true"] {
+  color: #FFFFFF !important;
+}

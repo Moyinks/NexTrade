@@ -28,10 +28,10 @@ const Navbar = (() => {
   let dropdownOpen = false;
 
   // ── DESIGN TOKENS (mirrors core.css) ──────────────────────────────────
-  const SURFACE          = '#151921';
-  const SURFACE_ELEVATED = '#1E232F';
-  const BORDER_HOVER     = 'rgba(255,255,255,0.15)';
-  const TOP_EDGE         = 'inset 0 1px 0 rgba(255,255,255,0.09)';
+  const SURFACE          = 'var(--color-surface)';
+  const SURFACE_ELEVATED = 'var(--color-surface-elevated)';
+  const BORDER_HOVER     = 'var(--color-border-hover)';
+  const TOP_EDGE         = 'none';
 
   const PAGES = {
     home:   { label: 'Home',   icon: 'fa-house',       color: '#3B82F6' },
@@ -42,7 +42,9 @@ const Navbar = (() => {
 
   const AUX_PAGES = {
     deposit: { label: 'Demo Deposit', icon: 'fa-arrow-down', color: 'var(--color-primary)' },
-    adminreview: { label: 'Review Queue', icon: 'fa-inbox', color: 'var(--color-warning)' }
+    adminreview: { label: 'Review Queue', icon: 'fa-inbox', color: 'var(--color-warning)' },
+    settings: { label: 'Settings', icon: 'fa-gear', color: 'var(--color-primary)' },
+    transactiondetail: { label: 'Transaction', icon: 'fa-receipt', color: 'var(--color-primary)' }
   };
 
   // ── USER HELPERS ───────────────────────────────────────────────────────
@@ -339,8 +341,8 @@ const Navbar = (() => {
     const safeInitials = esc(initials);
 
     const titleHTML = pageId === 'home'
-      ? `<span style="font-size:17px;font-weight:800;letter-spacing:-0.5px;font-family:'Inter',system-ui,sans-serif;color:#F8FAFC;">NexTrade</span>`
-      : `<span style="font-size:16px;font-weight:600;letter-spacing:-0.3px;font-family:'Inter',system-ui,sans-serif;color:#F8FAFC;">${cfg.label}</span>`;
+      ? `<span style="font-size:17px;font-weight:800;letter-spacing:-0.5px;font-family:'Inter',system-ui,sans-serif;color:var(--color-text-primary);">NexTrade</span>`
+      : `<span style="font-size:16px;font-weight:600;letter-spacing:-0.3px;font-family:'Inter',system-ui,sans-serif;color:var(--color-text-primary);">${cfg.label}</span>`;
 
     headerEl.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;font-family:'Inter',system-ui,sans-serif;">
@@ -349,7 +351,7 @@ const Navbar = (() => {
         ${titleHTML}
       </div>
       <div style="position:relative;">
-        <button id="profile-menu-btn" style="width:36px;height:36px;border-radius:10px;background:${SURFACE};border:1px solid rgba(255,255,255,0.10);display:flex;align-items:center;justify-content:center;color:#F8FAFC;cursor:pointer;transition:all 0.2s;font-family:'Inter',system-ui,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.3px;box-shadow:${TOP_EDGE};">
+        <button id="profile-menu-btn" style="width:36px;height:36px;border-radius:10px;background:${SURFACE};border:1px solid var(--color-border);display:flex;align-items:center;justify-content:center;color:var(--color-text-primary);cursor:pointer;transition:all 0.2s;font-family:'Inter',system-ui,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.3px;box-shadow:${TOP_EDGE};">
           ${safeInitials}
         </button>
         <div id="profile-dropdown" class="profile-dropdown">
@@ -403,9 +405,9 @@ const Navbar = (() => {
     dropdownOpen = !dropdownOpen;
     dd.classList.toggle('open', dropdownOpen);
     if (btn) {
-      btn.style.background  = dropdownOpen ? 'rgba(59,130,246,0.1)' : SURFACE;
-      btn.style.borderColor = dropdownOpen ? 'rgba(59,130,246,0.3)' : BORDER_HOVER;
-      btn.style.color       = dropdownOpen ? '#3B82F6' : '#F8FAFC';
+      btn.style.background  = dropdownOpen ? 'var(--color-primary-glow)' : SURFACE;
+      btn.style.borderColor = dropdownOpen ? 'var(--color-primary)' : BORDER_HOVER;
+      btn.style.color       = dropdownOpen ? 'var(--color-primary)' : 'var(--color-text-primary)';
     }
   }
 
@@ -417,7 +419,7 @@ const Navbar = (() => {
     if (btn) {
       btn.style.background  = SURFACE;
       btn.style.borderColor = BORDER_HOVER;
-      btn.style.color       = '#F8FAFC';
+      btn.style.color       = 'var(--color-text-primary)';
     }
   }
 
@@ -431,13 +433,13 @@ const Navbar = (() => {
       .profile-header{display:flex;align-items:center;gap:12px;padding:16px;border-bottom:1px solid rgba(255,255,255,0.06);}
       .profile-avatar{width:40px;height:40px;border-radius:10px;background:#3B82F6;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:700;flex-shrink:0;}
       .profile-info{flex:1;min-width:0;}
-      .profile-name{font-size:14px;font-weight:600;color:#F8FAFC;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-0.2px;}
+      .profile-name{font-size:14px;font-weight:600;color:var(--color-text-primary);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-0.2px;}
       .profile-email{font-size:11px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
       .profile-verification{display:flex;align-items:center;gap:8px;padding:10px 16px;font-size:11px;font-weight:600;letter-spacing:0.02em;border-bottom:1px solid rgba(255,255,255,0.06);}
       .profile-verification.verified{color:#10b981;background:rgba(16,185,129,0.05);}
       .profile-verification.unverified{color:#f59e0b;background:rgba(245,158,11,0.05);}
       .profile-menu{padding:6px 0;}
-      .profile-menu-item{width:100%;display:flex;align-items:center;gap:10px;padding:10px 16px;background:none;border:none;color:#F8FAFC;font-family:'Inter',system-ui,sans-serif;font-size:14px;font-weight:500;text-align:left;cursor:pointer;transition:background 0.12s;}
+      .profile-menu-item{width:100%;display:flex;align-items:center;gap:10px;padding:10px 16px;background:none;border:none;color:var(--color-text-primary);font-family:'Inter',system-ui,sans-serif;font-size:14px;font-weight:500;text-align:left;cursor:pointer;transition:background 0.12s;}
       .profile-menu-item:active{background:rgba(255,255,255,0.05);}
       .menu-icon{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:12px;flex-shrink:0;}
       .profile-menu-item.danger{color:#EF4444;}
@@ -457,7 +459,13 @@ const Navbar = (() => {
 
   function handleSettings() {
     closeDropdown();
-    if (window.App) App.showError('Settings coming soon');
+    if (window.Settings && typeof Settings.open === 'function') {
+      Settings.open();
+      return;
+    }
+    if (window.App && typeof App.navigate === 'function') {
+      App.navigate('settings');
+    }
   }
 
   function handleHelp() {

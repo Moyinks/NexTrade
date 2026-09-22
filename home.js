@@ -601,20 +601,19 @@
 
       row.addEventListener('click', () => {
         if (
+          window.Transactiondetail &&
+          typeof Transactiondetail.open === 'function'
+        ) {
+          Transactiondetail.open(tx.id, 'home');
+          return;
+        }
+
+        if (
           window.App &&
           typeof App.navigate === 'function'
         ) {
           App.navigate('wallet');
         }
-
-        setTimeout(() => {
-          if (
-            window.Wallet &&
-            typeof Wallet.switchToActivity === 'function'
-          ) {
-            Wallet.switchToActivity();
-          }
-        }, 120);
       });
 
       const icon = document.createElement('div');

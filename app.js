@@ -22,7 +22,12 @@
   };
 
   const PRIMARY_PAGES = new Set(['home','market','vault','wallet']);
-  const AUXILIARY_ROUTES = new Set(['deposit','adminreview']);
+  const AUXILIARY_ROUTES = new Set([
+    'deposit',
+    'adminreview',
+    'settings',
+    'transactiondetail'
+  ]);
 
   const state = {
     initialized: false,
@@ -285,6 +290,12 @@
 
       state.initialized = true;
 
+      if (window.ExperienceOrchestrator && ExperienceOrchestrator.markAppReady) {
+        ExperienceOrchestrator.markAppReady(
+          window.Router ? Router.getCurrentPage() : 'home'
+        );
+      }
+
       // ── BACK BUTTON EXIT HANDLER ─────────────────────────────────────────
       // Push a history entry so the first hardware/browser back press fires
       // popstate instead of navigating to login.html (which causes the
@@ -309,6 +320,26 @@
         if (currentRoute === 'adminreview') {
           window.history.pushState({ ntx: 1 }, '');
           navigate('home');
+          return;
+        }
+
+        if (
+          currentRoute === 'transactiondetail' &&
+          window.Transactiondetail &&
+          Transactiondetail.back
+        ) {
+          window.history.pushState({ ntx: 1 }, '');
+          Transactiondetail.back();
+          return;
+        }
+
+        if (
+          currentRoute === 'settings' &&
+          window.Settings &&
+          Settings.back
+        ) {
+          window.history.pushState({ ntx: 1 }, '');
+          Settings.back();
           return;
         }
 
@@ -478,11 +509,17 @@
   async function navigate(pageId) {
     if (!pageId) return;
     console.log(`[APP] 🧭 Navigate: ${pageId}`);
-    document.body.classList.toggle('route-immersive', pageId === 'deposit');
+    document.body.classList.toggle(
+      'route-immersive',
+      pageId === 'deposit' || pageId === 'transactiondetail'
+    );
     if (window.AppState) AppState.set('ui.currentPage', pageId);
     if (window.Router)   await window.Router.navigate(pageId);
     if (window.Navbar)   Navbar.setActive(pageId);
     if (window.Storage && PRIMARY_PAGES.has(pageId)) Storage.setLastPage(pageId);
+    if (window.ExperienceOrchestrator && ExperienceOrchestrator.noteNavigation) {
+      ExperienceOrchestrator.noteNavigation(pageId);
+    }
   }
 
   // ── TOAST SYSTEM ────────────────────────────────────────────────────────────

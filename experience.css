@@ -1,0 +1,18 @@
+.experience-prompt {
+  position: fixed; left: 50%; bottom: calc(var(--nav-footprint-live, 96px) + 16px); z-index: 8500;
+  width: min(calc(100% - 28px), 440px); padding: 12px;
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: start;
+  background: var(--color-overlay); border: 1px solid var(--color-border); border-radius: var(--nt-radius-card); box-shadow: var(--shadow-lg);
+  opacity: 0; transform: translate(-50%, 10px); pointer-events: none;
+  transition: opacity var(--nt-motion-content) var(--nt-ease-out), transform var(--nt-motion-content) var(--nt-ease-out);
+}
+.experience-prompt.is-visible { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.experience-prompt__icon { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: var(--nt-radius-compact); background: var(--color-surface-elevated); color: var(--color-primary); }
+.experience-prompt__title { color: var(--color-text-primary); font-size: 12px; font-weight: 700; line-height: 1.3; }
+.experience-prompt__copy { margin-top: 3px; color: var(--color-text-secondary); font-size: 10px; line-height: 1.45; }
+.experience-prompt__actions { grid-column: 2 / 4; display: flex; gap: 7px; }
+.experience-prompt__primary, .experience-prompt__secondary { min-height: 34px; padding: 0 11px; border-radius: var(--nt-radius-compact); font-family: var(--font-ui); font-size: 10px; font-weight: 700; }
+.experience-prompt__primary { border: 1px solid var(--color-primary); background: var(--color-primary); color: #FFFFFF; }
+.experience-prompt__secondary { border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-secondary); }
+.experience-prompt__close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--color-text-tertiary); }
+@media (max-width: 360px) { .experience-prompt { grid-template-columns: 30px minmax(0, 1fr) auto; } .experience-prompt__icon { width: 30px; height: 30px; } }
