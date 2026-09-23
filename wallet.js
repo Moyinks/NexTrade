@@ -383,7 +383,7 @@ const Wallet = (() => {
   function createOverviewTab() {
     const tab = document.createElement('div');
     tab.className = 'overview-tab';
-    tab.style.cssText = 'flex:1; min-height:0; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; padding-bottom:var(--scroll-bottom-clearance, 116px);';
+    tab.style.cssText = 'flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; padding-bottom:0; gap:10px;';
     
     const summary = getPortfolioSummary();
     
@@ -394,11 +394,32 @@ const Wallet = (() => {
     tab.appendChild(createBalanceCards(summary));
     tab.appendChild(createQuickActions());
     
-    if (state.transactions.length > 0) {
-      tab.appendChild(createRecentActivity());
-    }
-    
     return tab;
+  }
+
+  function createHeroActivityShortcut() {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wallet-hero-activity';
+    const latest = state.transactions[0] || null;
+    const pendingCount = state.transactions.filter(tx => tx && tx.status === 'pending').length;
+    const copy = document.createElement('span'); copy.className = 'wallet-hero-activity__copy';
+    const title = document.createElement('span'); title.className = 'wallet-hero-activity__title';
+    const meta = document.createElement('span'); meta.className = 'wallet-hero-activity__meta';
+    if (pendingCount > 0) {
+      title.textContent = pendingCount + ' pending transaction' + (pendingCount === 1 ? '' : 's');
+      meta.textContent = latest && latest.description ? String(latest.description) : 'Review your latest ledger state';
+    } else if (latest) {
+      const view = window.TransactionUI && TransactionUI.present ? TransactionUI.present(latest) : { label: 'Transaction' };
+      title.textContent = 'Latest · ' + view.label;
+      meta.textContent = latest.description || 'Open your activity history';
+    } else {
+      title.textContent = 'Activity'; meta.textContent = 'No ledger events yet';
+    }
+    copy.append(title, meta);
+    const action = document.createElement('span'); action.className = 'wallet-hero-activity__action'; action.appendChild(document.createTextNode('View activity'));
+    const icon = document.createElement('i'); icon.className = 'fas fa-arrow-right'; action.appendChild(icon);
+    button.append(copy, action); button.addEventListener('click', () => switchTab('activity')); return button;
   }
 
   function createHeroCard(summary) {
@@ -453,12 +474,15 @@ const Wallet = (() => {
       e.stopPropagation(); 
       togglePrivacy(); 
     };
+
+    card.appendChild(createHeroActivityShortcut());
     
     return card;
   }
 
   function createBalanceCards(summary) {
     const section = document.createElement('div');
+    section.className = 'wallet-balance-grid';
     section.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; padding:0;';
     
     const cards = [
@@ -480,6 +504,7 @@ const Wallet = (() => {
     
     cards.forEach(cardData => {
       const card = document.createElement('div');
+      card.className = 'wallet-balance-card';
       card.style.cssText = `
         background:var(--color-surface); border:1px solid var(--color-border);
         border-radius:12px; padding:12px; position:relative; overflow:hidden;

@@ -23,3 +23,7 @@ These rules are product constraints, not aspirations.
 13. **Persistent screen space must be earned by persistent relevance.** Selected values stay visible; alternatives and explanations use progressive disclosure.
 14. **Never interrupt user-owned motion with application-owned rendering.** Live data may arrive while someone scrolls, but refreshes must preserve the active surface and scroll anchor.
 15. **Back means origin, not destination.** Back navigation restores the route and meaningful local UI state the user came from.
+16. **A route owns its position in space.** Primary destinations keep independent scroll state; Back restores exact origin state.
+17. **Semantic colour belongs to information, not decoration.** State/value colour may be strong; containers stay predominantly neutral.
+18. **Transparency is physical, not hierarchical.** Scrims, shadows and temporary motion may use alpha; financial surfaces and text hierarchy use deterministic semantic tokens.
+19. **Immersion comes from continuity and hierarchy, not more layers.** Prefer continuous workspaces and selective containment over a dashboard made entirely of cards.

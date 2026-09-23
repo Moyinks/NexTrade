@@ -1272,27 +1272,36 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     const upColor   = '#10b981';
     const downColor = '#ef4444';
 
+    const rootStyles = getComputedStyle(document.documentElement);
+    const chartTheme = {
+      background: rootStyles.getPropertyValue('--chart-background').trim() || '#111820',
+      text: rootStyles.getPropertyValue('--chart-text').trim() || '#8E9AA6',
+      grid: rootStyles.getPropertyValue('--chart-grid').trim() || '#1D2730',
+      border: rootStyles.getPropertyValue('--chart-border').trim() || '#2A3540',
+      watermark: rootStyles.getPropertyValue('--chart-watermark').trim() || '#1E2A34'
+    };
+
     _chartInstance = LightweightCharts.createChart(chartEl, {
       width:  chartEl.offsetWidth  || 340,
       height: chartEl.offsetHeight || 200,
       layout: {
-        background:  { color: 'transparent' },
-        textColor:   'rgba(255,255,255,0.7)',
+        background:  { color: chartTheme.background },
+        textColor:   chartTheme.text,
         fontFamily:  'var(--font-mono, monospace)'
       },
       grid: {
-        vertLines:   { color: 'rgba(255,255,255,0.05)' },
-        horzLines:   { color: 'rgba(255,255,255,0.05)' }
+        vertLines:   { color: chartTheme.grid },
+        horzLines:   { color: chartTheme.grid }
       },
       crosshair: {
         mode: LightweightCharts.CrosshairMode.Normal
       },
       rightPriceScale: {
-        borderColor:   'rgba(255,255,255,0.08)',
+        borderColor:   chartTheme.border,
         scaleMargins:  { top: 0.12, bottom: 0.14 }
       },
       timeScale: {
-        borderColor:     'rgba(255,255,255,0.08)',
+        borderColor:     chartTheme.border,
         timeVisible:     days <= 7,
         secondsVisible:  false,
         borderVisible:   false
@@ -1302,7 +1311,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
         fontSize: 26,
         horzAlign: 'center',
         vertAlign: 'center',
-        color: 'rgba(255,255,255,0.04)',
+        color: chartTheme.watermark,
         text: 'NEXTRADE LIVE'
       },
       handleScroll:   { mouseWheel: true, pressedMouseMove: true },

@@ -377,6 +377,32 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
   }
 }
 
+
+// Surface + spatial architecture.
+{
+  const appSource = read('app.js');
+  const homeSource = read('home.js');
+  const walletSource = read('wallet.js');
+  const marketSource = read('market.js');
+  const settingsSource = read('settings.js');
+  const surfaceCss = read('surface-spatial.css');
+  const architectureSource = read('ARCHITECTURE_RULES.md');
+  if (!appSource.includes('navigationState.primary')) fail('Primary routes do not own independent scroll state');
+  if (!homeSource.includes('getNavigationState')) fail('Home cannot preserve its inner scroll state');
+  if (!walletSource.includes('createHeroActivityShortcut')) fail('Wallet hero has no compact Activity affordance');
+  if (/createOverviewTab[\s\S]{0,900}createRecentActivity\(\)/.test(walletSource)) fail('Wallet Overview still duplicates Recent Activity');
+  if (!surfaceCss.includes('body[data-route="wallet"] .overview-tab')) fail('Wallet Overview viewport composition missing');
+  if (marketSource.includes("background:  { color: 'transparent' }")) fail('Market chart still inherits a transparent background');
+  if (!settingsSource.includes('settings-sheet-layer')) fail('Settings Theme control is not progressively disclosed');
+  for (const principle of ['A route owns its position in space.','Semantic colour belongs to information, not decoration.','Transparency is physical, not hierarchical.','Immersion comes from continuity and hierarchy, not more layers.']) {
+    if (!architectureSource.includes(principle)) fail(`Architecture constitution missing: ${principle}`);
+  }
+  const surfaceDebt = spawnSync(process.execPath,[path.join(root,'scripts/surface-debt.mjs')],{encoding:'utf8'});
+  if (surfaceDebt.status !== 0) fail('Surface/transparency debt ratchet failed: '+(surfaceDebt.stderr||surfaceDebt.stdout||'').trim());
+  else pass('Surface/transparency debt ratchet did not increase');
+  if (!failures.some((x)=>x.includes('independent scroll state')||x.includes('inner scroll state')||x.includes('Activity affordance')||x.includes('duplicates Recent Activity')||x.includes('viewport composition')||x.includes('transparent background')||x.includes('progressively disclosed')||x.includes('Architecture constitution missing')||x.includes('Surface/transparency debt ratchet'))) pass('Surface/spatial architecture');
+}
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);

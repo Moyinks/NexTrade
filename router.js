@@ -264,7 +264,7 @@ notFound.appendChild(msg);
 
     showSkeletonLoader(container, pageName);
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await Promise.resolve();
 
     try {
       const renderPromise = pageModule.render(container);

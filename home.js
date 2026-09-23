@@ -292,7 +292,7 @@
       'padding:16px',
       'border-radius:18px',
       'background:linear-gradient(180deg, rgba(10,16,28,1), rgba(6,10,18,1))',
-      'border:1px solid rgba(255,255,255,0.08)',
+      'border:1px solid var(--color-border)',
       'box-shadow:0 12px 32px rgba(0,0,0,0.22)',
       'text-align:left',
       'cursor:pointer'
@@ -308,16 +308,16 @@
     const eyebrow = el('div', 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;');
     eyebrow.appendChild(el('div', 'font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:rgba(255,255,255,0.52);', greeting() + ', ' + firstName()));
     if (streak.count > 1) {
-      eyebrow.appendChild(el('div', 'font-size:11px;font-weight:700;color:rgba(255,255,255,0.72);display:inline-flex;align-items:center;gap:4px;', '🔥 ' + streak.count + 'd streak'));
+      eyebrow.appendChild(el('div', 'font-size:11px;font-weight:700;color:var(--color-text-secondary);display:inline-flex;align-items:center;gap:4px;', '🔥 ' + streak.count + 'd streak'));
     }
     left.appendChild(eyebrow);
 
-    const totalNode = el('div', 'font-family:var(--font-mono,monospace);font-size:30px;line-height:1.05;font-weight:800;letter-spacing:-0.9px;color:#fff;word-break:break-word;');
+    const totalNode = el('div', 'font-family:var(--font-mono,monospace);font-size:30px;line-height:1.05;font-weight:800;letter-spacing:-0.9px;color:var(--color-text-primary);word-break:break-word;');
     totalNode.textContent = hidden ? '••••••••' : formatMoney(total);
     left.appendChild(totalNode);
 
     const row = el('div', 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;');
-    const badge = el('div', 'display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);font-size:11px;font-weight:700;color:rgba(255,255,255,0.9);');
+    const badge = el('div', 'display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:var(--color-surface-elevated);border:1px solid var(--color-border);font-size:11px;font-weight:700;color:rgba(255,255,255,0.9);');
     badge.textContent = ready ? 'Live' : 'Syncing';
     row.appendChild(badge);
 
@@ -325,7 +325,7 @@
     delta.textContent = hidden ? 'Balance hidden' : ('24h ' + (change.crypto24 >= 0 ? '+' : '-') + formatMoney(Math.abs(change.crypto24)));
     row.appendChild(delta);
 
-    const balanceNote = el('div', 'width:100%;font-size:12px;line-height:1.4;color:rgba(255,255,255,0.62);margin-top:2px;');
+    const balanceNote = el('div', 'width:100%;font-size:12px;line-height:1.4;color:var(--color-text-secondary);margin-top:2px;');
     if (!ready) {
       balanceNote.textContent = 'Loading your latest balances…';
     } else if (total <= 0) {
@@ -337,7 +337,7 @@
     left.appendChild(row);
     left.appendChild(balanceNote);
 
-    const right = el('div', 'width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.18);color:#93c5fd;');
+    const right = el('div', 'width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:rgba(59,130,246,0.12);border:1px solid var(--color-border);color:#93c5fd;');
     right.innerHTML = '<i class="fas fa-wallet" style="font-size:14px"></i>';
 
     top.appendChild(left);
@@ -349,7 +349,9 @@
 
   function sectionShell(title, subtitle, actionText, actionHandler) {
     const wrap = el('section', 'display:flex;flex-direction:column;gap:10px;');
+    wrap.className = 'home-section';
     const head = el('div', 'display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 16px;');
+    head.className = 'home-section__head';
     const left = el('div', 'min-width:0;');
     left.appendChild(el('div', 'font-size:16px;font-weight:800;line-height:1.15;color:var(--color-text-primary,#fff);letter-spacing:-0.3px;', title));
     if (subtitle) left.appendChild(el('div', 'font-size:12px;line-height:1.4;color:var(--color-text-secondary,#94a3b8);margin-top:3px;', subtitle));
@@ -369,11 +371,11 @@
     const shell = sectionShell('Active Strategies', 'Open positions in the Vault');
 
     if (!active.length) {
-      const empty = el('div', 'border-radius:16px;padding:18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;gap:12px;');
+      const empty = el('div', 'border-radius:16px;padding:18px;background:var(--color-surface);border:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;gap:12px;');
       const copy = el('div', 'min-width:0;flex:1;');
       copy.appendChild(el('div', 'font-size:14px;font-weight:700;color:var(--color-text-primary,#fff);margin-bottom:4px;', 'No active positions'));
       copy.appendChild(el('div', 'font-size:12px;line-height:1.4;color:var(--color-text-secondary,#94a3b8);', 'Open Vault to pick a strategy and start compounding.'));
-      const btn = el('button', 'border:none;border-radius:12px;padding:10px 14px;background:var(--color-primary,#3b82f6);color:#fff;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;');
+      const btn = el('button', 'border:none;border-radius:12px;padding:10px 14px;background:var(--color-primary,#3b82f6);color:var(--color-text-primary);font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;');
       btn.textContent = 'Open Vault';
       btn.addEventListener('click', () => window.App && App.navigate('vault'));
       empty.appendChild(copy);
@@ -390,7 +392,7 @@
       const atMat  = Number.isFinite(p.atMaturity) && p.atMaturity > amount ? p.atMaturity : amount;
       const profit  = atMat - amount;
 
-      const box = el('button', 'width:100%;text-align:left;border-radius:16px;padding:14px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);cursor:pointer;display:flex;flex-direction:column;gap:10px;');
+      const box = el('button', 'width:100%;text-align:left;border-radius:16px;padding:14px;border:1px solid var(--color-border);background:var(--color-surface);cursor:pointer;display:flex;flex-direction:column;gap:10px;');
       box.type = 'button';
       box.addEventListener('click', () => {
         if (window.App && typeof App.navigate === 'function') App.navigate('vault');
@@ -398,27 +400,27 @@
 
       const top  = el('div', 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;min-width:0;');
       const left = el('div', 'min-width:0;flex:1;');
-      left.appendChild(el('div', 'font-size:14px;font-weight:800;line-height:1.2;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', name));
-      left.appendChild(el('div', 'font-size:12px;color:rgba(255,255,255,0.55);margin-top:4px;', formatMoney(amount) + ' invested \u00B7 ' + timeRemaining(p.maturesAt)));
+      left.appendChild(el('div', 'font-size:14px;font-weight:800;line-height:1.2;color:var(--color-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', name));
+      left.appendChild(el('div', 'font-size:12px;color:var(--color-text-tertiary);margin-top:4px;', formatMoney(amount) + ' invested \u00B7 ' + timeRemaining(p.maturesAt)));
       top.appendChild(left);
 
       const right = el('div', 'text-align:right;flex-shrink:0;');
-      right.appendChild(el('div', 'font-size:13px;font-weight:800;color:#fff;line-height:1.2;', formatMoney(atMat)));
-      right.appendChild(el('div', 'font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;', 'Est. at maturity'));
+      right.appendChild(el('div', 'font-size:13px;font-weight:800;color:var(--color-text-primary);line-height:1.2;', formatMoney(atMat)));
+      right.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);margin-top:2px;', 'Est. at maturity'));
       const profitEl = el('div', 'font-size:10px;font-weight:700;margin-top:3px;', '+' + formatMoney(profit) + ' profit');
       profitEl.style.color = '#10b981';
       right.appendChild(profitEl);
       top.appendChild(right);
       box.appendChild(top);
 
-      const bar  = el('div', 'width:100%;height:5px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;');
+      const bar  = el('div', 'width:100%;height:5px;border-radius:999px;background:var(--color-surface-elevated);overflow:hidden;');
       const fill = el('div', 'height:100%;width:' + Math.max(4, Math.round((p.progress || 0) * 100)) + '%;border-radius:999px;background:linear-gradient(90deg,rgba(59,130,246,0.95),rgba(16,185,129,0.95));');
       bar.appendChild(fill);
       box.appendChild(bar);
 
       const bottom = el('div', 'display:flex;align-items:center;justify-content:space-between;');
-      bottom.appendChild(el('div', 'font-size:11px;color:rgba(255,255,255,0.5);', Math.round((p.progress || 0) * 100) + '% complete'));
-      bottom.appendChild(el('div', 'font-size:11px;font-weight:700;color:rgba(255,255,255,0.65);', (inv.apy || 0) + '% cycle target'));
+      bottom.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);', Math.round((p.progress || 0) * 100) + '% complete'));
+      bottom.appendChild(el('div', 'font-size:11px;font-weight:700;color:var(--color-text-secondary);', (inv.apy || 0) + '% cycle target'));
       box.appendChild(bottom);
 
       list.appendChild(box);
@@ -452,8 +454,8 @@
     const unrealisedGain = totalEst - totalInvested;
 
     let title, body, cta = null, action = null;
-    let tone   = 'linear-gradient(135deg,rgba(59,130,246,0.13),rgba(59,130,246,0.05))';
-    let border = 'rgba(59,130,246,0.22)';
+    let tone   = 'var(--color-surface)';
+    let border = 'var(--color-border)';
 
     if (snapshot.balanceSyncStatus !== 'ready') {
       title = 'Syncing your portfolio\u2026';
@@ -466,8 +468,8 @@
       body   = formatMoney(claimVal) + ' ' + (plural ? 'are' : 'is') + ' waiting. Claim to your Spot Wallet and decide what\u2019s next.';
       cta    = 'Claim now';
       action = () => window.App && App.navigate('vault');
-      tone   = 'linear-gradient(135deg,rgba(16,185,129,0.15),rgba(16,185,129,0.05))';
-      border = 'rgba(16,185,129,0.28)';
+      tone   = 'var(--color-surface)';
+      border = 'var(--color-border)';
 
     } else if (total <= 0) {
       title  = 'Nothing here yet';
@@ -480,8 +482,8 @@
       body   = 'That cash could be working. Steady Accumulator starts at $100 \u2014 90-day cycle. Surge Pool takes $1,500 \u2014 30-day cycle.';
       cta    = 'Invest now';
       action = () => window.App && App.navigate('vault');
-      tone   = 'linear-gradient(135deg,rgba(245,158,11,0.14),rgba(245,158,11,0.05))';
-      border = 'rgba(245,158,11,0.26)';
+      tone   = 'var(--color-surface)';
+      border = 'var(--color-border)';
 
     } else if (active.length > 0 && daysToNext !== null && daysToNext <= 4) {
       const sName = strategyDisplayName(next);
@@ -489,8 +491,8 @@
       body   = formatMoney(Number(next.amount) || 0) + ' is almost done. Plan now: reinvest or withdraw to wallet.';
       cta    = 'View positions';
       action = () => window.App && App.navigate('vault');
-      tone   = 'linear-gradient(135deg,rgba(245,158,11,0.14),rgba(245,158,11,0.05))';
-      border = 'rgba(245,158,11,0.26)';
+      tone   = 'var(--color-surface)';
+      border = 'var(--color-border)';
 
     } else if (active.length > 0 && unrealisedGain > 0) {
       const pct = totalInvested > 0 ? ((unrealisedGain / totalInvested) * 100).toFixed(1) : '0.0';
@@ -500,16 +502,16 @@
              + (daysToNext ? 'Next payout in ' + daysToNext + 'd.' : 'Stay the course.');
       cta    = 'View';
       action = () => window.App && App.navigate('vault');
-      tone   = 'linear-gradient(135deg,rgba(16,185,129,0.12),rgba(16,185,129,0.04))';
-      border = 'rgba(16,185,129,0.2)';
+      tone   = 'var(--color-surface)';
+      border = 'var(--color-border)';
 
     } else if (active.length > 0 && cash < Math.max(50, totalInvested * 0.08)) {
       title  = 'Fully deployed';
       body   = 'All capital is in the pool. Keep a small cash buffer for flexibility \u2014 or sit tight until maturity.';
       cta    = 'Wallet';
       action = () => window.App && App.navigate('wallet');
-      tone   = 'linear-gradient(135deg,rgba(139,92,246,0.12),rgba(139,92,246,0.04))';
-      border = 'rgba(139,92,246,0.2)';
+      tone   = 'var(--color-surface)';
+      border = 'var(--color-border)';
 
     } else {
       const posStr = active.length + ' position' + (active.length > 1 ? 's' : '') + ' active';
@@ -520,13 +522,14 @@
     }
 
     const shell = sectionShell('Smart context', null);
-    const card  = el('div', 'border-radius:16px;padding:16px;background:' + tone + ';border:1px solid ' + border + ';display:flex;align-items:flex-start;justify-content:space-between;gap:12px;');
+    const card  = el('div');
+    card.className = 'home-context-card';
     const copy  = el('div', 'min-width:0;flex:1;');
-    copy.appendChild(el('div', 'font-size:15px;font-weight:800;line-height:1.2;color:#fff;', title));
-    copy.appendChild(el('div', 'font-size:12px;line-height:1.55;color:rgba(255,255,255,0.68);margin-top:6px;', body));
+    copy.appendChild(el('div', 'font-size:15px;font-weight:800;line-height:1.2;color:var(--color-text-primary);', title));
+    copy.appendChild(el('div', 'font-size:12px;line-height:1.55;color:var(--color-text-secondary);margin-top:6px;', body));
     card.appendChild(copy);
     if (cta && action) {
-      const btn = el('button', 'border:none;border-radius:12px;padding:10px 14px;background:rgba(255,255,255,0.11);color:#fff;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;white-space:nowrap;');
+      const btn = el('button', 'border:none;border-radius:12px;padding:10px 14px;background:rgba(255,255,255,0.11);color:var(--color-text-primary);font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;white-space:nowrap;');
       btn.textContent = cta;
       btn.addEventListener('click', action);
       card.appendChild(btn);
@@ -556,7 +559,7 @@
         const row = el('div', [
           'display:flex;align-items:center;gap:12px;min-width:0;',
           'border-radius:14px;padding:12px 14px;',
-          'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);',
+          'background:var(--color-surface);border:1px solid var(--color-border);',
           'opacity:' + s.opacity + ';'
         ].join(''));
 
@@ -580,7 +583,7 @@
       const note = el('div', [
         'margin-top:4px;padding:12px 14px;border-radius:12px;',
         'background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.12);',
-        'font-size:12px;line-height:1.5;color:rgba(255,255,255,0.5);text-align:center;'
+        'font-size:12px;line-height:1.5;color:var(--color-text-tertiary);text-align:center;'
       ].join(''), 'Your first deposit starts the ledger.');
       empty.appendChild(note);
 
@@ -685,19 +688,20 @@
     });
 
     const wrap = el('div', 'display:flex;flex-direction:column;gap:10px;');
+    wrap.className = 'home-market-list';
 
     if (!assets.length && !mover) {
-      const empty = el('div', 'border-radius:16px;padding:18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);');
-      empty.appendChild(el('div', 'font-size:14px;font-weight:700;color:#fff;margin-bottom:4px;', 'No market exposure yet'));
-      empty.appendChild(el('div', 'font-size:12px;line-height:1.4;color:rgba(255,255,255,0.62);', 'When you hold assets, they will appear here.'));
+      const empty = el('div', 'border-radius:16px;padding:18px;background:var(--color-surface);border:1px solid var(--color-border);');
+      empty.appendChild(el('div', 'font-size:14px;font-weight:700;color:var(--color-text-primary);margin-bottom:4px;', 'No market exposure yet'));
+      empty.appendChild(el('div', 'font-size:12px;line-height:1.4;color:var(--color-text-secondary);', 'When you hold assets, they will appear here.'));
       wrap.appendChild(empty);
       shell.appendChild(wrap);
       return shell;
     }
 
     assets.slice(0, 3).forEach(asset => {
-      const row = el('div', 'display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);min-width:0;');
-      const icon = el('div', 'width:30px;height:30px;border-radius:999px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:rgba(255,255,255,0.06);color:#fff;font-size:12px;font-weight:900;');
+      const row = el('div', 'display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:var(--color-surface);border:1px solid var(--color-border);min-width:0;');
+      const icon = el('div', 'width:30px;height:30px;border-radius:999px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:var(--color-surface-elevated);color:var(--color-text-primary);font-size:12px;font-weight:900;');
       const assetImageUrl = coinImageUrl(asset.image);
       if (assetImageUrl) {
         const img = document.createElement('img');
@@ -714,8 +718,8 @@
       }
       row.appendChild(icon);
       const copy = el('div', 'min-width:0;flex:1;');
-      copy.appendChild(el('div', 'font-size:13px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', asset.name + ' · ' + asset.symbol));
-      copy.appendChild(el('div', 'font-size:11px;color:rgba(255,255,255,0.62);margin-top:4px;', formatMoney(asset.qty) + ' · ' + formatMoney(asset.value)));
+      copy.appendChild(el('div', 'font-size:13px;font-weight:800;color:var(--color-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', asset.name + ' · ' + asset.symbol));
+      copy.appendChild(el('div', 'font-size:11px;color:var(--color-text-secondary);margin-top:4px;', formatMoney(asset.qty) + ' · ' + formatMoney(asset.value)));
       row.appendChild(copy);
       const chg = el('div', 'flex-shrink:0;font-size:12px;font-weight:800;color:' + (asset.change24 >= 0 ? '#34d399' : '#f87171') + ';', formatPercent(asset.change24));
       row.appendChild(chg);
@@ -723,8 +727,8 @@
     });
 
     if (mover) {
-      const row = el('div', 'display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg, rgba(59,130,246,0.12), rgba(16,185,129,0.06));border:1px solid rgba(59,130,246,0.18);min-width:0;');
-      const icon = el('div', 'width:30px;height:30px;border-radius:999px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:rgba(255,255,255,0.08);color:#fff;font-size:12px;font-weight:900;');
+      const row = el('div', 'display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:var(--color-surface);border:1px solid var(--color-border);min-width:0;');
+      const icon = el('div', 'width:30px;height:30px;border-radius:999px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:rgba(255,255,255,0.08);color:var(--color-text-primary);font-size:12px;font-weight:900;');
       const moverImageUrl = coinImageUrl(mover.image);
       if (moverImageUrl) {
         const img = document.createElement('img');
@@ -741,8 +745,8 @@
       }
       row.appendChild(icon);
       const copy = el('div', 'min-width:0;flex:1;');
-      copy.appendChild(el('div', 'font-size:13px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', 'Top mover · ' + mover.name));
-      copy.appendChild(el('div', 'font-size:11px;color:rgba(255,255,255,0.68);margin-top:4px;', mover.symbol + ' · ' + formatMoney(mover.price)));
+      copy.appendChild(el('div', 'font-size:13px;font-weight:800;color:var(--color-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', 'Top mover · ' + mover.name));
+      copy.appendChild(el('div', 'font-size:11px;color:var(--color-text-secondary);margin-top:4px;', mover.symbol + ' · ' + formatMoney(mover.price)));
       row.appendChild(copy);
       row.appendChild(el('div', 'flex-shrink:0;font-size:12px;font-weight:800;color:' + (mover.change24 >= 0 ? '#34d399' : '#f87171') + ';', formatPercent(mover.change24)));
       wrap.appendChild(row);
@@ -763,6 +767,7 @@
 
     const shell = sectionShell('Live stats', 'Real counts from your account state');
     const grid = el('div', 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;');
+    grid.className = 'home-stat-grid';
 
     const cells = [
       { label: 'Active positions', value: String(active.length) },
@@ -774,9 +779,10 @@
     ];
 
     cells.forEach(cell => {
-      const box = el('div', 'border-radius:14px;padding:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);min-width:0;');
-      box.appendChild(el('div', 'font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:rgba(255,255,255,0.56);', cell.label));
-      box.appendChild(el('div', 'font-size:18px;font-weight:900;letter-spacing:-0.3px;color:#fff;margin-top:8px;word-break:break-word;', cell.value));
+      const box = el('div', 'min-width:0;');
+      box.className = 'home-stat-cell';
+      box.appendChild(el('div', 'font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--color-text-tertiary);', cell.label));
+      box.appendChild(el('div', 'font-size:18px;font-weight:900;letter-spacing:-0.3px;color:var(--color-text-primary);margin-top:8px;word-break:break-word;', cell.value));
       grid.appendChild(box);
     });
 
@@ -792,7 +798,7 @@
 
   function loadingSection(title, lines = 2) {
     const shell = sectionShell(title, null);
-    const card = el('div', 'border-radius:16px;padding:16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;gap:10px;');
+    const card = el('div', 'border-radius:16px;padding:16px;background:var(--color-surface);border:1px solid var(--color-border);display:flex;flex-direction:column;gap:10px;');
     for (let i = 0; i < lines; i++) card.appendChild(emptySkeletonLine(i === 0 ? '72%' : '52%', '14px'));
     shell.appendChild(card);
     return shell;
@@ -816,9 +822,9 @@
       steps.forEach((_, i) => dots.appendChild(el('div', 'width:' + (i === idx ? '20px' : '8px') + ';height:8px;border-radius:999px;background:' + (i <= idx ? '#60a5fa' : 'rgba(255,255,255,0.1)') + ';')));
       content.appendChild(dots);
       content.appendChild(el('div', 'font-size:44px;text-align:center;', step.icon));
-      content.appendChild(el('div', 'font-size:18px;font-weight:900;color:#fff;text-align:center;line-height:1.25;', step.title));
+      content.appendChild(el('div', 'font-size:18px;font-weight:900;color:var(--color-text-primary);text-align:center;line-height:1.25;', step.title));
       content.appendChild(el('div', 'font-size:14px;line-height:1.6;color:#cbd5e1;text-align:center;', step.body));
-      const next = el('button', 'width:100%;padding:14px;border:none;border-radius:14px;background:var(--color-primary,#3b82f6);color:#fff;font-size:14px;font-weight:800;cursor:pointer;', idx === steps.length - 1 ? 'Get started' : 'Next');
+      const next = el('button', 'width:100%;padding:14px;border:none;border-radius:14px;background:var(--color-primary,#3b82f6);color:var(--color-text-primary);font-size:14px;font-weight:800;cursor:pointer;', idx === steps.length - 1 ? 'Get started' : 'Next');
       next.addEventListener('click', () => {
         if (idx === steps.length - 1) {
           markOnboarded();
@@ -831,7 +837,7 @@
       });
       content.appendChild(next);
       if (idx < steps.length - 1) {
-        const skip = el('button', 'width:100%;padding:13px;border-radius:14px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.05);color:#cbd5e1;font-size:13px;font-weight:700;cursor:pointer;');
+        const skip = el('button', 'width:100%;padding:13px;border-radius:14px;border:1px solid var(--color-border);background:rgba(255,255,255,0.05);color:#cbd5e1;font-size:13px;font-weight:700;cursor:pointer;');
         skip.textContent = 'Skip';
         skip.addEventListener('click', () => { markOnboarded(); Modal.close(); });
         content.appendChild(skip);
@@ -878,6 +884,7 @@
 
   function buildRoot(snapshot) {
     const root = el('div', 'display:flex;flex-direction:column;gap:14px;min-width:0;width:100%;padding:0 0 var(--scroll-bottom-clearance, 116px) 0;box-sizing:border-box;');
+    root.className = 'home-workspace';
 
     root.appendChild(heroCard(snapshot));
 
@@ -988,5 +995,16 @@
     destroy();
   }
 
-  window.Home = { render, refresh, destroy, cleanup };
+  function getNavigationState() {
+    return { scrollTop: _scrollEl ? _scrollEl.scrollTop : 0 };
+  }
+
+  function restoreNavigationState(snapshot) {
+    if (!_scrollEl || !snapshot) return;
+    requestAnimationFrame(() => {
+      _scrollEl.scrollTop = Number(snapshot.scrollTop) || 0;
+    });
+  }
+
+  window.Home = { render, refresh, destroy, cleanup, getNavigationState, restoreNavigationState };
 })();

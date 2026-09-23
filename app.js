@@ -37,7 +37,8 @@
 
   // ORIGIN-AWARE NAVIGATION
   const navigationState = {
-    stack: []
+    stack: [],
+    primary: new Map()
   };
 
   function getRouteScrollSurface(route) {
@@ -66,7 +67,11 @@
         window.Wallet &&
         typeof Wallet.getNavigationState === 'function'
           ? Wallet.getNavigationState()
-          : null
+          : route === 'home' &&
+            window.Home &&
+            typeof Home.getNavigationState === 'function'
+              ? Home.getNavigationState()
+              : null
     };
   }
 
@@ -82,6 +87,16 @@
           typeof Wallet.restoreNavigationState === 'function'
         ) {
           Wallet.restoreNavigationState(snapshot.moduleState);
+          return;
+        }
+
+        if (
+          snapshot.route === 'home' &&
+          snapshot.moduleState &&
+          window.Home &&
+          typeof Home.restoreNavigationState === 'function'
+        ) {
+          Home.restoreNavigationState(snapshot.moduleState);
           return;
         }
 
@@ -103,6 +118,20 @@
     }
 
     await navigate(fallback, { fromBack: true });
+  }
+
+  function resetRouteToTop(route) {
+    if (route === 'wallet' && window.Wallet && typeof Wallet.getNavigationState === 'function' && typeof Wallet.restoreNavigationState === 'function') {
+      const current = Wallet.getNavigationState() || {};
+      Wallet.restoreNavigationState({ ...current, scrollTop: 0 });
+      return;
+    }
+    if (route === 'home' && window.Home && typeof Home.restoreNavigationState === 'function') {
+      Home.restoreNavigationState({ scrollTop: 0 });
+      return;
+    }
+    const surface = getRouteScrollSurface(route);
+    if (surface) surface.scrollTop = 0;
   }
 
   // ============================================
@@ -567,6 +596,15 @@
     const currentRoute = window.Router ? Router.getCurrentPage() : null;
     const fromBack = options && options.fromBack === true;
 
+    if (!fromBack && currentRoute && currentRoute === pageId && PRIMARY_PAGES.has(pageId)) {
+      resetRouteToTop(pageId);
+      return;
+    }
+
+    if (currentRoute && currentRoute !== pageId && PRIMARY_PAGES.has(currentRoute)) {
+      navigationState.primary.set(currentRoute, captureRouteSnapshot(currentRoute));
+    }
+
     if (!fromBack && currentRoute && currentRoute !== pageId && AUXILIARY_ROUTES.has(pageId)) {
       navigationState.stack.push(captureRouteSnapshot(currentRoute));
     }
@@ -582,6 +620,15 @@
     );
     if (window.AppState) AppState.set('ui.currentPage', pageId);
     if (window.Router)   await window.Router.navigate(pageId);
+
+    document.body.dataset.route = pageId;
+
+    if (PRIMARY_PAGES.has(pageId) && !(options && options.restoreSnapshot)) {
+      const saved = navigationState.primary.get(pageId);
+      if (saved) restoreRouteSnapshot(saved);
+      else resetRouteToTop(pageId);
+    }
+
     if (window.Navbar)   Navbar.setActive(pageId);
     if (window.Storage && PRIMARY_PAGES.has(pageId)) Storage.setLastPage(pageId);
     if (window.ExperienceOrchestrator && ExperienceOrchestrator.noteNavigation) {
