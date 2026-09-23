@@ -952,3 +952,205 @@ body[data-route="wallet"] .wallet-strategy-discovery {
     font-size: 7.5px !important;
   }
 }
+
+/* ── RELEASE CANDIDATE: LIGHT HERO + ACTIVITY FILTERS ─────────────── */
+
+.home-hero-card {
+  --color-text-primary: #F5F7FA;
+  --color-text-secondary: #A9B2BE;
+  --color-text-tertiary: #7E8996;
+  --color-surface-elevated: #151E29;
+  --color-border: #253242;
+
+  color: var(--color-text-primary) !important;
+  background:
+    linear-gradient(
+      180deg,
+      #0D141D 0%,
+      #091019 100%
+    ) !important;
+  border-color: #1D2936 !important;
+}
+
+html[data-theme="light"] .home-hero-card {
+  --color-text-primary: #F5F7FA;
+  --color-text-secondary: #A9B2BE;
+  --color-text-tertiary: #7E8996;
+  --color-surface-elevated: #151E29;
+  --color-border: #253242;
+  color: var(--color-text-primary) !important;
+}
+
+.wallet-filter-bar {
+  position: relative;
+  z-index: 12;
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+  padding: 7px;
+  overflow: visible;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+
+.wallet-filter-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(98px, auto)
+    minmax(98px, auto);
+  gap: 6px;
+  align-items: center;
+}
+
+.wallet-filter-search,
+.wallet-filter-select__button {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  outline: none;
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+
+.wallet-filter-search {
+  padding: 0 12px;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.wallet-filter-search::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.wallet-filter-search:focus-visible,
+.wallet-filter-select__button:focus-visible,
+.wallet-filter-select__option:focus-visible {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-glow);
+}
+
+.wallet-filter-select {
+  position: relative;
+  min-width: 0;
+}
+
+.wallet-filter-select__button {
+  padding: 0 10px 0 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.wallet-filter-select__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-filter-select__chevron {
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
+  font-size: 8px;
+  transition:
+    transform 150ms var(--nt-ease-standard);
+}
+
+.wallet-filter-select.is-open .wallet-filter-select__chevron {
+  transform: rotate(180deg);
+}
+
+.wallet-filter-select__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  width: max(100%, 164px);
+  max-height: min(280px, 45dvh);
+  padding: 5px;
+  display: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-border);
+  border-radius: 11px;
+  background: var(--color-overlay);
+  box-shadow: var(--shadow-lg);
+}
+
+.wallet-filter-select--right .wallet-filter-select__menu {
+  right: 0;
+  left: auto;
+}
+
+.wallet-filter-select.is-open .wallet-filter-select__menu {
+  display: grid;
+  gap: 2px;
+}
+
+.wallet-filter-select__option {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wallet-filter-select__option:hover,
+.wallet-filter-select__option:focus-visible,
+.wallet-filter-select__option.is-selected {
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+}
+
+.wallet-filter-select__check {
+  flex: 0 0 auto;
+  color: var(--color-primary);
+  font-size: 9px;
+  opacity: 0;
+}
+
+.wallet-filter-select__option.is-selected .wallet-filter-select__check {
+  opacity: 1;
+}
+
+@media (max-width: 390px) {
+  .wallet-filter-grid {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(0, 1fr);
+  }
+
+  .wallet-filter-search {
+    grid-column: 1 / -1;
+  }
+
+  .wallet-filter-select__menu {
+    width: max(100%, 150px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wallet-filter-select__chevron {
+    transition-duration: .01ms;
+  }
+}

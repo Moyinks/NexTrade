@@ -732,6 +732,113 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
   }
 }
 
+
+// Light hero + custom Activity controls.
+{
+  const homeSource = read('home.js');
+  const walletSource = read('wallet.js');
+  const finishCss = read('mobile-product-finish.css');
+  const architectureSource = read('ARCHITECTURE_RULES.md');
+
+  if (
+    !homeSource.includes(
+      "card.className = 'hero-card home-hero-card';"
+    )
+  ) {
+    fail('Home account hero is not attached to its theme-independent contract');
+  }
+
+  if (
+    !finishCss.includes(
+      'html[data-theme="light"] .home-hero-card'
+    ) ||
+    !finishCss.includes(
+      '--color-text-primary: #F5F7FA'
+    )
+  ) {
+    fail('Light theme does not preserve inverse Home hero content');
+  }
+
+  const filterStart =
+    walletSource.indexOf(
+      'function createFilterBar()'
+    );
+
+  const filterEnd =
+    walletSource.indexOf(
+      'function applyFilters()',
+      filterStart
+    );
+
+  const filterSource =
+    (
+      filterStart >= 0 &&
+      filterEnd > filterStart
+    )
+      ? walletSource.slice(
+          filterStart,
+          filterEnd
+        )
+      : '';
+
+  if (
+    !filterSource ||
+    filterSource.includes('<select') ||
+    filterSource.includes(
+      "document.createElement('select')"
+    )
+  ) {
+    fail('Wallet Activity still uses browser-native select controls');
+  }
+
+  if (
+    !filterSource.includes(
+      "setAttribute('role', 'listbox')"
+    ) ||
+    !filterSource.includes(
+      "setAttribute('aria-haspopup', 'listbox')"
+    ) ||
+    !filterSource.includes(
+      "event.key === 'Escape'"
+    )
+  ) {
+    fail('Wallet Activity custom filters lack accessible listbox behavior');
+  }
+
+  if (
+    !finishCss.includes(
+      '.wallet-filter-select__menu'
+    ) ||
+    !finishCss.includes(
+      '.wallet-filter-select__option.is-selected'
+    )
+  ) {
+    fail('Wallet Activity custom filter presentation missing');
+  }
+
+  for (const principle of [
+    'Dark anchor surfaces own inverse content tokens.',
+    'Product-critical selection controls have product-owned presentation.'
+  ]) {
+    if (!architectureSource.includes(principle)) {
+      fail(`Architecture constitution missing: ${principle}`);
+    }
+  }
+
+  if (
+    !failures.some((x) =>
+      x.includes('Home account hero') ||
+      x.includes('inverse Home hero') ||
+      x.includes('browser-native select') ||
+      x.includes('accessible listbox') ||
+      x.includes('custom filter presentation') ||
+      x.includes('Architecture constitution missing')
+    )
+  ) {
+    pass('Light hero/Activity control architecture');
+  }
+}
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);

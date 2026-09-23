@@ -41,3 +41,5 @@ These rules are product constraints, not aspirations.
 31. **A live visualization updates data without reconstructing presentation.** High-frequency ticks mutate existing chart objects and guides instead of destroying and recreating them.
 32. **Async chart replacement is atomic.** The last valid chart remains visible until a requested range has valid replacement data; failed or stale requests never blank or overwrite it.
 33. **A live stream proves identity before mutating a chart.** Coin, range, chart generation, socket, and series identity must all match before real-time data is accepted.
+34. **Dark anchor surfaces own inverse content tokens.** A deliberately dark financial anchor remains legible in every page theme because its content colors are scoped to the anchor, not inherited from the page.
+35. **Product-critical selection controls have product-owned presentation.** High-frequency filters and selectors use NexTrade interaction geometry and accessible semantics rather than uncontrolled browser-native chrome.

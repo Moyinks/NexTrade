@@ -993,55 +993,286 @@ function createBalanceCards(summary) {
 
   function createFilterBar() {
     const bar = document.createElement('div');
-    bar.style.cssText = 'margin-bottom:8px; padding:6px 8px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:10px; flex-shrink:0;';
+    bar.className = 'wallet-filter-bar';
 
-    bar.innerHTML = `
-      <div style="display:grid; grid-template-columns:1fr 100px 100px; gap:5px; align-items:center;">
-        <input type="text" id="filter-search" placeholder="Search…"
-          style="padding:6px 10px; background:var(--color-surface-elevated);
-                 border:1px solid var(--color-border); border-radius:7px;
-                 color:var(--color-text-primary); font-size:12px; min-width:0; outline:none;">
-        <select id="filter-type"
-          style="padding:6px 4px; background:var(--color-surface-elevated);
-                 border:1px solid var(--color-border); border-radius:7px;
-                 color:var(--color-text-primary); font-size:11px; cursor:pointer; outline:none;">
-          <option value="all">All Types</option>
-          <option value="deposit">Deposit</option>
-          <option value="withdraw">Withdraw</option>
-          <option value="buy">Buy</option>
-          <option value="sell">Sell</option>
-          <option value="investment">Strategy Entry</option>
-          <option value="claim">Claim</option>
-          <option value="transfer_in">Transfer In</option>
-          <option value="transfer_out">Transfer Out</option>
-        </select>
-        <select id="filter-status"
-          style="padding:6px 4px; background:var(--color-surface-elevated);
-                 border:1px solid var(--color-border); border-radius:7px;
-                 color:var(--color-text-primary); font-size:11px; cursor:pointer; outline:none;">
-          <option value="all">All Status</option>
-          <option value="completed">Completed</option>
-          <option value="approved">Approved</option>
-          <option value="pending">Pending</option>
-          <option value="failed">Failed</option>
-        </select>
-      </div>
-    `;
+    const grid = document.createElement('div');
+    grid.className = 'wallet-filter-grid';
 
-    bar.querySelector('#filter-search').oninput = (e) => {
-      state.ui.filters.search = e.target.value;
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.className = 'wallet-filter-search';
+    search.placeholder = 'Search activity';
+    search.setAttribute('aria-label', 'Search transaction activity');
+    search.autocomplete = 'off';
+    search.value = state.ui.filters.search || '';
+
+    search.addEventListener('input', event => {
+      state.ui.filters.search = event.target.value;
       applyFilters();
-    };
+    });
 
-    bar.querySelector('#filter-type').onchange = (e) => {
-      state.ui.filters.type = e.target.value;
-      applyFilters();
-    };
+    function closeAllMenus(except = null) {
+      bar.querySelectorAll('.wallet-filter-select').forEach(select => {
+        if (select === except) return;
+        select.classList.remove('is-open');
+        const trigger = select.querySelector('.wallet-filter-select__button');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+      });
+    }
 
-    bar.querySelector('#filter-status').onchange = (e) => {
-      state.ui.filters.status = e.target.value;
-      applyFilters();
-    };
+    function createFilterSelect({
+      label,
+      value,
+      options,
+      onChange,
+      align = 'left'
+    }) {
+      const root = document.createElement('div');
+      root.className =
+        'wallet-filter-select wallet-filter-select--' + align;
+
+      const trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.className = 'wallet-filter-select__button';
+      trigger.setAttribute('aria-haspopup', 'listbox');
+      trigger.setAttribute('aria-expanded', 'false');
+      trigger.setAttribute('aria-label', label);
+
+      const triggerLabel = document.createElement('span');
+      triggerLabel.className = 'wallet-filter-select__label';
+
+      const chevron = document.createElement('i');
+      chevron.className =
+        'fas fa-chevron-down wallet-filter-select__chevron';
+      chevron.setAttribute('aria-hidden', 'true');
+
+      trigger.append(triggerLabel, chevron);
+
+      const menu = document.createElement('div');
+      menu.className = 'wallet-filter-select__menu';
+      menu.setAttribute('role', 'listbox');
+      menu.setAttribute('aria-label', label);
+
+      const normalizedValue = String(value || 'all');
+
+      function syncLabel(nextValue) {
+        const item =
+          options.find(
+            option =>
+              String(option.value) === String(nextValue)
+          ) ||
+          options[0];
+
+        triggerLabel.textContent = item.label;
+
+        menu.querySelectorAll(
+          '.wallet-filter-select__option'
+        ).forEach(optionNode => {
+          const selected =
+            optionNode.dataset.value === String(nextValue);
+
+          optionNode.setAttribute(
+            'aria-selected',
+            String(selected)
+          );
+
+          optionNode.classList.toggle(
+            'is-selected',
+            selected
+          );
+        });
+      }
+
+      options.forEach(option => {
+        const optionButton =
+          document.createElement('button');
+
+        optionButton.type = 'button';
+        optionButton.className =
+          'wallet-filter-select__option';
+
+        optionButton.dataset.value =
+          String(option.value);
+
+        optionButton.setAttribute(
+          'role',
+          'option'
+        );
+
+        const text =
+          document.createElement('span');
+
+        text.textContent =
+          option.label;
+
+        const check =
+          document.createElement('i');
+
+        check.className =
+          'fas fa-check wallet-filter-select__check';
+
+        check.setAttribute(
+          'aria-hidden',
+          'true'
+        );
+
+        optionButton.append(
+          text,
+          check
+        );
+
+        optionButton.addEventListener(
+          'click',
+          event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const nextValue =
+              optionButton.dataset.value;
+
+            onChange(nextValue);
+            syncLabel(nextValue);
+
+            root.classList.remove('is-open');
+
+            trigger.setAttribute(
+              'aria-expanded',
+              'false'
+            );
+
+            trigger.focus();
+          }
+        );
+
+        menu.appendChild(
+          optionButton
+        );
+      });
+
+      trigger.addEventListener(
+        'click',
+        event => {
+          event.preventDefault();
+          event.stopPropagation();
+
+          const opening =
+            !root.classList.contains('is-open');
+
+          closeAllMenus(root);
+
+          root.classList.toggle(
+            'is-open',
+            opening
+          );
+
+          trigger.setAttribute(
+            'aria-expanded',
+            String(opening)
+          );
+
+          if (opening) {
+            const closeFromOutside =
+              outsideEvent => {
+                if (
+                  root.contains(outsideEvent.target)
+                ) {
+                  return;
+                }
+
+                root.classList.remove('is-open');
+
+                trigger.setAttribute(
+                  'aria-expanded',
+                  'false'
+                );
+              };
+
+            document.addEventListener(
+              'pointerdown',
+              closeFromOutside,
+              {
+                capture: true,
+                once: true
+              }
+            );
+          }
+        }
+      );
+
+      root.addEventListener(
+        'keydown',
+        event => {
+          if (event.key === 'Escape') {
+            root.classList.remove('is-open');
+
+            trigger.setAttribute(
+              'aria-expanded',
+              'false'
+            );
+
+            trigger.focus();
+          }
+        }
+      );
+
+      root.append(
+        trigger,
+        menu
+      );
+
+      syncLabel(
+        normalizedValue
+      );
+
+      return root;
+    }
+
+    const typeFilter =
+      createFilterSelect({
+        label: 'Transaction type',
+        value: state.ui.filters.type,
+        options: [
+          { value: 'all', label: 'All types' },
+          { value: 'deposit', label: 'Deposit' },
+          { value: 'withdraw', label: 'Withdraw' },
+          { value: 'buy', label: 'Buy' },
+          { value: 'sell', label: 'Sell' },
+          { value: 'investment', label: 'Strategy entry' },
+          { value: 'claim', label: 'Claim' },
+          { value: 'transfer_in', label: 'Transfer in' },
+          { value: 'transfer_out', label: 'Transfer out' }
+        ],
+        onChange: nextValue => {
+          state.ui.filters.type = nextValue;
+          applyFilters();
+        }
+      });
+
+    const statusFilter =
+      createFilterSelect({
+        label: 'Transaction status',
+        value: state.ui.filters.status,
+        align: 'right',
+        options: [
+          { value: 'all', label: 'All status' },
+          { value: 'completed', label: 'Completed' },
+          { value: 'approved', label: 'Approved' },
+          { value: 'pending', label: 'Pending' },
+          { value: 'failed', label: 'Failed' }
+        ],
+        onChange: nextValue => {
+          state.ui.filters.status = nextValue;
+          applyFilters();
+        }
+      });
+
+    grid.append(
+      search,
+      typeFilter,
+      statusFilter
+    );
+
+    bar.appendChild(grid);
 
     return bar;
   }
