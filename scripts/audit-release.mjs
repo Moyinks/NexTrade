@@ -403,6 +403,126 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
   if (!failures.some((x)=>x.includes('independent scroll state')||x.includes('inner scroll state')||x.includes('Activity affordance')||x.includes('duplicates Recent Activity')||x.includes('viewport composition')||x.includes('transparent background')||x.includes('progressively disclosed')||x.includes('Architecture constitution missing')||x.includes('Surface/transparency debt ratchet'))) pass('Surface/spatial architecture');
 }
 
+// Mobile product finish.
+{
+  const indexSource = read('index.html');
+  const finishCss = read('mobile-product-finish.css');
+  const walletSource = read('wallet.js');
+  const homeSource = read('home.js');
+  const vaultSource = read('vault.js');
+  const modalSource = read('modals.js');
+  const architectureSource = read('ARCHITECTURE_RULES.md');
+  const navbarSource = read('navbar.js');
+
+  if (!indexSource.includes('viewport-fit=cover')) {
+    fail('PWA viewport does not opt into safe-area coverage');
+  }
+
+  for (const token of [
+    '--nt-safe-top',
+    '--nt-safe-right',
+    '--nt-safe-bottom',
+    '--nt-safe-left'
+  ]) {
+    if (!finishCss.includes(token)) {
+      fail(`Mobile safe-area token missing: ${token}`);
+    }
+  }
+
+  if (!finishCss.includes('@media (display-mode: standalone)')) {
+    fail('Installed-PWA viewport contract missing');
+  }
+
+  if (!finishCss.includes('@media (max-height: 700px)')) {
+    fail('Short-screen Wallet fallback missing');
+  }
+
+  if (!navbarSource.includes('nt-app-brand__name')) {
+    fail('Workspace header does not keep NexTrade as the stable brand landmark');
+  }
+
+  if (!navbarSource.includes('nt-app-brand__context')) {
+    fail('Workspace header lacks subordinate route context');
+  }
+
+  if (!finishCss.includes('#profile-menu-btn') || !finishCss.includes('width: 44px')) {
+    fail('Workspace header account target is below the intended mobile touch contract');
+  }
+
+  if (!finishCss.includes('.nt-app-header__account .profile-dropdown')) {
+    fail('Workspace header dropdown lacks safe-width positioning');
+  }
+
+  if (!walletSource.includes('wallet-balance-rail')) {
+    fail('Wallet balances are still independent competing cards');
+  }
+
+  if (!walletSource.includes('createStrategyDiscoveryRail')) {
+    fail('Wallet strategy discovery rail missing');
+  }
+
+  if (
+    /wallet-strategy-discovery[\s\S]{0,500}\+?\d{1,3}%/
+      .test(walletSource)
+  ) {
+    fail('Wallet strategy discovery contains promotional return promises');
+  }
+
+  if (!homeSource.includes('home-strategy-empty')) {
+    fail('Home empty strategy hierarchy is not finish-layer addressable');
+  }
+
+  if (!vaultSource.includes('vault-segmented')) {
+    fail('Earn segmented control is not system-addressable');
+  }
+
+  if (!vaultSource.includes('vault-strategy-metrics')) {
+    fail('Earn strategy metrics have not been consolidated');
+  }
+
+  if (!vaultSource.includes('vault-detail-content')) {
+    fail('Strategy detail sheet lacks theme-native contract');
+  }
+
+  if (!modalSource.includes('max-height: calc(100dvh')) {
+    fail('Modal sheet does not respect dynamic mobile viewport');
+  }
+
+  for (const principle of [
+    'Viewport chrome is environment, not layout.',
+    'Depth must explain hierarchy.',
+    'Internal promotion is contextual, non-blocking, and truthful.',
+    'Non-critical motion yields to the user and the device.'
+  ]) {
+    if (!architectureSource.includes(principle)) {
+      fail(`Architecture constitution missing: ${principle}`);
+    }
+  }
+
+  if (
+    !failures.some((x) =>
+      x.includes('safe-area') ||
+      x.includes('Installed-PWA') ||
+      x.includes('Short-screen') ||
+      x.includes('stable brand landmark') ||
+      x.includes('subordinate route context') ||
+      x.includes('mobile touch contract') ||
+      x.includes('safe-width positioning') ||
+      x.includes('competing cards') ||
+      x.includes('discovery rail') ||
+      x.includes('promotional return promises') ||
+      x.includes('empty strategy hierarchy') ||
+      x.includes('segmented control') ||
+      x.includes('strategy metrics') ||
+      x.includes('detail sheet') ||
+      x.includes('dynamic mobile viewport') ||
+      x.includes('Architecture constitution missing')
+    )
+  ) {
+    pass('Mobile product finish architecture');
+  }
+}
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);

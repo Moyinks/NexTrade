@@ -27,3 +27,8 @@ These rules are product constraints, not aspirations.
 17. **Semantic colour belongs to information, not decoration.** State/value colour may be strong; containers stay predominantly neutral.
 18. **Transparency is physical, not hierarchical.** Scrims, shadows and temporary motion may use alpha; financial surfaces and text hierarchy use deterministic semantic tokens.
 19. **Immersion comes from continuity and hierarchy, not more layers.** Prefer continuous workspaces and selective containment over a dashboard made entirely of cards.
+20. **Viewport chrome is environment, not layout.** Browser bars, Android gesture areas, iPhone safe areas, and standalone PWA chrome must not determine whether product controls remain reachable.
+21. **Depth must explain hierarchy.** Equal-importance surfaces do not compete through unrelated shadows, tints, or elevation.
+22. **Internal promotion is contextual, non-blocking, and truthful.** Product discovery may rotate quietly, but it pauses for user attention and never presents modeled strategy outcomes as guaranteed.
+23. **Non-critical motion yields to the user and the device.** Decorative rotation pauses when hidden, on interaction, and under reduced-motion preferences.
+24. **Brand is the landmark; route is context.** Persistent workspace chrome keeps NexTrade identity fixed while the active route is subordinate context. Task-immersive workflows may replace the workspace header only when the workflow itself is the user’s primary mental model.

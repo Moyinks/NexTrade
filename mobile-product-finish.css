@@ -1,0 +1,670 @@
+/**
+ * NexTrade — Mobile Product Finish
+ * Safe viewport/PWA composition + product-depth polish.
+ */
+
+:root {
+  --nt-safe-top: env(safe-area-inset-top, 0px);
+  --nt-safe-right: env(safe-area-inset-right, 0px);
+  --nt-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --nt-safe-left: env(safe-area-inset-left, 0px);
+  --nt-screen-height: 100vh;
+  --nt-wallet-contact-shadow:
+    0 1px 0 var(--color-border),
+    0 7px 18px -16px rgba(0,0,0,.32);
+}
+
+@supports (height: 100svh) {
+  :root { --nt-screen-height: 100svh; }
+}
+
+@supports (height: 100dvh) {
+  :root { --nt-screen-height: 100dvh; }
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  overscroll-behavior-y: none;
+}
+
+.app-wrapper {
+  height: var(--nt-screen-height) !important;
+  min-height: var(--nt-screen-height);
+  max-height: var(--nt-screen-height);
+}
+
+.app-header {
+  padding-top: var(--nt-safe-top);
+  padding-left: max(var(--space-4), var(--nt-safe-left));
+  padding-right: max(var(--space-4), var(--nt-safe-right));
+}
+
+.app-main {
+  padding-left: max(var(--space-4), var(--nt-safe-left));
+  padding-right: max(var(--space-4), var(--nt-safe-right));
+}
+
+#ntm-nav-root {
+  bottom: calc(10px + var(--nt-safe-bottom)) !important;
+  width: min(
+    440px,
+    calc(
+      100% - 28px - var(--nt-safe-left) - var(--nt-safe-right)
+    )
+  ) !important;
+}
+
+.ntm-card {
+  max-height: calc(
+    var(--nt-screen-height) - var(--nt-safe-top) - 8px
+  ) !important;
+}
+
+.ntm-body {
+  padding-bottom: max(18px, var(--nt-safe-bottom)) !important;
+}
+
+.demo-deposit-main,
+.transaction-detail-main {
+  padding-left: max(14px, var(--nt-safe-left));
+  padding-right: max(14px, var(--nt-safe-right));
+  padding-bottom: calc(24px + var(--nt-safe-bottom));
+}
+
+.demo-sheet,
+.settings-sheet {
+  padding-bottom: calc(14px + var(--nt-safe-bottom)) !important;
+}
+
+@media (display-mode: standalone) {
+  html,
+  body {
+    background: var(--color-background);
+  }
+
+  .app-wrapper {
+    height: 100dvh !important;
+    min-height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  .app-header {
+    min-height: calc(60px + var(--nt-safe-top));
+  }
+}
+
+@supports (-webkit-touch-callout: none) {
+  .app-main,
+  .assets-tab,
+  .activity-tab,
+  #activity-scroll-container,
+  .demo-deposit-page,
+  .transaction-detail-page {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* ── WORKSPACE HEADER: stable brand landmark + subordinate route context ── */
+
+.app-header {
+  min-height: calc(64px + var(--nt-safe-top)) !important;
+  box-sizing: border-box;
+  padding-top: var(--nt-safe-top) !important;
+  padding-left: max(18px, var(--nt-safe-left)) !important;
+  padding-right: max(18px, var(--nt-safe-right)) !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  background: var(--color-surface) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+  box-shadow: none !important;
+}
+
+.nt-app-brand {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-ui);
+}
+
+.nt-app-brand .navbar-brand-image {
+  width: 34px !important;
+  height: 34px !important;
+  flex: 0 0 34px;
+  display: block;
+  object-fit: cover;
+  border: 1px solid var(--color-border);
+  border-radius: 10px !important;
+  box-shadow: none;
+}
+
+.nt-app-brand__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  line-height: 1;
+}
+
+.nt-app-brand__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 760;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+
+.nt-app-brand__context {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-tertiary);
+  font-size: 8.5px;
+  font-weight: 720;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.nt-app-header__account {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+#profile-menu-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  box-shadow: none;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.nt-app-header__account .profile-dropdown {
+  top: calc(100% + 8px) !important;
+  right: 0 !important;
+  width: min(
+    272px,
+    calc(
+      100vw -
+      32px -
+      var(--nt-safe-left) -
+      var(--nt-safe-right)
+    )
+  ) !important;
+  max-width: calc(
+    100vw -
+    32px -
+    var(--nt-safe-left) -
+    var(--nt-safe-right)
+  ) !important;
+}
+
+@media (max-width: 360px) {
+  .app-header {
+    padding-left: max(14px, var(--nt-safe-left)) !important;
+    padding-right: max(14px, var(--nt-safe-right)) !important;
+    gap: 9px;
+  }
+
+  .nt-app-brand {
+    gap: 8px;
+  }
+
+  .nt-app-brand .navbar-brand-image {
+    width: 32px !important;
+    height: 32px !important;
+    flex-basis: 32px;
+  }
+
+  #profile-menu-btn {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+/* Home: one intentional dark anchor inside either theme. */
+body[data-route="home"] .hero-card {
+  --color-text-primary: #F3F6F8;
+  --color-text-secondary: #A8B3C1;
+  --color-text-tertiary: #7F8B9A;
+  --color-border: #26344B;
+  --color-surface-elevated: #172237;
+
+  color: var(--color-text-primary) !important;
+  border-color: #1F2C42 !important;
+  box-shadow:
+    0 1px 0 #22314A,
+    0 10px 26px -23px rgba(0,0,0,.7) !important;
+}
+
+body[data-route="home"] .home-strategy-empty {
+  padding: 13px 16px !important;
+  border-radius: 0 !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  background: transparent !important;
+}
+
+body[data-route="home"] .home-context-card {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--surface-advisory);
+}
+
+body[data-route="home"] .home-activity-list {
+  gap: 0 !important;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+body[data-route="home"] .home-activity-list > .tx-card {
+  border: 0 !important;
+  border-bottom: 1px solid var(--color-border) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+body[data-route="home"] .home-activity-list > .tx-card:last-child {
+  border-bottom: 0 !important;
+}
+
+/* Wallet depth: hero → one balance rail → actions → discovery. */
+#wallet-main-hero {
+  box-shadow:
+    0 1px 0 #21304A,
+    0 10px 24px -22px rgba(0,0,0,.78) !important;
+}
+
+.wallet-balance-rail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  min-height: 78px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: var(--nt-wallet-contact-shadow);
+}
+
+.wallet-balance-rail__cell {
+  min-width: 0;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 30px minmax(0,1fr);
+  grid-template-rows: auto auto;
+  column-gap: 9px;
+  align-items: center;
+}
+
+.wallet-balance-rail__cell + .wallet-balance-rail__cell {
+  border-left: 1px solid var(--color-border);
+}
+
+.wallet-balance-rail__icon {
+  grid-row: 1 / 3;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+.wallet-balance-rail__cell[data-kind="spot"] .wallet-balance-rail__icon {
+  background: #E9F1FE;
+  color: #2B67E8;
+}
+
+.wallet-balance-rail__cell[data-kind="vault"] .wallet-balance-rail__icon {
+  background: #F0ECFC;
+  color: #7955D9;
+}
+
+html[data-theme="dark"]
+.wallet-balance-rail__cell[data-kind="spot"] .wallet-balance-rail__icon {
+  background: #142239;
+  color: #78A5FF;
+}
+
+html[data-theme="dark"]
+.wallet-balance-rail__cell[data-kind="vault"] .wallet-balance-rail__icon {
+  background: #211A36;
+  color: #A78BFA;
+}
+
+.wallet-balance-rail__label {
+  color: var(--color-text-tertiary);
+  font-size: 9px;
+  font-weight: 680;
+}
+
+.wallet-balance-rail__value {
+  min-width: 0;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+body[data-route="wallet"] .ui-action {
+  min-height: 74px !important;
+  border-radius: 14px;
+  box-shadow: none !important;
+}
+
+.wallet-strategy-discovery {
+  position: relative;
+  min-height: 92px;
+  margin-top: auto;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow:
+    0 1px 0 var(--color-border),
+    0 8px 18px -18px rgba(0,0,0,.28);
+}
+
+.wallet-strategy-discovery__viewport {
+  position: relative;
+  min-height: 92px;
+}
+
+.wallet-strategy-discovery__slide {
+  position: absolute;
+  inset: 0;
+  padding: 13px 15px;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 12px;
+  align-items: center;
+  opacity: 0;
+  transform: translateX(12px);
+  pointer-events: none;
+}
+
+.wallet-strategy-discovery__slide.is-active {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+  transition:
+    opacity 180ms var(--nt-ease-standard),
+    transform 240ms cubic-bezier(.22,1,.36,1);
+}
+
+.wallet-strategy-discovery__eyebrow {
+  color: var(--color-text-tertiary);
+  font-size: 8px;
+  font-weight: 760;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.wallet-strategy-discovery__title {
+  margin-top: 4px;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 730;
+  line-height: 1.25;
+}
+
+.wallet-strategy-discovery__copy {
+  margin-top: 4px;
+  max-width: 340px;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.wallet-strategy-discovery__action {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface-elevated);
+  color: var(--color-primary);
+  font-size: 9px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.wallet-strategy-discovery__dots {
+  position: absolute;
+  left: 15px;
+  bottom: 8px;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+}
+
+.wallet-strategy-discovery__dot {
+  width: 14px;
+  height: 2px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--color-border-hover);
+  padding: 0;
+}
+
+.wallet-strategy-discovery__dot.is-active {
+  background: var(--color-primary);
+}
+
+/* Earn/Vault composition. */
+.vault-tab-shell {
+  padding: 10px 16px 12px !important;
+  background: var(--color-background) !important;
+  box-shadow: none !important;
+}
+
+.vault-segmented {
+  width: min(100%, 620px);
+  margin: 0 auto;
+  padding: 4px !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 14px !important;
+  background: var(--color-surface) !important;
+}
+
+.vault-segmented__item {
+  min-height: 44px;
+  border-radius: 10px !important;
+  transition:
+    background 150ms var(--nt-ease-standard),
+    color 150ms var(--nt-ease-standard),
+    transform 72ms var(--nt-ease-press) !important;
+}
+
+.vault-strategy-card {
+  border: 1px solid var(--color-border) !important;
+  border-radius: 18px !important;
+  background: var(--color-surface) !important;
+  box-shadow: none !important;
+}
+
+.vault-strategy-card:hover {
+  transform: none !important;
+  border-color: var(--color-border-hover) !important;
+}
+
+.vault-strategy-metrics {
+  display: grid !important;
+  grid-template-columns: repeat(3,minmax(0,1fr)) !important;
+  gap: 0 !important;
+  overflow: hidden;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.vault-strategy-metric {
+  padding: 11px 7px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.vault-strategy-metric + .vault-strategy-metric {
+  border-left: 1px solid var(--color-border) !important;
+}
+
+.vault-strategy-cta {
+  min-height: 44px;
+  border-radius: 11px !important;
+}
+
+.vault-strategy-cta[data-recommended="false"] {
+  border: 1px solid var(--color-border) !important;
+  background: var(--color-surface-elevated) !important;
+  color: var(--color-text-primary) !important;
+}
+
+/* Strategy detail becomes theme-native instead of dark-only legacy. */
+.vault-detail-content {
+  color: var(--color-text-primary);
+}
+
+.vault-detail-chip {
+  background: var(--color-surface-elevated) !important;
+  border-color: var(--color-border) !important;
+}
+
+.vault-detail-metrics {
+  gap: 0 !important;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.vault-detail-metric {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--color-surface) !important;
+}
+
+.vault-detail-metric:nth-child(odd) {
+  border-right: 1px solid var(--color-border) !important;
+}
+
+.vault-detail-metric:nth-child(n + 3) {
+  border-top: 1px solid var(--color-border) !important;
+}
+
+.vault-detail-mechanic {
+  padding: 11px 0;
+  margin-bottom: 0 !important;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.vault-detail-mechanic:last-child {
+  border-bottom: 0;
+}
+
+.vault-detail-mechanic__icon {
+  background: var(--color-surface-elevated) !important;
+}
+
+.ntm-card {
+  background: var(--color-overlay) !important;
+  border-color: var(--color-border) !important;
+  box-shadow:
+    0 -1px 0 var(--color-border),
+    0 -14px 44px -26px rgba(0,0,0,.55) !important;
+}
+
+.ntm-title {
+  color: var(--color-text-primary) !important;
+}
+
+.ntm-close-btn {
+  border: 1px solid var(--color-border) !important;
+  background: var(--color-surface-elevated) !important;
+  color: var(--color-text-tertiary) !important;
+}
+
+.ntm-handle {
+  background: var(--color-border-active) !important;
+}
+
+@media (max-width: 380px) {
+  .wallet-balance-rail__cell {
+    padding-inline: 10px;
+    column-gap: 7px;
+  }
+
+  .wallet-balance-rail__value {
+    font-size: 13px;
+  }
+
+  .wallet-strategy-discovery__slide {
+    padding-inline: 12px;
+  }
+}
+
+@media (max-height: 700px) {
+  body[data-route="wallet"] .overview-tab {
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    padding-bottom: calc(
+      var(--nav-footprint-live, 96px) + 12px + var(--nt-safe-bottom)
+    ) !important;
+  }
+
+  .wallet-strategy-discovery {
+    margin-top: 2px;
+    min-height: 84px;
+  }
+
+  .wallet-strategy-discovery__viewport {
+    min-height: 84px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .app-header {
+    min-height: 50px;
+  }
+
+  .ntm-card {
+    max-height: calc(var(--nt-screen-height) - 6px) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wallet-strategy-discovery__slide,
+  .vault-segmented__item,
+  .ntm-card {
+    transition-duration: .01ms !important;
+  }
+}

@@ -372,6 +372,7 @@
 
     if (!active.length) {
       const empty = el('div', 'border-radius:16px;padding:18px;background:var(--color-surface);border:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;gap:12px;');
+      empty.className = 'home-strategy-empty';
       const copy = el('div', 'min-width:0;flex:1;');
       copy.appendChild(el('div', 'font-size:14px;font-weight:700;color:var(--color-text-primary,#fff);margin-bottom:4px;', 'No active positions'));
       copy.appendChild(el('div', 'font-size:12px;line-height:1.4;color:var(--color-text-secondary,#94a3b8);', 'Open Vault to pick a strategy and start compounding.'));
@@ -592,6 +593,7 @@
     }
 
     const list = el('div', 'display:flex;flex-direction:column;gap:8px;');
+    list.className = 'home-activity-list';
     items.forEach(tx => {
       const view = transactionView(tx);
 

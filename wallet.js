@@ -380,6 +380,135 @@ const Wallet = (() => {
   /* ═══════════════════════════════════════════════════════════════════════════
      OVERVIEW TAB - INSTITUTIONAL REDESIGN
      ═══════════════════════════════════════════════════════════════════════════ */
+function createStrategyDiscoveryRail() {
+  const root = document.createElement('section');
+  root.className = 'wallet-strategy-discovery';
+  root.setAttribute('aria-label', 'Strategy discovery');
+
+  const viewport = document.createElement('div');
+  viewport.className = 'wallet-strategy-discovery__viewport';
+
+  const dots = document.createElement('div');
+  dots.className = 'wallet-strategy-discovery__dots';
+
+  const items = [
+    {
+      eyebrow: 'Strategy spotlight',
+      title: 'Steady Accumulator · 90-day model',
+      copy: 'Review its allocation, term and lower-volatility mechanics before choosing.',
+      action: 'Explore'
+    },
+    {
+      eyebrow: 'Strategy spotlight',
+      title: 'Surge Pool · 30-day model',
+      copy: 'Compare shorter-cycle momentum mechanics, minimums and risk disclosures.',
+      action: 'Compare'
+    },
+    {
+      eyebrow: 'Choose with context',
+      title: 'Term, risk and mechanics in one place',
+      copy: 'See how NexTrade models each strategy before you make a demo allocation.',
+      action: 'View strategies'
+    }
+  ];
+
+  let active = 0;
+  let pausedUntil = 0;
+  let timer = null;
+
+  const slides = items.map((item, index) => {
+    const slide = document.createElement('div');
+    slide.className =
+      'wallet-strategy-discovery__slide' +
+      (index === 0 ? ' is-active' : '');
+
+    const copy = document.createElement('div');
+
+    const eyebrow = document.createElement('div');
+    eyebrow.className = 'wallet-strategy-discovery__eyebrow';
+    eyebrow.textContent = item.eyebrow;
+
+    const title = document.createElement('div');
+    title.className = 'wallet-strategy-discovery__title';
+    title.textContent = item.title;
+
+    const description = document.createElement('div');
+    description.className = 'wallet-strategy-discovery__copy';
+    description.textContent = item.copy;
+
+    copy.append(eyebrow, title, description);
+
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.className = 'wallet-strategy-discovery__action';
+    action.textContent = item.action;
+    action.addEventListener('click', () => {
+      if (window.App && typeof App.navigate === 'function') {
+        App.navigate('vault');
+      }
+    });
+
+    slide.append(copy, action);
+    viewport.appendChild(slide);
+
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.className =
+      'wallet-strategy-discovery__dot' +
+      (index === 0 ? ' is-active' : '');
+    dot.setAttribute('aria-label', 'Show strategy message ' + (index + 1));
+    dot.addEventListener('click', () => {
+      active = index;
+      pausedUntil = Date.now() + 9000;
+      renderActive();
+    });
+    dots.appendChild(dot);
+
+    return slide;
+  });
+
+  function renderActive() {
+    slides.forEach((slide, index) => {
+      slide.classList.toggle('is-active', index === active);
+    });
+
+    Array.from(dots.children).forEach((dot, index) => {
+      dot.classList.toggle('is-active', index === active);
+    });
+  }
+
+  function advance() {
+    if (!root.isConnected) {
+      if (timer) clearInterval(timer);
+      timer = null;
+      return;
+    }
+
+    if (document.hidden || Date.now() < pausedUntil) {
+      return;
+    }
+
+    active = (active + 1) % items.length;
+    renderActive();
+  }
+
+  root.addEventListener('pointerdown', () => {
+    pausedUntil = Date.now() + 9000;
+  }, { passive: true });
+
+  root.append(viewport, dots);
+
+  const reduceMotion =
+    window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (!reduceMotion) {
+    timer = setInterval(advance, 7200);
+  }
+
+  return root;
+}
+
   function createOverviewTab() {
     const tab = document.createElement('div');
     tab.className = 'overview-tab';
@@ -393,6 +522,7 @@ const Wallet = (() => {
     tab.appendChild(heroShell);
     tab.appendChild(createBalanceCards(summary));
     tab.appendChild(createQuickActions());
+    tab.appendChild(createStrategyDiscoveryRail());
     
     return tab;
   }
@@ -480,66 +610,41 @@ const Wallet = (() => {
     return card;
   }
 
-  function createBalanceCards(summary) {
-    const section = document.createElement('div');
-    section.className = 'wallet-balance-grid';
-    section.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; padding:0;';
-    
-    const cards = [
-      {
-        label: 'Spot Wallet',
-        value: summary.spotBalance,
-        icon: 'fa-wallet',
-        color: '#60a5fa',
-        gradient: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)'
-      },
-      {
-        label: 'Vault',
-        value: summary.vaultBalance,
-        icon: 'fa-layer-group',
-        color: '#8b5cf6',
-        gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)'
-      }
-    ];
-    
-    cards.forEach(cardData => {
-      const card = document.createElement('div');
-      card.className = 'wallet-balance-card';
-      card.style.cssText = `
-        background:var(--color-surface); border:1px solid var(--color-border);
-        border-radius:12px; padding:12px; position:relative; overflow:hidden;
-        cursor:pointer; transition:all 0.2s;
-      `;
-      
-      card.onmouseenter = () => {
-        card.style.borderColor = cardData.color;
-        card.style.transform = 'translateY(-2px)';
-      };
-      card.onmouseleave = () => {
-        card.style.borderColor = 'var(--color-border)';
-        card.style.transform = 'translateY(0)';
-      };
-      
-      card.innerHTML = `
-        <div style="position:absolute; top:0; right:0; width:40px; height:40px; background:${cardData.gradient}; opacity:0.1; border-radius:0 12px 0 100%;"></div>
-        <div style="position:relative; z-index:1;">
-          <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
-            <div style="width:28px; height:28px; border-radius:7px; background:${cardData.color}15; color:${cardData.color}; display:flex; align-items:center; justify-content:center;">
-              <i class="fas ${cardData.icon}" style="font-size:12px;"></i>
-            </div>
-            <span style="font-size:11px; font-weight:600; color:var(--color-text-secondary);">${cardData.label}</span>
-          </div>
-          <div style="font-family:var(--font-mono); font-size:16px; font-weight:700; color:var(--color-text-primary);">
-            ${formatMoney(cardData.value)}
-          </div>
-        </div>
-      `;
-      
-      section.appendChild(card);
-    });
-    
-    return section;
-  }
+function createBalanceCards(summary) {
+  const rail = document.createElement('section');
+  rail.className = 'wallet-balance-rail';
+  rail.setAttribute('aria-label', 'Wallet balances');
+
+  [
+    { kind: 'spot', label: 'Spot Wallet', value: summary.spotBalance, icon: 'fa-wallet' },
+    { kind: 'vault', label: 'Vault', value: summary.vaultBalance, icon: 'fa-layer-group' }
+  ].forEach(item => {
+    const cell = document.createElement('div');
+    cell.className = 'wallet-balance-rail__cell';
+    cell.dataset.kind = item.kind;
+
+    const icon = document.createElement('span');
+    icon.className = 'wallet-balance-rail__icon';
+    icon.setAttribute('aria-hidden', 'true');
+
+    const glyph = document.createElement('i');
+    glyph.className = 'fas ' + item.icon;
+    icon.appendChild(glyph);
+
+    const label = document.createElement('span');
+    label.className = 'wallet-balance-rail__label';
+    label.textContent = item.label;
+
+    const value = document.createElement('span');
+    value.className = 'wallet-balance-rail__value';
+    value.textContent = formatMoney(item.value);
+
+    cell.append(icon, label, value);
+    rail.appendChild(cell);
+  });
+
+  return rail;
+}
 
   function createQuickActions() {
     const section = document.createElement('div');

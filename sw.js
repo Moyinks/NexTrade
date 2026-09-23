@@ -11,7 +11,7 @@
  * Bump CACHE_VERSION whenever you deploy changes so users get fresh files.
  */
 
-const CACHE_VERSION  = 'nextrade-surface-spatial-v1';
+const CACHE_VERSION  = 'nextrade-mobile-product-finish-v1';
 const OFFLINE_URL    = '/login.html';
 
 // ── FILES TO PRECACHE ON INSTALL ──────────────────────────────────────────────
@@ -60,6 +60,7 @@ const PRECACHE_URLS = [
   '/transaction-detail.css',
   '/interaction-system.css',
   '/surface-spatial.css',
+  '/mobile-product-finish.css',
   '/demo-deposit.js',
   '/admin-review.js',
   '/validation.js',

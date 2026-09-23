@@ -804,6 +804,7 @@
 
   function buildPlanCard(strategy, recommended) {
     const card = el('div');
+    card.className = 'vault-strategy-card';
     card.style.cssText = 'position:relative;background:var(--color-surface-elevated);border-radius:16px;overflow:hidden;margin-bottom:12px;transition:transform 0.15s ease,border-color 0.2s;cursor:pointer;';
     card.style.border  = '1px solid ' + (recommended ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)');
     card.addEventListener('mouseenter', () => { card.style.borderColor = 'rgba(255,255,255,0.2)'; card.style.transform = 'translateY(-1px)'; });
@@ -844,12 +845,14 @@
 
     // ── Stats: minimum · term · risk ──
     const statsRow = el('div', 'display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px;');
+    statsRow.className = 'vault-strategy-metrics';
     [
       { label: 'MINIMUM', value: fmt(strategy.minAmount), color: 'var(--color-text-primary)' },
       { label: 'TERM',    value: strategy.duration + 'd', color: 'var(--color-text-primary)' },
       { label: 'RISK',    value: strategy.riskLabel,      color: strategy.riskColor }
     ].forEach(s => {
       const cell = el('div', 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:8px;text-align:center;');
+      cell.className = 'vault-strategy-metric';
       const valEl = el('div', 'font-size:13px;font-weight:700;', s.value);
       valEl.style.color = s.color;
       cell.appendChild(valEl);
@@ -863,6 +866,8 @@
 
     // ── CTA ──
     const cta = el('button', 'width:100%;padding:12px;font-size:13px;font-weight:700;border-radius:10px;cursor:pointer;transition:all 0.2s;letter-spacing:-0.1px;color:#fff;');
+    cta.className = 'vault-strategy-cta';
+    cta.dataset.recommended = String(recommended);
     cta.style.background = recommended ? 'var(--color-primary)' : 'rgba(255,255,255,0.05)';
     cta.style.border     = recommended ? 'none' : '1px solid rgba(255,255,255,0.1)';
     cta.textContent      = 'View Strategy \u2192';
@@ -882,9 +887,11 @@
   function openStrategyDetail(strategy) {
     if (!window.Modal) return;
     const content = document.createElement('div');
+    content.className = 'vault-detail-content';
 
     // Header chip
     const chip = el('div', 'display:inline-flex;align-items:center;gap:8px;border-radius:20px;padding:6px 14px;margin-bottom:16px;');
+    chip.className = 'vault-detail-chip';
     chip.style.background = 'rgba(255,255,255,0.04)';
     chip.style.border     = '1px solid rgba(255,255,255,0.09)';
     chip.innerHTML = '<span style="font-size:15px;">' + strategy.icon + '</span>' +
@@ -899,6 +906,7 @@
     const pool30str = (pool30d >= 0 ? '+' : '') + pool30d.toFixed(2) + '%';
 
     const metaGrid = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;');
+    metaGrid.className = 'vault-detail-metrics';
     [
       { label: 'Target Return',  value: strategy.apyRange,                              color: strategy.riskColor },
       { label: '30D Pool Return',value: pool30str,                                       color: pool30d >= 0 ? '#10b981' : '#ef4444' },
@@ -906,6 +914,7 @@
       { label: 'Early Exit Fee', value: Math.round(strategy.penaltyRate * 100) + '%',    color: '#f59e0b' }
     ].forEach(item => {
       const cell = el('div', 'background:rgba(255,255,255,0.03);border-radius:10px;padding:12px;border:1px solid rgba(255,255,255,0.07);');
+      cell.className = 'vault-detail-metric';
       cell.appendChild(el('div', 'font-size:10px;color:var(--color-text-tertiary);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.4px;', item.label));
       const val = el('div', 'font-size:15px;font-weight:700;', item.value);
       val.style.color = item.color;
@@ -918,7 +927,9 @@
     const mechSection = el('div', 'margin-bottom:20px;');
     strategy.mechanics.forEach(m => {
       const mechRow = el('div', 'display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;');
+      mechRow.className = 'vault-detail-mechanic';
       const iconWrap = el('div', 'width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:2px;');
+      iconWrap.className = 'vault-detail-mechanic__icon';
       iconWrap.style.background = 'rgba(255,255,255,0.05)';
       iconWrap.textContent = m.icon;
       const textWrap = el('div', 'flex:1;min-width:0;');
@@ -1825,6 +1836,7 @@
     vaultWrapper.appendChild(pageHeader);
 
     const tabBarContainer = el('div');
+    tabBarContainer.className = 'vault-tab-shell';
     tabBarContainer.style.cssText = [
       'position: sticky',
       'top: 0',
@@ -1835,12 +1847,14 @@
     ].join(';');
 
     const tabBar      = el('div', 'display:flex;background:var(--color-surface);padding:4px;border-radius:12px;border:1px solid var(--color-border);');
+    tabBar.className = 'vault-segmented';
     const activeCount = (investments || []).filter(i => i.status === 'active').length;
     [
       { id: 'explore',   label: 'Strategies' },
       { id: 'portfolio', label: 'My Portfolio (' + activeCount + ')' }
     ].forEach(tab => {
       const btn = el('button');
+      btn.className = 'vault-segmented__item';
       btn.dataset.vaultTab = tab.id;
       const isActive       = tab.id === _activeTab;
       btn.style.cssText    = 'flex:1;padding:10px;border:none;border-radius:8px;font-size:13px;font-weight:700;transition:all 0.2s;cursor:pointer;background:' + (isActive ? 'var(--color-primary)' : 'transparent') + ';color:' + (isActive ? '#fff' : 'var(--color-text-secondary)') + ';';

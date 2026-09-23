@@ -340,18 +340,29 @@ const Navbar = (() => {
     const safeEmail = esc(userEmail);
     const safeInitials = esc(initials);
 
-    const titleHTML = pageId === 'home'
-      ? `<span style="font-size:17px;font-weight:800;letter-spacing:-0.5px;font-family:'Inter',system-ui,sans-serif;color:var(--color-text-primary);">NexTrade</span>`
-      : `<span style="font-size:16px;font-weight:600;letter-spacing:-0.3px;font-family:'Inter',system-ui,sans-serif;color:var(--color-text-primary);">${cfg.label}</span>`;
+    const routeContext = pageId === 'home' ? 'Workspace' : cfg.label;
+    const safeRouteContext = esc(routeContext);
 
     headerEl.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;font-family:'Inter',system-ui,sans-serif;">
-        <img class="navbar-brand-image" src="pwa2.png" alt="NexTrade"
-             style="width:28px;height:28px;border-radius:8px;object-fit:cover;flex-shrink:0;display:block;">
-        ${titleHTML}
+      <div class="nt-app-brand" aria-label="NexTrade · ${safeRouteContext}">
+        <img
+          class="navbar-brand-image"
+          src="pwa2.png"
+          alt=""
+          aria-hidden="true"
+        >
+        <div class="nt-app-brand__copy">
+          <span class="nt-app-brand__name">NexTrade</span>
+          <span class="nt-app-brand__context">${safeRouteContext}</span>
+        </div>
       </div>
-      <div style="position:relative;">
-        <button id="profile-menu-btn" style="width:36px;height:36px;border-radius:10px;background:${SURFACE};border:1px solid var(--color-border);display:flex;align-items:center;justify-content:center;color:var(--color-text-primary);cursor:pointer;transition:all 0.2s;font-family:'Inter',system-ui,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.3px;box-shadow:${TOP_EDGE};">
+      <div class="nt-app-header__account">
+        <button
+          id="profile-menu-btn"
+          type="button"
+          aria-label="Open account menu"
+          aria-haspopup="menu"
+        >
           ${safeInitials}
         </button>
         <div id="profile-dropdown" class="profile-dropdown">
