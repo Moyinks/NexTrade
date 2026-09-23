@@ -836,3 +836,119 @@ body[data-route="wallet"] .wallet-strategy-discovery {
     font-size: 8px;
   }
 }
+
+/* ── MARKET RELIABILITY + CONTEXT PLACEMENT FINISH ─────────────── */
+
+.home-context-card {
+  padding: 14px 16px !important;
+  gap: 10px !important;
+  border-radius: 12px !important;
+  border-color: var(--color-border) !important;
+  background: var(--color-surface) !important;
+  box-shadow: none !important;
+}
+
+.home-context-card[data-priority="attention"] {
+  border-color: var(--color-warning-border) !important;
+}
+
+.home-context-card[data-priority="action"] {
+  border-color: var(--color-danger-border) !important;
+}
+
+.home-context-actions {
+  gap: 7px !important;
+}
+
+.home-context-action {
+  min-height: 40px !important;
+  border-radius: 10px !important;
+  font-size: 11px !important;
+}
+
+.home-context-action--secondary {
+  background: var(--color-surface-elevated) !important;
+}
+
+.market-chart-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background:
+    color-mix(
+      in srgb,
+      var(--chart-background) 86%,
+      transparent
+    );
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.market-chart-loading.is-error {
+  align-items: flex-end;
+  padding: 0 12px 14px;
+  background: transparent;
+  color: var(--color-warning);
+}
+
+.market-chart-failure {
+  position: absolute;
+  inset: 0;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.market-chart-failure strong {
+  color: var(--color-text-primary);
+  font-size: 12px;
+}
+
+.market-chart-failure span {
+  max-width: 290px;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.market-chart-retry {
+  min-height: 38px;
+  margin-top: 4px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface-elevated);
+  color: var(--color-primary);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.market-chart-inspector {
+  max-width: calc(100% - 20px) !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.market-chart-gesture-hint {
+  opacity: 0.78;
+}
+
+@media (max-width: 380px) {
+  .home-context-card {
+    padding-inline: 14px !important;
+  }
+
+  .market-chart-inspector {
+    font-size: 7.5px !important;
+  }
+}

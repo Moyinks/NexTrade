@@ -1008,6 +1008,10 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
   let _followLive     = true;   // false while user is inspecting history
   let _chartInspectorEl = null;
   let _returnLiveBtn  = null;
+  let _chartRequestToken = 0;
+  let _chartGeneration = 0;
+  let _activeCoinId = null;
+  let _renderedRange = '1W';
 
   // Binance symbol map — CoinGecko ID → Binance trading pair
   // Binance public WS is free, no API key required.
@@ -1036,85 +1040,149 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
   const RANGE_DAYS = { '1D': 1, '1W': 7, '1M': 30, '3M': 90 };
 
   function stopLiveWs() {
-    if (_liveWs) {
-      try { _liveWs.close(); } catch (_) {}
-      _liveWs = null;
+    const ws = _liveWs;
+    _liveWs = null;
+
+    if (ws) {
+      try {
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+        ws.close(1000, 'chart-switch');
+      } catch (_) {}
     }
-    if (_chartSeries && _livePriceLine && typeof _chartSeries.removePriceLine === 'function') {
-      try { _chartSeries.removePriceLine(_livePriceLine); } catch (_) {}
+
+    if (_liveBadgeEl) {
+      _liveBadgeEl.style.opacity = '0';
     }
+  }
+
+  function destroyChart(options = {}) {
+    if (options.invalidateRequest !== false) {
+      _chartRequestToken += 1;
+    }
+
+    _chartGeneration += 1;
+    _activeCoinId = null;
+
+    stopLiveWs();
+
+    if (
+      _chartSeries &&
+      _livePriceLine &&
+      typeof _chartSeries.removePriceLine === 'function'
+    ) {
+      try {
+        _chartSeries.removePriceLine(_livePriceLine);
+      } catch (_) {}
+    }
+
     _livePriceLine = null;
     _lastOHLC = null;
     _followLive = true;
     _chartInspectorEl = null;
     _returnLiveBtn = null;
-    if (_liveBadgeEl) { _liveBadgeEl.style.opacity = '0'; }
-  }
 
-  function destroyChart() {
-    stopLiveWs();
     if (_chartInstance) {
       try { _chartInstance.remove(); } catch (_) {}
       _chartInstance = null;
-      _chartSeries   = null;
+      _chartSeries = null;
     }
-    // Disconnect ResizeObserver using the stored element reference.
-    // The old querySelector('[id^="chart-"]') never matched because chartEl
-    // has no id, so the RO was leaking on every overlay open/close.
-    if (_chartEl && _chartEl._ro) { try { _chartEl._ro.disconnect(); } catch (_) {} _chartEl._ro = null; }
+
+    if (_chartEl && _chartEl._ro) {
+      try { _chartEl._ro.disconnect(); } catch (_) {}
+      _chartEl._ro = null;
+    }
+
     _chartEl = null;
   }
 
-  // Start Binance WebSocket kline stream — updates last candle in real time.
-  // Called after historical OHLC loads. Gracefully falls back if:
-  //   - coin has no Binance mapping
-  //   - WebSocket fails to connect
-  //   - Network is unavailable
-  function startLiveWs(coinId, range, reconnectAttempt) {
+  function liveStreamMatches(ws, coinId, range, generation, chart, series) {
+    return Boolean(
+      ws &&
+      ws === _liveWs &&
+      _overlayEl &&
+      _overlayEl.isConnected &&
+      generation === _chartGeneration &&
+      coinId === _activeCoinId &&
+      range === _renderedRange &&
+      chart === _chartInstance &&
+      series === _chartSeries
+    );
+  }
+
+  function startLiveWs(coinId, range, generation, reconnectAttempt) {
     reconnectAttempt = reconnectAttempt || 0;
     stopLiveWs();
+
     const sym = BINANCE_SYM[coinId];
-    // Match the live feed interval to the visible chart range so candles
-    // actually advance in real time instead of mutating one frozen bar.
     const interval = RANGE_WS_INTERVAL[range] || '1m';
     if (!sym || typeof WebSocket === 'undefined') return;
 
+    const chart = _chartInstance;
+    const series = _chartSeries;
+    const expectedSymbol = sym.toUpperCase();
+
     try {
-      const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${sym}@kline_${interval}`);
+      const ws = new WebSocket(
+        `wss://stream.binance.com:9443/ws/${sym}@kline_${interval}`
+      );
+      _liveWs = ws;
 
       ws.onopen = () => {
+        if (!liveStreamMatches(ws, coinId, range, generation, chart, series)) return;
         if (_liveBadgeEl) {
           _liveBadgeEl.textContent = '● LIVE';
           _liveBadgeEl.style.opacity = '1';
-          _liveBadgeEl.style.color   = '#10b981';
+          _liveBadgeEl.style.color = '#10b981';
         }
       };
 
-      ws.onmessage = (event) => {
-        try {
-          const { k } = JSON.parse(event.data);
-          if (!k || !_chartSeries) return;
+      ws.onmessage = event => {
+        if (!liveStreamMatches(ws, coinId, range, generation, chart, series)) return;
 
-          const open  = parseFloat(k.o);
-          const high  = parseFloat(k.h);
-          const low   = parseFloat(k.l);
-          const close = parseFloat(k.c);
-          const time  = Math.floor((k.t || k.T || Date.now()) / 1000);
+        try {
+          const payload = JSON.parse(event.data);
+          const k = payload && payload.k;
+          if (!k || String(k.s || '').toUpperCase() !== expectedSymbol) return;
+
+          const open = Number.parseFloat(k.o);
+          const high = Number.parseFloat(k.h);
+          const low = Number.parseFloat(k.l);
+          const close = Number.parseFloat(k.c);
+          const time = Math.floor((k.t || k.T || Date.now()) / 1000);
 
           if (![open, high, low, close, time].every(Number.isFinite)) return;
 
+          const previous = _lastOHLC;
+          if (previous && Number(previous.time) && time < Number(previous.time)) return;
+
+          const reference = Number(previous?.close);
+          if (Number.isFinite(reference) && reference > 0) {
+            const ratio = close / reference;
+            if (ratio < 0.1 || ratio > 10) {
+              if (_liveBadgeEl) {
+                _liveBadgeEl.textContent = 'Delayed';
+              }
+              return;
+            }
+          }
+
           const update = { time, open, high, low, close };
-          _chartSeries.update(update);
+          const isNewCandle = !previous || Number(update.time) > Number(previous.time);
+
+          series.update(update);
           _lastOHLC = update;
 
-          if (_chartSeries && typeof _chartSeries.removePriceLine === 'function' && _livePriceLine) {
-            try { _chartSeries.removePriceLine(_livePriceLine); } catch (_) {}
-            _livePriceLine = null;
-          }
-          if (_chartSeries && typeof _chartSeries.createPriceLine === 'function') {
-            _livePriceLine = _chartSeries.createPriceLine({
+          const lineColor = close >= open ? '#10b981' : '#ef4444';
+
+          if (_livePriceLine && typeof _livePriceLine.applyOptions === 'function') {
+            _livePriceLine.applyOptions({ price: close, color: lineColor });
+          } else if (typeof series.createPriceLine === 'function') {
+            _livePriceLine = series.createPriceLine({
               price: close,
-              color: close >= open ? '#10b981' : '#ef4444',
+              color: lineColor,
               lineWidth: 1,
               lineStyle: LightweightCharts.LineStyle.Dashed,
               axisLabelVisible: true,
@@ -1122,38 +1190,64 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
             });
           }
 
+          if (_followLive && _chartInspectorEl) {
+            const fmt = value => Number(value).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 4
+            });
+            _chartInspectorEl.textContent =
+              'O ' + fmt(open) + '  H ' + fmt(high) +
+              '  L ' + fmt(low) + '  C ' + fmt(close);
+          }
+
           if (
             _followLive &&
-            _chartInstance &&
-            typeof _chartInstance.timeScale === 'function'
+            isNewCandle &&
+            chart &&
+            typeof chart.timeScale === 'function'
           ) {
-            try { _chartInstance.timeScale().scrollToRealTime(); } catch (_) {}
+            try { chart.timeScale().scrollToRealTime(); } catch (_) {}
           }
         } catch (_) {}
       };
 
       ws.onerror = () => {
-        // onerror always fires before onclose — update badge only; let onclose handle reconnect.
+        if (!liveStreamMatches(ws, coinId, range, generation, chart, series)) return;
         if (_liveBadgeEl) {
           _liveBadgeEl.textContent = 'Delayed';
           _liveBadgeEl.style.color = 'var(--color-text-tertiary)';
         }
       };
 
-      ws.onclose = (evt) => {
+      ws.onclose = event => {
+        if (ws !== _liveWs) return;
         _liveWs = null;
-        // Auto-reconnect only when: overlay is still open AND close was not
-        // user-initiated (code 1000 = normal/intentional, sent by stopLiveWs).
-        if (_overlayEl && evt.code !== 1000 && reconnectAttempt < 3) {
-          const delay = Math.min(2000 * Math.pow(2, reconnectAttempt), 16000);
-          const attempt = reconnectAttempt + 1;
-          setTimeout(() => {
-            if (_overlayEl) startLiveWs(coinId, range, attempt);
-          }, delay);
-        }
-      };
 
-      _liveWs = ws;
+        if (
+          !_overlayEl ||
+          !_overlayEl.isConnected ||
+          generation !== _chartGeneration ||
+          coinId !== _activeCoinId ||
+          range !== _renderedRange ||
+          event.code === 1000 ||
+          reconnectAttempt >= 3
+        ) {
+          return;
+        }
+
+        const delay = Math.min(2000 * Math.pow(2, reconnectAttempt), 16000);
+        setTimeout(() => {
+          if (
+            _overlayEl &&
+            _overlayEl.isConnected &&
+            generation === _chartGeneration &&
+            coinId === _activeCoinId &&
+            range === _renderedRange
+          ) {
+            startLiveWs(coinId, range, generation, reconnectAttempt + 1);
+          }
+        }, delay);
+      };
     } catch (err) {
       console.warn('[MARKET] Binance WS failed:', err.message);
     }
@@ -1205,6 +1299,58 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     }
   }
 
+  async function fetchBinanceOHLC(coinId, range) {
+    const sym = BINANCE_SYM[coinId];
+    if (!sym) return null;
+
+    const interval = RANGE_WS_INTERVAL[range] || '4h';
+    const limitByRange = { '1D': 48, '1W': 42, '1M': 30, '3M': 90 };
+    const limit = limitByRange[range] || 42;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      const url =
+        'https://api.binance.com/api/v3/klines?symbol=' +
+        encodeURIComponent(sym.toUpperCase()) +
+        '&interval=' + encodeURIComponent(interval) +
+        '&limit=' + encodeURIComponent(limit);
+
+      const response = await fetch(url, {
+        signal: controller.signal,
+        cache: 'no-store'
+      });
+
+      if (!response.ok) return null;
+
+      const rows = await response.json();
+      if (!Array.isArray(rows)) return null;
+
+      const candles = rows.map(row => ({
+        time: Math.floor(Number(row?.[0]) / 1000),
+        open: Number(row?.[1]),
+        high: Number(row?.[2]),
+        low: Number(row?.[3]),
+        close: Number(row?.[4])
+      })).filter(candle =>
+        [
+          candle.time,
+          candle.open,
+          candle.high,
+          candle.low,
+          candle.close
+        ].every(Number.isFinite)
+      );
+
+      return candles.length ? candles : null;
+    } catch (_) {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   function buildSparklineAsOHLC(sparkline) {
     // Converts sparkline (hourly prices, last 7d) into pseudo-OHLC for the chart
     // Groups into 4-hour candles so the chart has a reasonable density
@@ -1230,49 +1376,114 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
   }
 
   async function renderChart(coinId, days, chartEl, coin) {
-    // Guard: if the overlay was closed (e.g. rapid reopen) while we were
-    // waiting for data, chartEl is no longer in the DOM — bail silently.
-    if (!chartEl.isConnected) return;
+    if (!chartEl.isConnected) return null;
 
-    destroyChart();
-    _chartEl = chartEl; // store for RO cleanup in destroyChart()
-    chartEl.innerHTML = '';
+    const requestToken = ++_chartRequestToken;
+    const requestedRange = _activeRange;
+    const hadValidChart = Boolean(_chartInstance && _chartEl === chartEl);
+
     const loader = document.createElement('div');
-    loader.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--color-text-tertiary);font-size:13px;';
-    loader.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading chart…';
+    loader.className = 'market-chart-loading';
+    loader.innerHTML =
+      '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i>' +
+      '<span>' + (hadValidChart ? 'Loading ' + requestedRange + '…' : 'Loading chart…') + '</span>';
     chartEl.appendChild(loader);
+
+    if (_liveBadgeEl) {
+      _liveBadgeEl.textContent = 'Loading';
+      _liveBadgeEl.style.opacity = '1';
+      _liveBadgeEl.style.color = 'var(--color-text-tertiary)';
+    }
 
     let ohlc = await fetchOHLC(coinId, days);
 
-    // Second guard: overlay may have been closed during the network fetch.
-    if (!chartEl.isConnected) return;
+    if (requestToken !== _chartRequestToken || !chartEl.isConnected) {
+      loader.remove();
+      return null;
+    }
 
-    // Fallback to sparkline for 1W if OHLC fails
-    if (!ohlc && days === 7 && coin.sparkline && coin.sparkline.length > 0) {
+    if ((!ohlc || ohlc.length === 0) && BINANCE_SYM[coinId]) {
+      ohlc = await fetchBinanceOHLC(coinId, requestedRange);
+    }
+
+    if (requestToken !== _chartRequestToken || !chartEl.isConnected) {
+      loader.remove();
+      return null;
+    }
+
+    if (
+      (!ohlc || ohlc.length === 0) &&
+      requestedRange === '1W' &&
+      coin.sparkline &&
+      coin.sparkline.length > 0
+    ) {
       ohlc = buildSparklineAsOHLC(coin.sparkline);
     }
 
-    chartEl.innerHTML = '';
-
     if (!ohlc || ohlc.length === 0 || !window.LightweightCharts) {
-      const err = document.createElement('div');
-      err.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-tertiary);font-size:13px;text-align:center;';
-      err.textContent = 'Chart unavailable — try again in a moment';
-      chartEl.appendChild(err);
-      return;
+      if (hadValidChart) {
+        loader.classList.add('is-error');
+        loader.innerHTML = '<span>Could not load ' + requestedRange + ' · showing last valid chart</span>';
+        setTimeout(() => loader.remove(), 2400);
+
+        if (_liveBadgeEl) {
+          _liveBadgeEl.textContent = '● LIVE';
+          _liveBadgeEl.style.color = '#10b981';
+        }
+
+        return false;
+      }
+
+      chartEl.innerHTML = '';
+      const error = document.createElement('div');
+      error.className = 'market-chart-failure';
+
+      const title = document.createElement('strong');
+      title.textContent = 'Chart temporarily unavailable';
+
+      const copy = document.createElement('span');
+      copy.textContent = 'The market page is still live. Retry the chart when the connection settles.';
+
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'market-chart-retry';
+      retry.textContent = 'Retry chart';
+      retry.addEventListener('click', () => {
+        renderChart(coinId, days, chartEl, coin);
+      });
+
+      error.append(title, copy, retry);
+      chartEl.appendChild(error);
+      return false;
     }
 
     try {
-      _initChart(coinId, days, chartEl, coin, ohlc);
-    } catch (chartErr) {
-      // Chart boot failed — show graceful fallback; overlay already visible.
-      console.warn('[MARKET] Chart init failed (non-fatal):', chartErr.message);
-      _chartInstance = null; _chartSeries = null;
+      destroyChart({ invalidateRequest: false });
+
+      if (requestToken !== _chartRequestToken || !chartEl.isConnected) {
+        return null;
+      }
+
       chartEl.innerHTML = '';
-      const err = document.createElement('div');
-      err.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-tertiary);font-size:13px;text-align:center;';
-      err.textContent = 'Chart unavailable — try again in a moment';
-      chartEl.appendChild(err);
+      _chartEl = chartEl;
+      _activeRange = requestedRange;
+
+      _initChart(coinId, days, chartEl, coin, ohlc);
+      _renderedRange = requestedRange;
+
+      return true;
+    } catch (chartErr) {
+      console.warn('[MARKET] Chart init failed (non-fatal):', chartErr.message);
+
+      if (!hadValidChart) {
+        chartEl.innerHTML = '';
+        const error = document.createElement('div');
+        error.className = 'market-chart-failure';
+        error.textContent = 'Chart temporarily unavailable — retry in a moment';
+        chartEl.appendChild(error);
+      }
+
+      return false;
     }
   }
 
@@ -1317,12 +1528,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
         borderVisible:   false
       },
       watermark: {
-        visible: true,
-        fontSize: 26,
-        horzAlign: 'center',
-        vertAlign: 'center',
-        color: chartTheme.watermark,
-        text: 'NEXTRADE LIVE'
+        visible: false
       },
       handleScroll: {
         mouseWheel: true,
@@ -1345,7 +1551,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
       wickUpColor:      upColor,
       wickDownColor:    downColor,
       priceLineVisible: false,
-      lastValueVisible: true,
+      lastValueVisible: false,
       priceFormat: {
         type: 'price',
         precision: 2,
@@ -1460,7 +1666,10 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     }
 
     // Start live WebSocket after historical data is rendered
-    startLiveWs(coinId, _activeRange);
+    _activeCoinId = coinId;
+    _renderedRange = _activeRange;
+    const generation = ++_chartGeneration;
+    startLiveWs(coinId, _activeRange, generation);
   }
 
   function showCoinDetails(coinIdOrObject) {
@@ -1573,19 +1782,47 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     liveBadge.textContent = '● LIVE';
     _liveBadgeEl = liveBadge;
 
-    function setRange(range) {
-      _activeRange = range;
+    function paintRangeState(range) {
       ranges.forEach(r => {
         const btn = rangeBtns[r];
         if (!btn) return;
+
         const active = r === range;
-        btn.style.background   = active ? 'var(--color-primary)' : 'var(--color-surface)';
-        btn.style.color        = active ? '#fff' : 'var(--color-text-secondary)';
-        btn.style.borderColor  = active ? 'var(--color-primary)' : 'var(--color-border)';
+        btn.style.background = active
+          ? 'var(--color-primary)'
+          : 'var(--color-surface)';
+        btn.style.color = active
+          ? 'var(--color-text-inverse)'
+          : 'var(--color-text-secondary)';
+        btn.style.borderColor = active
+          ? 'var(--color-primary)'
+          : 'var(--color-border)';
       });
+    }
+
+    async function setRange(range) {
+      if (range === _renderedRange && _chartInstance) {
+        _activeRange = range;
+        paintRangeState(range);
+        return;
+      }
+
+      const fallbackRange = _renderedRange;
+      _activeRange = range;
+      paintRangeState(range);
       _followLive = true;
-      renderChart(coin.id, RANGE_DAYS[range], chartEl, coin);
-      // renderChart will call startLiveWs with the new interval after loading
+
+      const result = await renderChart(
+        coin.id,
+        RANGE_DAYS[range],
+        chartEl,
+        coin
+      );
+
+      if (result === false && _activeRange === range) {
+        _activeRange = fallbackRange;
+        paintRangeState(fallbackRange);
+      }
     }
 
     ranges.forEach(r => {
@@ -1595,7 +1832,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
         'flex:1;padding:7px 0;border-radius:8px;font-size:12px;font-weight:700;',
         'border:1px solid var(--color-border);cursor:pointer;transition:all 0.15s;',
         `background:${r === _activeRange ? 'var(--color-primary)' : 'var(--color-surface)'};`,
-        `color:${r === _activeRange ? '#fff' : 'var(--color-text-secondary)'};`,
+        `color:${r === _activeRange ? 'var(--color-text-inverse)' : 'var(--color-text-secondary)'};`,
         `border-color:${r === _activeRange ? 'var(--color-primary)' : 'var(--color-border)'};`
       ].join('');
       btn.addEventListener('click', () => setRange(r));
@@ -1741,7 +1978,16 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     });
 
     // Kick off chart after overlay is visible
-    setTimeout(() => renderChart(coin.id, RANGE_DAYS[_activeRange], chartEl, coin), 300);
+    _renderedRange = _activeRange;
+    setTimeout(
+      () => renderChart(
+        coin.id,
+        RANGE_DAYS[_activeRange],
+        chartEl,
+        coin
+      ),
+      300
+    );
   }
 
     // ============================================

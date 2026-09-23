@@ -606,6 +606,132 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
   }
 }
 
+
+// Market reliability + Smart Context placement.
+{
+  const homeSource = read('home.js');
+  const marketSource = read('market.js');
+  const finishCss = read('mobile-product-finish.css');
+  const architectureSource = read('ARCHITECTURE_RULES.md');
+
+  const activityIndex =
+    homeSource.indexOf(`root.appendChild(
+      activitySection(snapshot)
+    );`);
+
+  const marketIndex =
+    homeSource.indexOf(`root.appendChild(
+      marketPulseSection(snapshot)
+    );`);
+
+  const standardContextIndex =
+    homeSource.indexOf(
+      "if (smartPriority !== 'action')"
+    );
+
+  if (
+    activityIndex < 0 ||
+    marketIndex < 0 ||
+    standardContextIndex < 0 ||
+    !(activityIndex < marketIndex &&
+      marketIndex < standardContextIndex)
+  ) {
+    fail('Standard Smart Context is not positioned after Activity and Market Pulse');
+  }
+
+  if (
+    !homeSource.includes(
+      "if (smartPriority === 'action')"
+    ) ||
+    !homeSource.includes(
+      'smartContextPriority(snapshot)'
+    )
+  ) {
+    fail('Smart Context has no exceptional promotion path');
+  }
+
+  if (
+    !marketSource.includes(
+      'liveStreamMatches'
+    ) ||
+    !marketSource.includes(
+      'ws === _liveWs'
+    ) ||
+    !marketSource.includes(
+      'generation === _chartGeneration'
+    )
+  ) {
+    fail('Market live stream lacks identity gating');
+  }
+
+  if (
+    !marketSource.includes(
+      '_livePriceLine.applyOptions'
+    )
+  ) {
+    fail('Market LIVE guide line is reconstructed instead of updated');
+  }
+
+  if (
+    !marketSource.includes(
+      'isNewCandle'
+    ) ||
+    !marketSource.includes(
+      'showing last valid chart'
+    ) ||
+    !marketSource.includes(
+      '_chartRequestToken'
+    )
+  ) {
+    fail('Market chart does not preserve camera/data state atomically');
+  }
+
+  if (
+    !marketSource.includes(
+      'fetchBinanceOHLC'
+    )
+  ) {
+    fail('Market chart lacks independent historical fallback');
+  }
+
+  if (
+    !finishCss.includes(
+      '.market-chart-loading'
+    ) ||
+    !finishCss.includes(
+      '.home-context-card[data-priority="action"]'
+    )
+  ) {
+    fail('Market/Home finish styling contract missing');
+  }
+
+  for (const principle of [
+    'Smart Context has stable standard geography and exceptional promotion.',
+    'A live visualization updates data without reconstructing presentation.',
+    'Async chart replacement is atomic.',
+    'A live stream proves identity before mutating a chart.'
+  ]) {
+    if (!architectureSource.includes(principle)) {
+      fail(`Architecture constitution missing: ${principle}`);
+    }
+  }
+
+  if (
+    !failures.some((x) =>
+      x.includes('Standard Smart Context') ||
+      x.includes('exceptional promotion') ||
+      x.includes('identity gating') ||
+      x.includes('reconstructed instead') ||
+      x.includes('preserve camera/data state') ||
+      x.includes('historical fallback') ||
+      x.includes('finish styling contract') ||
+      x.includes('Architecture constitution missing')
+    )
+  ) {
+    pass('Market reliability/Smart Context architecture');
+  }
+}
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);

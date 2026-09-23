@@ -431,6 +431,61 @@
     return shell;
   }
 
+  function smartContextPriority(snapshot) {
+    const investments = Array.isArray(snapshot.investments)
+      ? snapshot.investments
+      : [];
+
+    const transactions = Array.isArray(snapshot.transactions)
+      ? snapshot.transactions
+      : [];
+
+    const now = Date.now();
+
+    const hasClaimable = investments.some(inv =>
+      inv &&
+      inv.status === 'active' &&
+      inv.matures_at &&
+      new Date(inv.matures_at).getTime() <= now
+    );
+
+    const hasRecentFailedTransaction = transactions.some(tx => {
+      const status = String(tx?.status || '').toLowerCase();
+      if (status !== 'failed' && status !== 'rejected') return false;
+
+      const created = new Date(tx.created_at || tx.timestamp || 0).getTime();
+      return Number.isFinite(created) && created > 0 && (now - created) <= 7 * 86400000;
+    });
+
+    if (hasClaimable || hasRecentFailedTransaction) {
+      return 'action';
+    }
+
+    const hasPendingDeposit = transactions.some(tx => {
+      if (!tx || String(tx.status || '').toLowerCase() !== 'pending') return false;
+
+      const haystack = [
+        tx.type,
+        tx.category,
+        tx.description,
+        tx.metadata?.kind,
+        tx.metadata?.rail
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      return haystack.includes('deposit');
+    });
+
+    const approachingMaturity = investments.some(inv => {
+      if (!inv || inv.status !== 'active' || !inv.matures_at) return false;
+      const remaining = new Date(inv.matures_at).getTime() - now;
+      return remaining > 0 && remaining <= 4 * 86400000;
+    });
+
+    return (hasPendingDeposit || approachingMaturity)
+      ? 'attention'
+      : 'advisory';
+  }
+
   function smartContextSection(snapshot) {
     const active = (snapshot.investments || []).filter(
       inv => inv && inv.status === 'active'
@@ -459,6 +514,16 @@
       ].filter(Boolean).join(' ').toLowerCase();
 
       return haystack.includes('deposit');
+    }) || null;
+
+    const actionRequiredTransaction = transactions.find(tx => {
+      const status = String(tx?.status || '').toLowerCase();
+      if (status !== 'failed' && status !== 'rejected') return false;
+
+      const created = new Date(tx.created_at || tx.timestamp || 0).getTime();
+      return Number.isFinite(created) &&
+        created > 0 &&
+        (Date.now() - created) <= 7 * 86400000;
     }) || null;
 
     const upcoming = active
@@ -540,6 +605,26 @@
       body = formatMoney(claimValue) + ' is ready for your next decision.';
       primary = { label: 'Review positions', action: toVault };
 
+    } else if (actionRequiredTransaction) {
+      const failedStatus = String(actionRequiredTransaction.status || '').toLowerCase();
+      title = 'A transaction needs attention';
+      body = failedStatus === 'rejected'
+        ? 'A recent ledger request was rejected. Review the record before deciding what to do next.'
+        : 'A recent ledger request did not complete. Review the record before trying another action.';
+      primary = {
+        label: 'Review transaction',
+        action: () => {
+          if (
+            window.Transactiondetail &&
+            typeof Transactiondetail.open === 'function'
+          ) {
+            Transactiondetail.open(actionRequiredTransaction.id, 'home');
+            return;
+          }
+          toWallet();
+        }
+      };
+
     } else if (total <= 0 && pendingDeposit) {
       title = 'Your deposit is under review';
       body = 'The ledger request is pending human review. Inspect its status or explore strategies while you wait.';
@@ -592,6 +677,7 @@
     const shell = sectionShell('Smart context', null);
     const card = el('div');
     card.className = 'home-context-card';
+    card.dataset.priority = smartContextPriority(snapshot);
 
     const copy = el('div', 'min-width:0;');
     copy.appendChild(el(
@@ -984,9 +1070,9 @@
     root.appendChild(heroCard(snapshot));
 
     if (snapshot.balanceSyncStatus !== 'ready') {
-      root.appendChild(loadingSection('Smart context', 2));
       root.appendChild(loadingSection('Recent activity', 3));
       root.appendChild(loadingSection('Market pulse', 3));
+      root.appendChild(loadingSection('Smart context', 2));
       root.appendChild(loadingSection('Live stats', 4));
       return root;
     }
@@ -995,14 +1081,37 @@
       investment => investment && investment.status === 'active'
     );
 
-    if (hasActiveStrategies) {
-      root.appendChild(investmentsSection(snapshot));
+    const smartPriority = smartContextPriority(snapshot);
+
+    if (smartPriority === 'action') {
+      root.appendChild(
+        smartContextSection(snapshot)
+      );
     }
 
-    root.appendChild(smartContextSection(snapshot));
-    root.appendChild(activitySection(snapshot));
-    root.appendChild(marketPulseSection(snapshot));
-    root.appendChild(liveStatsSection(snapshot));
+    if (hasActiveStrategies) {
+      root.appendChild(
+        investmentsSection(snapshot)
+      );
+    }
+
+    root.appendChild(
+      activitySection(snapshot)
+    );
+
+    root.appendChild(
+      marketPulseSection(snapshot)
+    );
+
+    if (smartPriority !== 'action') {
+      root.appendChild(
+        smartContextSection(snapshot)
+      );
+    }
+
+    root.appendChild(
+      liveStatsSection(snapshot)
+    );
     return root;
   }
 

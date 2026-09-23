@@ -37,3 +37,7 @@ These rules are product constraints, not aspirations.
 27. **Empty state collapses decisions instead of duplicating them.** When multiple empty modules ask for the same next step, one contextual decision surface owns that guidance.
 28. **Live data never steals an active inspection viewport.** Real-time updates may continue while the user pans or zooms, but automatic following resumes only by explicit user action.
 29. **Floating navigation owns physical space.** Content that should be read or tapped must be laid out above the navigation footprint and device safe area, never merely layered behind it.
+30. **Smart Context has stable standard geography and exceptional promotion.** Advisory and attention states live after Activity and Market Pulse; only action-required states may move directly beneath the account anchor.
+31. **A live visualization updates data without reconstructing presentation.** High-frequency ticks mutate existing chart objects and guides instead of destroying and recreating them.
+32. **Async chart replacement is atomic.** The last valid chart remains visible until a requested range has valid replacement data; failed or stale requests never blank or overwrite it.
+33. **A live stream proves identity before mutating a chart.** Coin, range, chart generation, socket, and series identity must all match before real-time data is accepted.
