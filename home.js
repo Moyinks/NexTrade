@@ -432,109 +432,202 @@
   }
 
   function smartContextSection(snapshot) {
-    const active = (snapshot.investments || []).filter(inv => inv && inv.status === 'active');
-    const claimable = active.filter(inv => inv?.matures_at && new Date(inv.matures_at) <= new Date());
-    const cash  = Number(snapshot.balances?.spot)  || 0;
+    const active = (snapshot.investments || []).filter(
+      inv => inv && inv.status === 'active'
+    );
+    const claimable = active.filter(
+      inv => inv?.matures_at && new Date(inv.matures_at) <= new Date()
+    );
+    const cash = Number(snapshot.balances?.spot) || 0;
     const total = portfolioTotal(snapshot);
 
-    // Upcoming maturities (sorted soonest first)
+    const transactions = Array.isArray(snapshot.transactions)
+      ? snapshot.transactions
+      : [];
+
+    const pendingDeposit = transactions.find(tx => {
+      if (!tx || String(tx.status || '').toLowerCase() !== 'pending') {
+        return false;
+      }
+
+      const haystack = [
+        tx.type,
+        tx.category,
+        tx.description,
+        tx.metadata?.kind,
+        tx.metadata?.rail
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      return haystack.includes('deposit');
+    }) || null;
+
     const upcoming = active
       .filter(inv => inv?.matures_at && new Date(inv.matures_at) > new Date())
       .sort((a, b) => new Date(a.matures_at) - new Date(b.matures_at));
+
     const next = upcoming[0];
     const daysToNext = next
       ? Math.max(1, Math.ceil((new Date(next.matures_at) - Date.now()) / 86400000))
       : null;
 
-    // Portfolio gain across all active positions
-    const totalInvested = active.reduce((s, i) => s + (Number(i.amount) || 0), 0);
-    const totalEst = active.reduce((s, i) => {
-      const p = investmentProgress(i);
-      return s + (Number.isFinite(p.currentEstimate) ? p.currentEstimate : (Number(i.amount) || 0));
+    const totalInvested = active.reduce(
+      (sum, investment) => sum + (Number(investment.amount) || 0),
+      0
+    );
+
+    const totalEst = active.reduce((sum, investment) => {
+      const progress = investmentProgress(investment);
+      return sum + (
+        Number.isFinite(progress.currentEstimate)
+          ? progress.currentEstimate
+          : (Number(investment.amount) || 0)
+      );
     }, 0);
+
     const unrealisedGain = totalEst - totalInvested;
 
-    let title, body, cta = null, action = null;
-    let tone   = 'var(--color-surface)';
-    let border = 'var(--color-border)';
+    let title = '';
+    let body = '';
+    let primary = null;
+    let secondary = null;
+
+    const toVault = () => {
+      if (window.App && typeof App.navigate === 'function') App.navigate('vault');
+    };
+
+    const toWallet = () => {
+      if (window.App && typeof App.navigate === 'function') App.navigate('wallet');
+    };
+
+    const deposit = () => {
+      if (window.Trade && typeof Trade.openDeposit === 'function') Trade.openDeposit();
+    };
+
+    const viewPendingDeposit = () => {
+      if (
+        pendingDeposit &&
+        window.Transactiondetail &&
+        typeof Transactiondetail.open === 'function'
+      ) {
+        Transactiondetail.open(pendingDeposit.id, 'home');
+        return;
+      }
+
+      toWallet();
+      window.setTimeout(() => {
+        if (window.Wallet && typeof Wallet.switchToActivity === 'function') {
+          Wallet.switchToActivity();
+        }
+      }, 120);
+    };
 
     if (snapshot.balanceSyncStatus !== 'ready') {
-      title = 'Syncing your portfolio\u2026';
-      body  = 'Fetching latest ledger and pool data.';
+      title = 'Syncing your portfolio…';
+      body = 'Fetching the latest ledger and strategy state.';
 
     } else if (claimable.length > 0) {
-      const claimVal = claimable.reduce((s, i) => s + (Number(i.current_value) || Number(i.amount) || 0), 0);
-      const plural   = claimable.length > 1;
-      title  = claimable.length + ' position' + (plural ? 's' : '') + ' ready to claim';
-      body   = formatMoney(claimVal) + ' ' + (plural ? 'are' : 'is') + ' waiting. Claim to your Spot Wallet and decide what\u2019s next.';
-      cta    = 'Claim now';
-      action = () => window.App && App.navigate('vault');
-      tone   = 'var(--color-surface)';
-      border = 'var(--color-border)';
+      const claimValue = claimable.reduce(
+        (sum, investment) => sum + (
+          Number(investment.current_value) ||
+          Number(investment.amount) ||
+          0
+        ),
+        0
+      );
+
+      title = claimable.length + ' position' +
+        (claimable.length > 1 ? 's' : '') + ' ready to claim';
+      body = formatMoney(claimValue) + ' is ready for your next decision.';
+      primary = { label: 'Review positions', action: toVault };
+
+    } else if (total <= 0 && pendingDeposit) {
+      title = 'Your deposit is under review';
+      body = 'The ledger request is pending human review. Inspect its status or explore strategies while you wait.';
+      primary = { label: 'View deposit', action: viewPendingDeposit };
+      secondary = { label: 'Explore Vault', action: toVault };
 
     } else if (total <= 0) {
-      title  = 'Nothing here yet';
-      body   = 'Deposit funds, pick a strategy, and let the pool work. Steady starts at $100.';
-      cta    = 'Deposit';
-      action = () => window.Trade && Trade.openDeposit();
+      title = 'Start with one clear step';
+      body = 'Fund your Spot Wallet, then choose a strategy when you are ready.';
+      primary = { label: 'Deposit', action: deposit };
+      secondary = { label: 'Explore Vault', action: toVault };
 
     } else if (active.length === 0 && cash > 0) {
-      title  = formatMoney(cash) + ' sitting idle';
-      body   = 'That cash could be working. Steady Accumulator starts at $100 \u2014 90-day cycle. Surge Pool takes $1,500 \u2014 30-day cycle.';
-      cta    = 'Invest now';
-      action = () => window.App && App.navigate('vault');
-      tone   = 'var(--color-surface)';
-      border = 'var(--color-border)';
+      title = formatMoney(cash) + ' is available';
+      body = 'Your cash is ready. Compare strategy term, mechanics and risk before making a demo allocation.';
+      primary = { label: 'Open Vault', action: toVault };
+      secondary = { label: 'Deposit more', action: deposit };
 
     } else if (active.length > 0 && daysToNext !== null && daysToNext <= 4) {
-      const sName = strategyDisplayName(next);
-      title  = sName + ' matures in ' + daysToNext + ' day' + (daysToNext === 1 ? '' : 's');
-      body   = formatMoney(Number(next.amount) || 0) + ' is almost done. Plan now: reinvest or withdraw to wallet.';
-      cta    = 'View positions';
-      action = () => window.App && App.navigate('vault');
-      tone   = 'var(--color-surface)';
-      border = 'var(--color-border)';
+      const strategyName = strategyDisplayName(next);
+      title = strategyName + ' matures in ' + daysToNext + ' day' + (daysToNext === 1 ? '' : 's');
+      body = 'Review the position before maturity so your next move is deliberate.';
+      primary = { label: 'View positions', action: toVault };
 
     } else if (active.length > 0 && unrealisedGain > 0) {
-      const pct = totalInvested > 0 ? ((unrealisedGain / totalInvested) * 100).toFixed(1) : '0.0';
-      title  = 'Up ' + formatMoney(unrealisedGain) + ' since entry';
-      body   = active.length + ' position' + (active.length > 1 ? 's' : '') + ' tracking \u2014 '
-             + pct + '% unrealised. '
-             + (daysToNext ? 'Next payout in ' + daysToNext + 'd.' : 'Stay the course.');
-      cta    = 'View';
-      action = () => window.App && App.navigate('vault');
-      tone   = 'var(--color-surface)';
-      border = 'var(--color-border)';
+      const pct = totalInvested > 0
+        ? ((unrealisedGain / totalInvested) * 100).toFixed(1)
+        : '0.0';
+      title = 'Portfolio update';
+      body = active.length + ' active position' +
+        (active.length > 1 ? 's' : '') + ' · ' + pct +
+        '% modeled change since entry' +
+        (daysToNext ? ' · next maturity in ' + daysToNext + 'd.' : '.');
+      primary = { label: 'View positions', action: toVault };
 
     } else if (active.length > 0 && cash < Math.max(50, totalInvested * 0.08)) {
-      title  = 'Fully deployed';
-      body   = 'All capital is in the pool. Keep a small cash buffer for flexibility \u2014 or sit tight until maturity.';
-      cta    = 'Wallet';
-      action = () => window.App && App.navigate('wallet');
-      tone   = 'var(--color-surface)';
-      border = 'var(--color-border)';
+      title = 'Capital is deployed';
+      body = 'Your active strategy positions are using most available cash.';
+      primary = { label: 'View Vault', action: toVault };
+      secondary = { label: 'Open Wallet', action: toWallet };
 
     } else {
-      const posStr = active.length + ' position' + (active.length > 1 ? 's' : '') + ' active';
-      title  = 'Portfolio running';
-      body   = posStr + '. ' + (cash > 0 ? formatMoney(cash) + ' available to deploy.' : 'No idle cash right now.');
-      cta    = 'Vault';
-      action = () => window.App && App.navigate('vault');
+      title = 'Portfolio running';
+      body = active.length + ' active position' +
+        (active.length > 1 ? 's' : '') +
+        (cash > 0 ? ' · ' + formatMoney(cash) + ' still available.' : '.');
+      primary = { label: 'View Vault', action: toVault };
     }
 
     const shell = sectionShell('Smart context', null);
-    const card  = el('div');
+    const card = el('div');
     card.className = 'home-context-card';
-    const copy  = el('div', 'min-width:0;flex:1;');
-    copy.appendChild(el('div', 'font-size:15px;font-weight:800;line-height:1.2;color:var(--color-text-primary);', title));
-    copy.appendChild(el('div', 'font-size:12px;line-height:1.55;color:var(--color-text-secondary);margin-top:6px;', body));
+
+    const copy = el('div', 'min-width:0;');
+    copy.appendChild(el(
+      'div',
+      'font-size:15px;font-weight:800;line-height:1.2;color:var(--color-text-primary);',
+      title
+    ));
+    copy.appendChild(el(
+      'div',
+      'font-size:12px;line-height:1.55;color:var(--color-text-secondary);margin-top:6px;',
+      body
+    ));
     card.appendChild(copy);
-    if (cta && action) {
-      const btn = el('button', 'border:none;border-radius:12px;padding:10px 14px;background:rgba(255,255,255,0.11);color:var(--color-text-primary);font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;white-space:nowrap;');
-      btn.textContent = cta;
-      btn.addEventListener('click', action);
-      card.appendChild(btn);
+
+    if (primary || secondary) {
+      const actions = el('div');
+      actions.className = 'home-context-actions';
+
+      [
+        ['primary', primary],
+        ['secondary', secondary]
+      ].forEach(([tone, item]) => {
+        if (!item) return;
+        const button = el('button', '');
+        button.type = 'button';
+        button.className =
+          'home-context-action home-context-action--' + tone +
+          (tone === 'primary' ? ' btn-primary' : '');
+        button.textContent = item.label;
+        button.addEventListener('click', item.action);
+        actions.appendChild(button);
+      });
+
+      card.appendChild(actions);
     }
+
     shell.appendChild(card);
     return shell;
   }
@@ -891,7 +984,6 @@
     root.appendChild(heroCard(snapshot));
 
     if (snapshot.balanceSyncStatus !== 'ready') {
-      root.appendChild(loadingSection('Active investments', 3));
       root.appendChild(loadingSection('Smart context', 2));
       root.appendChild(loadingSection('Recent activity', 3));
       root.appendChild(loadingSection('Market pulse', 3));
@@ -899,7 +991,14 @@
       return root;
     }
 
-    root.appendChild(investmentsSection(snapshot));
+    const hasActiveStrategies = (snapshot.investments || []).some(
+      investment => investment && investment.status === 'active'
+    );
+
+    if (hasActiveStrategies) {
+      root.appendChild(investmentsSection(snapshot));
+    }
+
     root.appendChild(smartContextSection(snapshot));
     root.appendChild(activitySection(snapshot));
     root.appendChild(marketPulseSection(snapshot));

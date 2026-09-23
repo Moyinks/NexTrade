@@ -668,3 +668,171 @@ body[data-route="wallet"] .ui-action {
     transition-duration: .01ms !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   FINAL UI CONVERGENCE
+   Calm anchors • collapsed empty states • protected analysis
+   ═══════════════════════════════════════════════════════════════ */
+
+body[data-route="home"] .hero-card,
+#wallet-main-hero {
+  background: linear-gradient(180deg, #0D141D 0%, #091019 100%) !important;
+  border-color: #1D2936 !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.035) inset,
+    0 10px 24px -22px rgba(0,0,0,0.82) !important;
+}
+
+body[data-route="home"] .hero-card {
+  --color-text-primary: #F5F7FA;
+  --color-text-secondary: #A9B2BE;
+  --color-text-tertiary: #7E8996;
+  --color-surface-elevated: #151E29;
+  --color-border: #253242;
+}
+
+.home-context-card {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 13px !important;
+  padding: 16px !important;
+}
+
+.home-context-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.home-context-action {
+  width: 100%;
+  min-height: 43px;
+  padding: 0 14px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 760;
+  text-align: center;
+}
+
+.home-context-action--primary {
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
+}
+
+.home-context-action--secondary {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+html[data-theme="dark"] .home-context-action--secondary {
+  background: var(--color-surface-elevated);
+}
+
+body[data-route="wallet"] .wallet-strategy-discovery {
+  flex: 0 0 auto;
+  margin-top: auto;
+  margin-bottom: calc(var(--nav-footprint-live, 96px) + 12px + var(--nt-safe-bottom));
+  z-index: 1;
+}
+
+@media (max-height: 760px) {
+  body[data-route="wallet"] .overview-tab {
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+  }
+
+  body[data-route="wallet"] .wallet-strategy-discovery {
+    margin-top: 8px;
+  }
+}
+
+.market-detail-overlay {
+  padding-top: var(--nt-safe-top);
+  background: var(--color-background) !important;
+}
+
+.market-detail-topbar {
+  min-height: 66px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.market-detail-body {
+  overscroll-behavior-y: contain;
+}
+
+.market-detail-chart {
+  height: min(360px, 42dvh) !important;
+  min-height: 280px;
+  margin: 10px 16px 14px !important;
+  overflow: hidden;
+  border: 1px solid var(--chart-border) !important;
+  border-radius: 14px !important;
+  background: var(--chart-background) !important;
+  box-shadow: none !important;
+  touch-action: pan-y pinch-zoom;
+}
+
+.market-chart-inspector {
+  position: absolute;
+  top: 9px;
+  left: 10px;
+  z-index: 4;
+  max-width: calc(100% - 92px);
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-overlay) 92%, transparent);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.market-return-live {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 5;
+  min-height: 34px;
+  padding: 0 10px;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-overlay);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+  font-size: 9px;
+  font-weight: 760;
+}
+
+.market-return-live.is-visible {
+  display: inline-flex;
+}
+
+.market-chart-gesture-hint {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 3;
+  color: var(--color-text-tertiary);
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: .03em;
+  pointer-events: none;
+}
+
+@media (max-width: 380px) {
+  .market-detail-chart { margin-inline: 10px !important; }
+  .market-chart-inspector {
+    max-width: calc(100% - 74px);
+    font-size: 8px;
+  }
+}

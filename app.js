@@ -402,6 +402,18 @@
       window.history.pushState({ ntx: 1 }, '');
 
       function handleBack() {
+        // Market Detail is an analytical workspace. Device/browser Back closes
+        // it explicitly; ordinary scrolling/dragging never dismisses it.
+        if (
+          window.Market &&
+          typeof Market.isDetailOpen === 'function' &&
+          Market.isDetailOpen()
+        ) {
+          window.history.pushState({ ntx: 1 }, '');
+          if (typeof Market.closeDetail === 'function') Market.closeDetail();
+          return;
+        }
+
         // If a modal is open, close it — re-push so next back still fires popstate
         const openOverlay = document.querySelector('.ntm-overlay.ntm-open');
         if (openOverlay && window.Modal) {
@@ -596,8 +608,17 @@
     const currentRoute = window.Router ? Router.getCurrentPage() : null;
     const fromBack = options && options.fromBack === true;
 
+    // Route identity is presentation state. Establish it BEFORE render or
+    // same-route early return so login/restore can never show the wrong skin.
+    document.body.dataset.route = pageId;
+    document.body.classList.toggle(
+      'route-immersive',
+      pageId === 'deposit' || pageId === 'transactiondetail'
+    );
+
     if (!fromBack && currentRoute && currentRoute === pageId && PRIMARY_PAGES.has(pageId)) {
       resetRouteToTop(pageId);
+      if (window.Navbar) Navbar.setActive(pageId);
       return;
     }
 
@@ -614,14 +635,8 @@
     }
 
     console.log(`[APP] 🧭 Navigate: ${pageId}`);
-    document.body.classList.toggle(
-      'route-immersive',
-      pageId === 'deposit' || pageId === 'transactiondetail'
-    );
     if (window.AppState) AppState.set('ui.currentPage', pageId);
     if (window.Router)   await window.Router.navigate(pageId);
-
-    document.body.dataset.route = pageId;
 
     if (PRIMARY_PAGES.has(pageId) && !(options && options.restoreSnapshot)) {
       const saved = navigationState.primary.get(pageId);

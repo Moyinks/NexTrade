@@ -523,6 +523,89 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
   }
 }
 
+
+// Final UI convergence.
+{
+  const appSource = read('app.js');
+  const homeSource = read('home.js');
+  const marketSource = read('market.js');
+  const finishCss = read('mobile-product-finish.css');
+  const architectureSource = read('ARCHITECTURE_RULES.md');
+
+  const routeStamp = appSource.indexOf('document.body.dataset.route = pageId');
+  const routerPaint = appSource.indexOf('await window.Router.navigate(pageId)');
+
+  if (routeStamp < 0 || routerPaint < 0 || routeStamp > routerPaint) {
+    fail('Route state is not established before route paint');
+  }
+
+  if (homeSource.includes(
+    "root.appendChild(investmentsSection(snapshot));\\n    root.appendChild(smartContextSection(snapshot));"
+  )) {
+    fail('Home still renders empty Active Strategies unconditionally');
+  }
+
+  if (
+    !homeSource.includes("home-context-action--' + tone") ||
+    !finishCss.includes('.home-context-action--primary')
+  ) {
+    fail('Smart Context lacks explicit action hierarchy');
+  }
+
+  if (
+    marketSource.includes('Swipe-down to close (mobile)') ||
+    marketSource.includes('delta > 80 && body.scrollTop === 0')
+  ) {
+    fail('Market Detail still supports accidental swipe dismissal');
+  }
+
+  if (
+    !marketSource.includes('_followLive') ||
+    !marketSource.includes('market-return-live')
+  ) {
+    fail('Market chart does not yield live-following to user inspection');
+  }
+
+  if (
+    !marketSource.includes('isDetailOpen') ||
+    !marketSource.includes('closeDetail')
+  ) {
+    fail('Market Detail lacks explicit application Back integration');
+  }
+
+  if (
+    !finishCss.includes('var(--nav-footprint-live, 96px)') ||
+    !finishCss.includes('.wallet-strategy-discovery')
+  ) {
+    fail('Wallet discovery does not reserve floating-navigation space');
+  }
+
+  for (const principle of [
+    'Route state exists before route paint.',
+    'Analytical surfaces are persistent until explicitly dismissed.',
+    'Empty state collapses decisions instead of duplicating them.',
+    'Live data never steals an active inspection viewport.',
+    'Floating navigation owns physical space.'
+  ]) {
+    if (!architectureSource.includes(principle)) {
+      fail(`Architecture constitution missing: ${principle}`);
+    }
+  }
+
+  if (!failures.some((x) =>
+    x.includes('Route state is not established') ||
+    x.includes('empty Active Strategies') ||
+    x.includes('explicit action hierarchy') ||
+    x.includes('accidental swipe dismissal') ||
+    x.includes('live-following') ||
+    x.includes('Back integration') ||
+    x.includes('floating-navigation space') ||
+    x.includes('Architecture constitution missing')
+  )) {
+    pass('Final UI convergence architecture');
+  }
+}
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);

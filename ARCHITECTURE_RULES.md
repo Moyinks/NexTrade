@@ -32,3 +32,8 @@ These rules are product constraints, not aspirations.
 22. **Internal promotion is contextual, non-blocking, and truthful.** Product discovery may rotate quietly, but it pauses for user attention and never presents modeled strategy outcomes as guaranteed.
 23. **Non-critical motion yields to the user and the device.** Decorative rotation pauses when hidden, on interaction, and under reduced-motion preferences.
 24. **Brand is the landmark; route is context.** Persistent workspace chrome keeps NexTrade identity fixed while the active route is subordinate context. Task-immersive workflows may replace the workspace header only when the workflow itself is the user’s primary mental model.
+25. **Route state exists before route paint.** Theme and route-dependent presentation must be correct on the first authenticated frame, not only after the user navigates.
+26. **Analytical surfaces are persistent until explicitly dismissed.** Charts and inspection workspaces never close because of an ordinary scroll or ambiguous drag.
+27. **Empty state collapses decisions instead of duplicating them.** When multiple empty modules ask for the same next step, one contextual decision surface owns that guidance.
+28. **Live data never steals an active inspection viewport.** Real-time updates may continue while the user pans or zooms, but automatic following resumes only by explicit user action.
+29. **Floating navigation owns physical space.** Content that should be read or tapped must be laid out above the navigation footprint and device safe area, never merely layered behind it.

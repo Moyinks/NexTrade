@@ -1005,6 +1005,9 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
   let _lastOHLC       = null;   // last historical candle — live WS updates this
   let _liveBadgeEl    = null;   // "● LIVE" badge DOM element
   let _livePriceLine  = null;   // current live price guide line
+  let _followLive     = true;   // false while user is inspecting history
+  let _chartInspectorEl = null;
+  let _returnLiveBtn  = null;
 
   // Binance symbol map — CoinGecko ID → Binance trading pair
   // Binance public WS is free, no API key required.
@@ -1042,6 +1045,9 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     }
     _livePriceLine = null;
     _lastOHLC = null;
+    _followLive = true;
+    _chartInspectorEl = null;
+    _returnLiveBtn = null;
     if (_liveBadgeEl) { _liveBadgeEl.style.opacity = '0'; }
   }
 
@@ -1116,7 +1122,11 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
             });
           }
 
-          if (_chartInstance && typeof _chartInstance.timeScale === 'function') {
+          if (
+            _followLive &&
+            _chartInstance &&
+            typeof _chartInstance.timeScale === 'function'
+          ) {
             try { _chartInstance.timeScale().scrollToRealTime(); } catch (_) {}
           }
         } catch (_) {}
@@ -1314,8 +1324,17 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
         color: chartTheme.watermark,
         text: 'NEXTRADE LIVE'
       },
-      handleScroll:   { mouseWheel: true, pressedMouseMove: true },
-      handleScale:    { mouseWheel: true, pinch: true }
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: true
+      }
     });
 
     _chartSeries = _chartInstance.addCandlestickSeries({
@@ -1340,7 +1359,78 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
                           .sort((a, b) => a.time - b.time);
     _chartSeries.setData(cleanOhlc);
     _chartInstance.timeScale().fitContent();
+    _followLive = true;
     try { _chartInstance.timeScale().scrollToRealTime(); } catch (_) {}
+
+    const formatChartPrice = value => {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return '—';
+      return number.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 4
+      });
+    };
+
+    _chartInspectorEl = document.createElement('div');
+    _chartInspectorEl.className = 'market-chart-inspector';
+
+    const latestForInspector = cleanOhlc[cleanOhlc.length - 1];
+    if (latestForInspector) {
+      _chartInspectorEl.textContent =
+        'O ' + formatChartPrice(latestForInspector.open) +
+        '  H ' + formatChartPrice(latestForInspector.high) +
+        '  L ' + formatChartPrice(latestForInspector.low) +
+        '  C ' + formatChartPrice(latestForInspector.close);
+    }
+
+    _returnLiveBtn = document.createElement('button');
+    _returnLiveBtn.type = 'button';
+    _returnLiveBtn.className = 'market-return-live';
+    _returnLiveBtn.innerHTML =
+      '<i class="fas fa-location-crosshairs" aria-hidden="true"></i>' +
+      '<span>Return to live</span>';
+
+    const gestureHint = document.createElement('div');
+    gestureHint.className = 'market-chart-gesture-hint';
+    gestureHint.textContent = 'Drag to inspect · pinch to zoom';
+
+    const markInspecting = () => {
+      if (!_followLive) return;
+      _followLive = false;
+      if (_returnLiveBtn) _returnLiveBtn.classList.add('is-visible');
+    };
+
+    chartEl.addEventListener('pointerdown', markInspecting, { passive: true });
+    chartEl.addEventListener('wheel', markInspecting, { passive: true });
+
+    _returnLiveBtn.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      _followLive = true;
+      if (_chartInstance && typeof _chartInstance.timeScale === 'function') {
+        try { _chartInstance.timeScale().scrollToRealTime(); } catch (_) {}
+      }
+      _returnLiveBtn.classList.remove('is-visible');
+    });
+
+    if (_chartInstance && typeof _chartInstance.subscribeCrosshairMove === 'function') {
+      _chartInstance.subscribeCrosshairMove(param => {
+        if (!_chartInspectorEl) return;
+        let candle = null;
+        if (param && param.seriesData && typeof param.seriesData.get === 'function') {
+          candle = param.seriesData.get(_chartSeries);
+        }
+        if (!candle) candle = _lastOHLC || latestForInspector;
+        if (!candle) return;
+        _chartInspectorEl.textContent =
+          'O ' + formatChartPrice(candle.open) +
+          '  H ' + formatChartPrice(candle.high) +
+          '  L ' + formatChartPrice(candle.low) +
+          '  C ' + formatChartPrice(candle.close);
+      });
+    }
+
+    chartEl.append(_chartInspectorEl, gestureHint, _returnLiveBtn);
 
     // Store last candle so live WS updates can reference it
     _lastOHLC = cleanOhlc[cleanOhlc.length - 1] || null;
@@ -1391,6 +1481,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
     // ── Full-screen overlay ──────────────────────────────────────────────
     const overlay = document.createElement('div');
+    overlay.className = 'market-detail-overlay';
     _overlayEl = overlay;
     overlay.style.cssText = [
       'position:fixed;inset:0;z-index:9000;',
@@ -1402,6 +1493,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
     // ── Top bar ──────────────────────────────────────────────────────────
     const topBar = document.createElement('div');
+    topBar.className = 'market-detail-topbar';
     topBar.style.cssText = [
       'display:flex;align-items:center;gap:12px;',
       'padding:14px 16px;',
@@ -1460,6 +1552,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
     // ── Scrollable body ──────────────────────────────────────────────────
     const body = document.createElement('div');
+    body.className = 'market-detail-body';
     body.style.cssText = 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;';
 
     // ── Range tabs ───────────────────────────────────────────────────────
@@ -1490,6 +1583,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
         btn.style.color        = active ? '#fff' : 'var(--color-text-secondary)';
         btn.style.borderColor  = active ? 'var(--color-primary)' : 'var(--color-border)';
       });
+      _followLive = true;
       renderChart(coin.id, RANGE_DAYS[range], chartEl, coin);
       // renderChart will call startLiveWs with the new interval after loading
     }
@@ -1515,6 +1609,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
     // ── Chart container ───────────────────────────────────────────────────
     const chartEl = document.createElement('div');
+    chartEl.className = 'market-detail-chart';
     chartEl.style.cssText = [
       'height:300px;margin:8px 16px 16px;border-radius:16px;overflow:hidden;',
       'background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));',
@@ -1632,13 +1727,8 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
     overlay.appendChild(body);
 
-    // ── Swipe-down to close (mobile) ──────────────────────────────────────
-    let touchStartY = 0;
-    overlay.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; }, { passive: true });
-    overlay.addEventListener('touchend', e => {
-      const delta = e.changedTouches[0].clientY - touchStartY;
-      if (delta > 80 && body.scrollTop === 0) closeOverlay();
-    }, { passive: true });
+    // Market Detail intentionally has no gesture-to-dismiss.
+    // Analytical surfaces close only through explicit Back actions.
 
     // ── ESC key ───────────────────────────────────────────────────────────
     const onKeyDown = (e) => { if (e.key === 'Escape') { closeOverlay(); document.removeEventListener('keydown', onKeyDown); } };
@@ -1686,6 +1776,8 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     refresh,
     refreshTrending,
     showCoinDetails,
+    closeDetail: closeOverlay,
+    isDetailOpen: () => Boolean(_overlayEl && _overlayEl.isConnected),
     cleanup
   };
 })();
