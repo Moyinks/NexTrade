@@ -298,7 +298,7 @@
       'cursor:pointer'
     ].join(';'));
     card.type = 'button';
-    card.className = 'hero-card home-hero-card';
+    card.className = 'home-hero-card';
     card.addEventListener('click', () => {
       if (window.App && typeof App.navigate === 'function') App.navigate('wallet');
     });

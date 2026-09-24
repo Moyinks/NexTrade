@@ -742,10 +742,21 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
 
   if (
     !homeSource.includes(
-      "card.className = 'hero-card home-hero-card';"
+      "card.className = 'home-hero-card';"
     )
   ) {
     fail('Home account hero is not attached to its theme-independent contract');
+  }
+
+  if (
+    homeSource.includes(
+      "card.className = 'hero-card home-hero-card';"
+    ) ||
+    homeSource.includes(
+      "card.className = 'home-hero-card hero-card';"
+    )
+  ) {
+    fail('Home account hero has inherited the legacy sticky hero-card contract');
   }
 
   if (
@@ -757,6 +768,20 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
     )
   ) {
     fail('Light theme does not preserve inverse Home hero content');
+  }
+
+  if (
+    !finishCss.includes(
+      '.home-hero-card {'
+    ) ||
+    !finishCss.includes(
+      'position: relative !important;'
+    ) ||
+    !finishCss.includes(
+      'top: auto !important;'
+    )
+  ) {
+    fail('Home hero is not explicitly owned by normal scroll flow');
   }
 
   const filterStart =
@@ -818,7 +843,8 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
 
   for (const principle of [
     'Dark anchor surfaces own inverse content tokens.',
-    'Product-critical selection controls have product-owned presentation.'
+    'Product-critical selection controls have product-owned presentation.',
+    'Home account hero belongs to normal document flow.'
   ]) {
     if (!architectureSource.includes(principle)) {
       fail(`Architecture constitution missing: ${principle}`);
@@ -828,7 +854,9 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
   if (
     !failures.some((x) =>
       x.includes('Home account hero') ||
+      x.includes('legacy sticky') ||
       x.includes('inverse Home hero') ||
+      x.includes('normal scroll flow') ||
       x.includes('browser-native select') ||
       x.includes('accessible listbox') ||
       x.includes('custom filter presentation') ||

@@ -43,3 +43,4 @@ These rules are product constraints, not aspirations.
 33. **A live stream proves identity before mutating a chart.** Coin, range, chart generation, socket, and series identity must all match before real-time data is accepted.
 34. **Dark anchor surfaces own inverse content tokens.** A deliberately dark financial anchor remains legible in every page theme because its content colors are scoped to the anchor, not inherited from the page.
 35. **Product-critical selection controls have product-owned presentation.** High-frequency filters and selectors use NexTrade interaction geometry and accessible semantics rather than uncontrolled browser-native chrome.
+36. **Home account hero belongs to normal document flow.** The Home balance anchor scrolls away with Home content; persistent or sticky behavior is reserved for navigation and intentionally fixed workspaces, never inherited from legacy hero utilities.

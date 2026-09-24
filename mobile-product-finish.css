@@ -1154,3 +1154,29 @@ html[data-theme="light"] .home-hero-card {
     transition-duration: .01ms;
   }
 }
+
+/* ── FINAL RELEASE CANDIDATE: HOME HERO SCROLL OWNERSHIP ─────────── */
+
+/*
+ * The Home account hero is ordinary page content.
+ * It owns its visual theme, but never viewport position.
+ *
+ * These explicit geometry rules also protect Home from the legacy global
+ * .hero-card sticky contract in layout.css / hero-card.css.
+ */
+.home-hero-card {
+  position: relative !important;
+  top: auto !important;
+  z-index: auto !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 16px !important;
+  border-radius: 18px !important;
+  will-change: auto !important;
+  flex-shrink: 0;
+}
+
+body[data-route="home"] .home-hero-card {
+  position: relative !important;
+  top: auto !important;
+}
