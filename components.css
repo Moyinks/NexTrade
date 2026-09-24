@@ -38,7 +38,7 @@
 /* Primary: Electric Blue with Glass Top Highlight */
 .btn-primary {
   background-color: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-accent);
   /* Subtle top inner light for 3D effect */
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), var(--shadow-sm);
 }
@@ -58,11 +58,11 @@
   }
   .btn-danger:hover {
     background-color: var(--color-danger);
-    color: #fff;
+    color: var(--color-on-accent);
   }
   .btn-success:hover {
     background-color: var(--color-success);
-    color: #fff;
+    color: var(--color-on-accent);
   }
   .card-hover:hover {
     border-color: var(--color-border-hover);
@@ -461,7 +461,7 @@
   position: absolute; bottom: 130%; left: 50%;
   transform: translateX(-50%);
   background-color: #000;
-  color: #fff;
+  color: var(--color-on-accent);
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 11px;

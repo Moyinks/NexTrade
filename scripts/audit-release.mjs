@@ -867,6 +867,136 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
   }
 }
 
+
+// Cross-surface theme authority + same-origin API authority.
+{
+  const themeSource = read('themes.css');
+  const componentSource = read('components.css');
+  const modalSource = read('modals.js');
+  const tradeSource = read('trade.js');
+  const vaultSource = read('vault.js');
+  const envExample = read('.env.example');
+  const architectureSource = read('ARCHITECTURE_RULES.md');
+
+  if (
+    !themeSource.includes('--color-on-accent:#FFFFFF')
+  ) {
+    fail('Theme authority lacks a semantic foreground for accent surfaces');
+  }
+
+  if (
+    componentSource.includes('color: #fff;')
+  ) {
+    fail('Shared component controls still hardcode accent foreground text');
+  }
+
+  for (const forbidden of [
+    'color: #F8FAFC',
+    'color: #94A3B8',
+    'color: #CBD5E1',
+    'color: #fff'
+  ]) {
+    if (modalSource.includes(forbidden)) {
+      fail(`Shared modal system still carries dark-only foreground: ${forbidden}`);
+    }
+  }
+
+  const reviewStart =
+    tradeSource.indexOf('const reviewMsg = [');
+
+  const reviewEnd =
+    tradeSource.indexOf("].join('');", reviewStart);
+
+  const reviewSource =
+    reviewStart >= 0 && reviewEnd > reviewStart
+      ? tradeSource.slice(reviewStart, reviewEnd)
+      : '';
+
+  if (
+    !reviewSource ||
+    reviewSource.includes('#F8FAFC') ||
+    reviewSource.includes('#94A3B8') ||
+    !reviewSource.includes('ntm-review-value')
+  ) {
+    fail('Trade review still assumes a dark modal canvas');
+  }
+
+  const miniStart =
+    vaultSource.indexOf('function buildPositionMiniCard');
+
+  const miniEnd =
+    vaultSource.indexOf('// TAB SWITCHING', miniStart);
+
+  const miniSource =
+    miniStart >= 0 && miniEnd > miniStart
+      ? vaultSource.slice(miniStart, miniEnd)
+      : '';
+
+  if (
+    !miniSource ||
+    miniSource.includes('rgba(255,255,255,0.5)') ||
+    miniSource.includes('background:rgba(255,255,255') ||
+    miniSource.includes('color:#fff') ||
+    miniSource.includes('color:white')
+  ) {
+    fail('Vault position summary still assumes a dark canvas');
+  }
+
+  const mutatingApiFiles = [
+    'api/admin-deposit-reviews.js',
+    'api/admin-push.js',
+    'api/demo-deposit.js',
+    'api/execute-trade.js',
+    'api/generate-address.js'
+  ];
+
+  for (const file of mutatingApiFiles) {
+    const source = read(file);
+
+    if (!source.includes('requireSameOrigin')) {
+      fail(`${file} does not use shared same-origin authority`);
+    }
+
+    if (
+      source.includes('ALLOWED_ORIGIN') ||
+      source.includes('Access-Control-Allow-Origin')
+    ) {
+      fail(`${file} still depends on deployment-specific CORS authority`);
+    }
+  }
+
+  if (envExample.includes('ALLOWED_ORIGIN=')) {
+    fail('Environment template still advertises obsolete ALLOWED_ORIGIN');
+  }
+
+  for (const principle of [
+    'Mutating browser APIs derive same-origin authority from the active deployment.',
+    'Accent foreground is a semantic token.',
+    'Shared modal surfaces inherit the active theme.',
+    'Theme-sensitive portfolio summaries use semantic surface tokens.'
+  ]) {
+    if (!architectureSource.includes(principle)) {
+      fail(`Architecture constitution missing: ${principle}`);
+    }
+  }
+
+  if (
+    !failures.some((x) =>
+      x.includes('semantic foreground for accent') ||
+      x.includes('hardcode accent foreground') ||
+      x.includes('dark-only foreground') ||
+      x.includes('Trade review still assumes') ||
+      x.includes('Vault position summary') ||
+      x.includes('same-origin authority') ||
+      x.includes('deployment-specific CORS') ||
+      x.includes('obsolete ALLOWED_ORIGIN') ||
+      x.includes('Architecture constitution missing')
+    )
+  ) {
+    pass('Theme/API authority convergence');
+  }
+}
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);

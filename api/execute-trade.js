@@ -8,6 +8,7 @@
 'use strict';
 
 const { createClient } = require('@supabase/supabase-js');
+const { requireSameOrigin } = require('../server/supabase-server');
 
 const COINS = Object.freeze({
   bitcoin: 'btc',
@@ -42,21 +43,6 @@ function setSecurityHeaders(res) {
   res.setHeader('Referrer-Policy', 'no-referrer');
 }
 
-function enforceOrigin(req, res) {
-  const allowed = process.env.ALLOWED_ORIGIN;
-  if (!allowed) {
-    res.status(503).json({ error: 'Server origin policy is not configured' });
-    return false;
-  }
-  const origin = req.headers.origin || '';
-  if (origin !== allowed) {
-    res.status(403).json({ error: 'Origin not allowed' });
-    return false;
-  }
-  res.setHeader('Access-Control-Allow-Origin', allowed);
-  res.setHeader('Vary', 'Origin');
-  return true;
-}
 
 function validAmount(value) {
   const n = Number(value);
@@ -98,12 +84,17 @@ async function fetchUsdPrice(coinId) {
 
 module.exports = async function handler(req, res) {
   setSecurityHeaders(res);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method !== 'POST' && req.method !== 'OPTIONS') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-  if (!enforceOrigin(req, res)) return;
+  try {
+    requireSameOrigin(req);
+  } catch (_) {
+    return res.status(403).json({ error: 'Origin rejected' });
+  }
+
   if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const contentType = String(req.headers['content-type'] || '').toLowerCase();
   if (!contentType.startsWith('application/json')) return res.status(415).json({ error: 'JSON body required' });

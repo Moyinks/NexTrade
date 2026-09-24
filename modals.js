@@ -78,7 +78,7 @@ const Modal = (() => {
 
       .ntm-handle {
         width: 36px; height: 4px;
-        background: rgba(255,255,255,0.14);
+        background: var(--color-border-active);
         border-radius: 99px;
         margin: 12px auto 0;
       }
@@ -87,7 +87,7 @@ const Modal = (() => {
         .ntm-overlay { align-items: center; padding: 24px; }
         .ntm-card {
           border-radius: var(--nt-radius-sheet);
-          border-bottom: 1px solid rgba(255,255,255,0.09);
+          border-bottom: 1px solid var(--color-border);
           transform: translateY(16px) scale(0.97);
           opacity: 0;
         }
@@ -114,27 +114,31 @@ const Modal = (() => {
         display: flex; align-items: center; justify-content: center;
         cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s; font-size: 13px;
       }
-      .ntm-close-btn:hover { background: rgba(255,255,255,0.12); color: #F8FAFC; }
+      .ntm-close-btn:hover { background: var(--color-surface); color: var(--color-text-primary); }
 
       .ntm-confirm-icon { width: 52px; height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 20px; }
-      .ntm-confirm-icon.danger { background: rgba(239,68,68,0.1);   color: #EF4444; box-shadow: 0 0 0 1px rgba(239,68,68,0.18); }
-      .ntm-confirm-icon.info   { background: rgba(59,130,246,0.1);  color: #3B82F6; box-shadow: 0 0 0 1px rgba(59,130,246,0.18); }
-      .ntm-confirm-icon.warn   { background: rgba(245,158,11,0.1);  color: #F59E0B; box-shadow: 0 0 0 1px rgba(245,158,11,0.18); }
+      .ntm-confirm-icon.danger { background: var(--color-danger-bg); color: var(--color-danger); box-shadow: 0 0 0 1px var(--color-danger-border); }
+      .ntm-confirm-icon.info   { background: var(--color-primary-glow); color: var(--color-primary); box-shadow: 0 0 0 1px var(--color-border-active); }
+      .ntm-confirm-icon.warn   { background: var(--color-warning-bg); color: var(--color-warning); box-shadow: 0 0 0 1px var(--color-warning-border); }
 
-      .ntm-confirm-title { font-family: var(--font-ui); font-size: 17px; font-weight: 700; color: #F8FAFC; letter-spacing: -0.2px; margin-bottom: 8px; }
-      .ntm-confirm-msg   { font-family: var(--font-ui); font-size: 13.5px; line-height: 1.55; color: #94A3B8; margin-bottom: 22px; }
+      .ntm-confirm-title { font-family: var(--font-ui); font-size: 17px; font-weight: 700; color: var(--color-text-primary); letter-spacing: -0.2px; margin-bottom: 8px; }
+      .ntm-confirm-msg   { font-family: var(--font-ui); font-size: 13.5px; line-height: 1.55; color: var(--color-text-secondary); margin-bottom: 22px; }
 
       .ntm-confirm-btns { display: flex; gap: 10px; }
       .ntm-btn { flex: 1; height: 44px; border-radius: 12px; font-family: var(--font-ui); font-size: 14px; font-weight: 700; border: none; cursor: pointer; transition: all 0.18s ease; letter-spacing: -0.1px; }
-      .ntm-btn-cancel  { background: rgba(255,255,255,0.07); color: #CBD5E1; border: 1px solid rgba(255,255,255,0.08); }
-      .ntm-btn-cancel:hover  { background: rgba(255,255,255,0.11); }
-      .ntm-btn-confirm { background: #3B82F6; color: #fff; box-shadow: 0 4px 14px rgba(59,130,246,0.35); }
-      .ntm-btn-confirm:hover  { background: #2563EB; transform: translateY(-1px); }
+      .ntm-btn-cancel  { background: var(--color-surface-elevated); color: var(--color-text-secondary); border: 1px solid var(--color-border); }
+      .ntm-btn-cancel:hover  { background: var(--color-surface); }
+      .ntm-btn-confirm { background: var(--color-primary); color: var(--color-on-accent); box-shadow: 0 4px 14px var(--color-primary-glow); }
+      .ntm-btn-confirm:hover  { background: var(--color-primary-hover); transform: translateY(-1px); }
       .ntm-btn-confirm:active { transform: translateY(0); }
-      .ntm-btn-danger  { background: rgba(239,68,68,0.12); color: #EF4444; border: 1px solid rgba(239,68,68,0.2); }
-      .ntm-btn-danger:hover { background: rgba(239,68,68,0.2); }
+      .ntm-btn-danger  { background: var(--color-danger-bg); color: var(--color-danger); border: 1px solid var(--color-danger-border); }
+      .ntm-btn-danger:hover { background: var(--color-danger-bg); }
 
-      .ntm-content { font-family: var(--font-ui); color: #CBD5E1; font-size: 14px; line-height: 1.6; flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
+      .ntm-review-grid { display:flex; flex-direction:column; gap:10px; text-align:left; }
+      .ntm-review-row { display:flex; justify-content:space-between; align-items:baseline; gap:16px; font-size:13.5px; }
+      .ntm-review-label { color:var(--color-text-secondary); }
+      .ntm-review-value { color:var(--color-text-primary); font-weight:700; text-align:right; font-variant-numeric:tabular-nums; }
+      .ntm-content { font-family: var(--font-ui); color: var(--color-text-secondary); font-size: 14px; line-height: 1.6; flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
       .ntm-content input, .ntm-content textarea, .ntm-content select, .ntm-content button { position: relative; z-index: 1; }
       /* Confirm modal: action buttons must clear the iPhone home indicator */
       .ntm-confirm .ntm-body { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }

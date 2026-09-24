@@ -586,7 +586,7 @@
 
     content.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);text-align:center;margin-bottom:16px;line-height:1.6;', 'We earn a ' + strategy.perfFee + '% performance fee only on the profit we generate. Zero fees on your principal.'));
 
-    const confirmBtn = el('button', 'font-size:16px;padding:18px;border-radius:14px;font-weight:800;width:100%;border:none;color:#fff;cursor:pointer;background:var(--color-primary);', 'Invest Now');
+    const confirmBtn = el('button', 'font-size:16px;padding:18px;border-radius:14px;font-weight:800;width:100%;border:none;color:var(--color-on-accent);cursor:pointer;background:var(--color-primary);', 'Invest Now');
     confirmBtn.addEventListener('click', async () => {
       if (confirmBtn.disabled) return;
       const raw = amountInput.value.trim();
@@ -702,7 +702,7 @@
       });
       content.appendChild(table);
       content.appendChild(el('div', 'font-size:12px;color:var(--color-text-tertiary);text-align:center;margin-bottom:16px;line-height:1.5;', 'Wait ' + daysRemaining + ' more day' + (daysRemaining !== 1 ? 's' : '') + ' to claim with zero penalty.'));
-      const confirmBtn = el('button', 'background:#ef4444;color:white;border:none;padding:14px;margin-bottom:8px;border-radius:12px;width:100%;font-weight:700;cursor:pointer;', 'Accept Penalty & Claim');
+      const confirmBtn = el('button', 'background:#ef4444;color:var(--color-on-accent);border:none;padding:14px;margin-bottom:8px;border-radius:12px;width:100%;font-weight:700;cursor:pointer;', 'Accept Penalty & Claim');
       confirmBtn.addEventListener('click', () => { if (window.Modal) Modal.close(); setTimeout(() => handleClaim(investment, true), 350); });
       const cancelBtn  = el('button', 'background:rgba(255,255,255,0.06);border:1px solid var(--color-border);color:var(--color-text-primary);padding:14px;border-radius:12px;width:100%;font-weight:700;cursor:pointer;', 'Keep Invested');
       cancelBtn.addEventListener('click', () => { if (window.Modal) Modal.close(); });
@@ -825,7 +825,7 @@
     const nameRow   = el('div', 'display:flex;align-items:center;gap:6px;margin-bottom:1px;flex-wrap:wrap;');
     nameRow.appendChild(el('span', 'font-size:15px;font-weight:800;color:var(--color-text-primary);', strategy.name));
     if (recommended) {
-      const badge = el('span', 'font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;letter-spacing:0.6px;color:#fff;background:var(--color-primary);', '\u2605 FOR YOU');
+      const badge = el('span', 'font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;letter-spacing:0.6px;color:var(--color-on-accent);background:var(--color-primary);', '\u2605 FOR YOU');
       nameRow.appendChild(badge);
     }
     titleWrap.appendChild(nameRow);
@@ -865,7 +865,7 @@
     body.appendChild(el('div', 'font-size:12px;color:var(--color-text-secondary);line-height:1.4;margin-bottom:14px;', strategy.tagline));
 
     // ── CTA ──
-    const cta = el('button', 'width:100%;padding:12px;font-size:13px;font-weight:700;border-radius:10px;cursor:pointer;transition:all 0.2s;letter-spacing:-0.1px;color:#fff;');
+    const cta = el('button', 'width:100%;padding:12px;font-size:13px;font-weight:700;border-radius:10px;cursor:pointer;transition:all 0.2s;letter-spacing:-0.1px;color:var(--color-on-accent);');
     cta.className = 'vault-strategy-cta';
     cta.dataset.recommended = String(recommended);
     cta.style.background = recommended ? 'var(--color-primary)' : 'rgba(255,255,255,0.05)';
@@ -984,7 +984,7 @@
     content.appendChild(discBox);
 
     // Invest CTA
-    const investBtn = el('button', 'width:100%;padding:15px;border-radius:12px;font-size:15px;font-weight:800;margin-bottom:8px;cursor:pointer;border:none;background:var(--color-primary);color:#fff;', 'Invest \u2014 ' + strategy.name + ' \u2192');
+    const investBtn = el('button', 'width:100%;padding:15px;border-radius:12px;font-size:15px;font-weight:800;margin-bottom:8px;cursor:pointer;border:none;background:var(--color-primary);color:var(--color-on-accent);', 'Invest \u2014 ' + strategy.name + ' \u2192');
     investBtn.addEventListener('click', () => { if (window.Modal) Modal.close(); setTimeout(() => openInvestModal(strategy), 350); });
     const cancelBtn = el('button', 'width:100%;padding:12px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--color-border);background:rgba(255,255,255,0.03);color:var(--color-text-secondary);', 'Close');
     cancelBtn.addEventListener('click', () => { if (window.Modal) Modal.close(); });
@@ -1335,7 +1335,7 @@
     // ── CTA buttons ──────────────────────────────────────────────────────
     const btnRow = el('div', 'display:flex;gap:8px;margin-top:14px;');
     if (isMatured) {
-      const claimBtn = el('button', 'flex:1;padding:13px;font-size:14px;font-weight:800;border:none;border-radius:10px;cursor:pointer;background:#10b981;color:#fff;transition:opacity 0.15s;', 'Claim to Wallet');
+      const claimBtn = el('button', 'flex:1;padding:13px;font-size:14px;font-weight:800;border:none;border-radius:10px;cursor:pointer;background:#10b981;color:var(--color-on-accent);transition:opacity 0.15s;', 'Claim to Wallet');
       claimBtn.addEventListener('click', async () => {
         if (claimBtn.disabled) return;
         claimBtn.disabled = true;
@@ -1439,7 +1439,7 @@
         ctx.appendChild(ctxStats);
 
         const ctxCta = el('button',
-          'width:100%;padding:11px;border-radius:9px;font-size:12px;font-weight:800;border:none;cursor:pointer;background:var(--color-primary);color:#fff;',
+          'width:100%;padding:11px;border-radius:9px;font-size:12px;font-weight:800;border:none;cursor:pointer;background:var(--color-primary);color:var(--color-on-accent);',
           '⚡ Lock More In — Compound Your Return');
         ctxCta.addEventListener('click', () => {
           const s = STRATEGIES.find(st => st.id === investment.strategy_id) || STRATEGIES[0];
@@ -1514,7 +1514,7 @@
       empty.appendChild(el('div', 'font-size:48px;margin-bottom:16px;', '\uD83C\uDF31'));
       empty.appendChild(el('div', 'font-size:18px;font-weight:800;color:var(--color-text-primary);margin-bottom:8px;letter-spacing:-0.3px;', 'No active investments'));
       empty.appendChild(el('div', 'font-size:14px;color:var(--color-text-secondary);margin-bottom:24px;line-height:1.5;', 'Start from $100. Your money works while you sleep.'));
-      const startBtn = el('button', 'padding:14px 28px;font-size:14px;font-weight:700;border-radius:12px;cursor:pointer;background:var(--color-primary);color:#fff;border:none;', 'View Strategies');
+      const startBtn = el('button', 'padding:14px 28px;font-size:14px;font-weight:700;border-radius:12px;cursor:pointer;background:var(--color-primary);color:var(--color-on-accent);border:none;', 'View Strategies');
       startBtn.addEventListener('click', () => switchTab('explore'));
       empty.appendChild(startBtn);
       panel.appendChild(empty);
@@ -1707,7 +1707,7 @@
       return days > 0 ? days + 'd ' + hrs + 'h left' : Math.floor(diff / 3600000) + 'h left';
     })();
 
-    const card = el('div', 'border-radius:12px;padding:12px 14px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);');
+    const card = el('div', 'border-radius:12px;padding:12px 14px;background:var(--color-surface-elevated);border:1px solid var(--color-border);');
     if (isMatured) card.style.borderColor = 'rgba(16,185,129,0.25)';
 
     // Top row: amount · time · live value
@@ -1716,7 +1716,7 @@
     mLeft.appendChild(el('div', 'font-size:13px;font-weight:700;color:var(--color-text-primary);', fmt(amount) + ' invested'));
 
     const statusEl = el('div', 'font-size:10px;font-weight:700;margin-top:3px;', isMatured ? '\u2713 Ready to Claim' : '\u25CF Active \u00B7 ' + timeStr);
-    statusEl.style.color = isMatured ? '#10b981' : 'rgba(255,255,255,0.5)';
+    statusEl.style.color = isMatured ? 'var(--color-success)' : 'var(--color-text-tertiary)';
     mLeft.appendChild(statusEl);
 
     const mRight = el('div', 'text-align:right;');
@@ -1731,7 +1731,7 @@
     card.appendChild(topRow);
 
     // Progress bar
-    const bar  = el('div', 'width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;margin-bottom:10px;');
+    const bar  = el('div', 'width:100%;height:4px;border-radius:999px;background:var(--color-border);overflow:hidden;margin-bottom:10px;');
     const fill = el('div', 'height:100%;border-radius:999px;');
     fill.style.width      = Math.max(4, Math.round(progress * 100)) + '%';
     fill.style.background = isMatured ? '#10b981' : strategy.riskColor;
@@ -1739,7 +1739,7 @@
 
     // Bottom row: claim button OR progress label
     if (isMatured) {
-      const claimBtn = el('button', 'width:100%;padding:9px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:none;background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.25);', 'Claim ' + fmt(estVal) + ' \u2192');
+      const claimBtn = el('button', 'width:100%;padding:9px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;background:var(--color-success-bg);color:var(--color-success);border:1px solid var(--color-success-border);', 'Claim ' + fmt(estVal) + ' \u2192');
       claimBtn.addEventListener('click', async () => {
         claimBtn.disabled = true;
         claimBtn.textContent = 'Claiming\u2026';
@@ -1751,7 +1751,7 @@
       const foot = el('div', 'display:flex;align-items:center;justify-content:space-between;');
       foot.appendChild(el('div', 'font-size:10px;color:var(--color-text-tertiary);', Math.round(progress * 100) + '% through term'));
       // "Add more" CTA
-      const addBtn = el('button', 'font-size:11px;font-weight:700;color:var(--color-text-secondary);background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:7px;padding:4px 10px;cursor:pointer;', 'Add more \u2192');
+      const addBtn = el('button', 'font-size:11px;font-weight:700;color:var(--color-text-secondary);background:var(--color-surface);border:1px solid var(--color-border);border-radius:7px;padding:4px 10px;cursor:pointer;', 'Add more \u2192');
       addBtn.addEventListener('click', e => { e.stopPropagation(); openStrategyDetail(strategy); });
       foot.appendChild(addBtn);
       card.appendChild(foot);
@@ -1781,7 +1781,7 @@
     _container.querySelectorAll('[data-vault-tab]').forEach(btn => {
       const active = btn.dataset.vaultTab === tab;
       btn.style.background = active ? 'var(--color-primary)' : 'transparent';
-      btn.style.color      = active ? '#fff' : 'var(--color-text-secondary)';
+      btn.style.color      = active ? 'var(--color-on-accent)' : 'var(--color-text-secondary)';
     });
     _container.querySelectorAll('[data-vault-panel]').forEach(p => {
       p.style.display = p.dataset.vaultPanel === tab ? 'block' : 'none';
@@ -2028,7 +2028,7 @@
       badge.appendChild(badgeTxt);
       content.appendChild(badge);
 
-      const viewBtn = el('button', 'width:100%;padding:15px;border-radius:12px;font-size:15px;font-weight:800;border:none;color:#fff;cursor:pointer;background:var(--color-primary);margin-bottom:10px;', 'View My Plan \u2192');
+      const viewBtn = el('button', 'width:100%;padding:15px;border-radius:12px;font-size:15px;font-weight:800;border:none;color:var(--color-on-accent);cursor:pointer;background:var(--color-primary);margin-bottom:10px;', 'View My Plan \u2192');
       viewBtn.addEventListener('click', () => {
         if (window.Modal) Modal.close();
         setTimeout(() => { if (window.App) App.navigate('vault'); }, 200);

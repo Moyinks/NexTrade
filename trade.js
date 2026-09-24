@@ -496,18 +496,18 @@ const Trade = (() => {
       const priceFmt = '$' + coin.current_price.toLocaleString() + ' (quote)';
 
       const reviewMsg = [
-        '<div style="display:flex;flex-direction:column;gap:10px;text-align:left;">',
-        '  <div style="display:flex;justify-content:space-between;font-size:13.5px;">',
-        '    <span style="color:#94A3B8;">Amount</span>',
-        '    <span style="font-weight:700;color:#F8FAFC;">' + amtFmt + '</span>',
+        '<div class="ntm-review-grid">',
+        '  <div class="ntm-review-row">',
+        '    <span class="ntm-review-label">Amount</span>',
+        '    <strong class="ntm-review-value">' + amtFmt + '</strong>',
         '  </div>',
-        '  <div style="display:flex;justify-content:space-between;font-size:13.5px;">',
-        '    <span style="color:#94A3B8;">Price</span>',
-        '    <span style="font-weight:700;color:#F8FAFC;">' + priceFmt + '</span>',
+        '  <div class="ntm-review-row">',
+        '    <span class="ntm-review-label">Price</span>',
+        '    <strong class="ntm-review-value">' + priceFmt + '</strong>',
         '  </div>',
-        '  <div style="display:flex;justify-content:space-between;font-size:13.5px;">',
-        '    <span style="color:#94A3B8;">You receive</span>',
-        '    <span style="font-weight:700;color:#F8FAFC;">' + estLabel + '</span>',
+        '  <div class="ntm-review-row">',
+        '    <span class="ntm-review-label">You receive</span>',
+        '    <strong class="ntm-review-value">' + estLabel + '</strong>',
         '  </div>',
         '</div>'
       ].join('');
