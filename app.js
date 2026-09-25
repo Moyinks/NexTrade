@@ -655,228 +655,145 @@
     }
   }
 
-  // ── TOAST SYSTEM ────────────────────────────────────────────────────────────
-  // Premium fintech-grade notifications: glassmorphic card, left accent bar,
-  // icon badge, title + message, progress bar, stacking, click-to-dismiss.
-  // ─────────────────────────────────────────────────────────────────────────────
 
-  const TOAST_CFG = {
-    success: { color: '#10B981', bg: 'rgba(16,185,129,0.1)',  icon: 'fa-circle-check',          title: 'Success'     },
-    error:   { color: '#EF4444', bg: 'rgba(239,68,68,0.1)',   icon: 'fa-circle-exclamation',     title: 'Error'       },
-    warning: { color: '#F59E0B', bg: 'rgba(245,158,11,0.1)',  icon: 'fa-triangle-exclamation',   title: 'Warning'     },
-    info:    { color: '#3B82F6', bg: 'rgba(59,130,246,0.1)',  icon: 'fa-circle-info',            title: 'Info'        },
-  };
+  // ── TOAST / ATTENTION ARBITER ───────────────────────────────────────────────
+  const TOAST_META = Object.freeze({
+    success: { icon: 'fa-circle-check', title: 'Success' },
+    error:   { icon: 'fa-circle-exclamation', title: 'Error' },
+    warning: { icon: 'fa-triangle-exclamation', title: 'Notice' },
+    info:    { icon: 'fa-circle-info', title: 'Update' }
+  });
 
-  let _toastStack = [];
-  const MAX_VISIBLE_TOASTS = 3;   // hard cap — a burst of toasts can never fill the screen
+  const _toastQueue = [];
+  const _toastRecent = new Map();
+  let _activeToast = null;
 
-  function _injectToastStyles() {
-    if (document.getElementById('ntm-toast-styles')) return;
-    const s = document.createElement('style');
-    s.id = 'ntm-toast-styles';
-    s.textContent = `
-      .ntm-toast-wrap {
-        position: fixed;
-        top: calc(72px + env(safe-area-inset-top, 0px));
-        left: 50%;
-        transform: translateX(-50%);
-        width: calc(100% - 32px);
-        max-width: 400px;
-        z-index: 99999;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        pointer-events: none;
-      }
-      /* In landscape on Face ID iPhones, inset-left/right can be 44px.
-         Clamp the wrap so toasts don't overlap the safe zone. */
-      @supports (padding: max(0px)) {
-        .ntm-toast-wrap {
-          width: min(calc(100% - max(32px, calc(env(safe-area-inset-left, 16px) + env(safe-area-inset-right, 16px)))), 400px);
-        }
-      }
-      .ntm-toast {
-        position: relative;
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        padding: 14px 16px 14px 14px;
-        background: rgba(17, 22, 34, 0.96);
-        backdrop-filter: blur(24px);
-        -webkit-backdrop-filter: blur(24px);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 14px;
-        box-shadow:
-          0 2px 0 rgba(255,255,255,0.05) inset,
-          0 16px 48px rgba(0,0,0,0.65),
-          0 4px 16px rgba(0,0,0,0.4);
-        pointer-events: all;
-        cursor: pointer;
-        overflow: hidden;
-        opacity: 0;
-        transform: translateY(-12px) scale(0.97);
-        transition: opacity 0.28s cubic-bezier(0.34,1.2,0.64,1),
-                    transform 0.28s cubic-bezier(0.34,1.2,0.64,1);
-        -webkit-tap-highlight-color: transparent;
-      }
-      .ntm-toast.show {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-      }
-      .ntm-toast.hide {
-        opacity: 0;
-        transform: translateY(-8px) scale(0.97);
-        transition: opacity 0.22s ease, transform 0.22s ease;
-      }
-      .ntm-toast-accent {
-        position: absolute;
-        left: 0; top: 0; bottom: 0;
-        width: 3px;
-        border-radius: 14px 0 0 14px;
-      }
-      .ntm-toast-icon {
-        width: 32px; height: 32px;
-        border-radius: 9px;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 14px;
-        flex-shrink: 0;
-        margin-top: 1px;
-      }
-      .ntm-toast-body {
-        flex: 1;
-        min-width: 0;
-        padding-right: 4px;
-      }
-      .ntm-toast-title {
-        font-size: 13px;
-        font-weight: 700;
-        letter-spacing: -0.1px;
-        color: #F1F5F9;
-        margin-bottom: 2px;
-        font-family: 'DM Sans', sans-serif;
-      }
-      .ntm-toast-msg {
-        font-size: 13px;
-        font-weight: 400;
-        color: #94A3B8;
-        line-height: 1.4;
-        font-family: 'DM Sans', sans-serif;
-        word-break: break-word;
-      }
-      .ntm-toast-close {
-        flex-shrink: 0;
-        width: 20px; height: 20px;
-        display: flex; align-items: center; justify-content: center;
-        color: rgba(148,163,184,0.5);
-        font-size: 11px;
-        margin-top: 2px;
-        transition: color 0.15s;
-      }
-      .ntm-toast:hover .ntm-toast-close { color: #94A3B8; }
-      .ntm-toast-progress {
-        position: absolute;
-        bottom: 0; left: 0;
-        height: 2px;
-        border-radius: 0 0 14px 14px;
-        transform-origin: left;
-      }
-      @keyframes ntm-progress {
-        from { transform: scaleX(1); }
-        to   { transform: scaleX(0); }
-      }
-    `;
-    document.head.appendChild(s);
+  function _toastDuration(type) {
+    if (type === 'error') return 5000;
+    if (type === 'warning') return 4400;
+    if (type === 'success') return 3600;
+    return CONSTANTS.TOAST_DURATION || 3400;
   }
 
-  function _getOrCreateWrap() {
+  function _toastKey(message, type, title) {
+    return [type || 'info', title || '', message || ''].join('|').slice(0, 480);
+  }
+
+  function _toastWrap() {
     let wrap = document.getElementById('ntm-toast-wrap');
     if (!wrap) {
       wrap = document.createElement('div');
       wrap.id = 'ntm-toast-wrap';
       wrap.className = 'ntm-toast-wrap';
+      wrap.setAttribute('aria-live', 'polite');
+      wrap.setAttribute('aria-atomic', 'true');
       document.body.appendChild(wrap);
     }
     return wrap;
   }
 
-  function showToast(message, type, title) {
-    _injectToastStyles();
-    const cfg  = TOAST_CFG[type] || TOAST_CFG.info;
-    const dur  = type === 'error' ? 5000 : type === 'success' ? 4500 : (CONSTANTS.TOAST_DURATION || 3500);
-    const wrap = _getOrCreateWrap();
+  function _drainToastQueue() {
+    if (_activeToast || _toastQueue.length === 0) return;
 
-    // Build toast via DOM (not innerHTML) so the message text is never
-    // interpreted as HTML — prevents XSS if any caller passes user-derived content.
-    const toast = document.createElement('div');
+    const item = _toastQueue.shift();
+    const cfg = TOAST_META[item.type] || TOAST_META.info;
+    const duration = _toastDuration(item.type);
+    const wrap = _toastWrap();
+
+    const toast = document.createElement('section');
     toast.className = 'ntm-toast';
+    toast.dataset.type = item.type;
+    toast.style.setProperty('--toast-duration', duration + 'ms');
+    toast.setAttribute('role', item.type === 'error' ? 'alert' : 'status');
 
-    const accent = document.createElement('div');
-    accent.className = 'ntm-toast-accent';
-    accent.style.background = cfg.color;
-
-    const iconWrap = document.createElement('div');
-    iconWrap.className = 'ntm-toast-icon';
-    iconWrap.style.background = cfg.bg;
-    iconWrap.style.color = cfg.color;
-    const iconEl = document.createElement('i');
-    iconEl.className = 'fa-solid ' + cfg.icon;
-    iconWrap.appendChild(iconEl);
+    const icon = document.createElement('div');
+    icon.className = 'ntm-toast__icon';
+    icon.setAttribute('aria-hidden', 'true');
+    const glyph = document.createElement('i');
+    glyph.className = 'fa-solid ' + cfg.icon;
+    icon.appendChild(glyph);
 
     const body = document.createElement('div');
-    body.className = 'ntm-toast-body';
+    body.className = 'ntm-toast__body';
 
     const titleEl = document.createElement('div');
-    titleEl.className = 'ntm-toast-title';
-    titleEl.textContent = (title && String(title)) || cfg.title;
+    titleEl.className = 'ntm-toast__title';
+    titleEl.textContent = item.title || cfg.title;
 
-    const msgEl = document.createElement('div');
-    msgEl.className = 'ntm-toast-msg';
-    msgEl.textContent = String(message || '');   // textContent — never parsed as HTML
+    const msg = document.createElement('div');
+    msg.className = 'ntm-toast__message';
+    msg.textContent = item.message;
 
-    body.appendChild(titleEl);
-    body.appendChild(msgEl);
-
-    const closeEl = document.createElement('div');
-    closeEl.className = 'ntm-toast-close';
-    const closeIcon = document.createElement('i');
-    closeIcon.className = 'fa-solid fa-xmark';
-    closeEl.appendChild(closeIcon);
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'ntm-toast__close';
+    close.setAttribute('aria-label', 'Dismiss notification');
+    close.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
 
     const progress = document.createElement('div');
-    progress.className = 'ntm-toast-progress';
-    progress.style.background = cfg.color;
-    progress.style.opacity = '0.35';
-    progress.style.animation = `ntm-progress ${dur}ms linear forwards`;
+    progress.className = 'ntm-toast__progress';
+    progress.setAttribute('aria-hidden', 'true');
 
-    toast.appendChild(accent);
-    toast.appendChild(iconWrap);
-    toast.appendChild(body);
-    toast.appendChild(closeEl);
-    toast.appendChild(progress);
+    body.append(titleEl, msg);
+    toast.append(icon, body, close, progress);
+    wrap.replaceChildren(toast);
+    _activeToast = toast;
 
-    wrap.appendChild(toast);
-    _toastStack.push(toast);
-
-    // Hard cap: if this push put us over the limit, remove the oldest
-    // toast immediately so a burst can never stack up and cover the screen.
-    while (_toastStack.length > MAX_VISIBLE_TOASTS) {
-      const oldest = _toastStack.shift();
-      if (oldest && oldest.parentNode) oldest.parentNode.removeChild(oldest);
-    }
-
-    requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.add('show')));
+    let timer = null;
+    let dismissed = false;
 
     const dismiss = () => {
-      toast.classList.remove('show');
-      toast.classList.add('hide');
+      if (dismissed) return;
+      dismissed = true;
+      if (timer) clearTimeout(timer);
+      toast.classList.remove('is-visible');
+      toast.classList.add('is-leaving');
       setTimeout(() => {
-        if (toast.parentNode) toast.parentNode.removeChild(toast);
-        _toastStack = _toastStack.filter(t => t !== toast);
-      }, 260);
+        if (toast.parentNode) toast.remove();
+        if (_activeToast === toast) _activeToast = null;
+        _drainToastQueue();
+      }, 210);
     };
 
-    toast.addEventListener('click', dismiss);
-    setTimeout(dismiss, dur);
+    close.addEventListener('click', (event) => {
+      event.stopPropagation();
+      dismiss();
+    });
+
+    requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.add('is-visible')));
+    timer = setTimeout(dismiss, duration);
+  }
+
+  function showToast(message, type = 'info', title = '') {
+    const normalized = String(message || '').trim();
+    if (!normalized) return;
+
+    const normalizedType = TOAST_META[type] ? type : 'info';
+    const key = _toastKey(normalized, normalizedType, title);
+    const now = Date.now();
+    const previous = _toastRecent.get(key) || 0;
+
+    if (now - previous < 8000) return;
+    _toastRecent.set(key, now);
+
+    if (_toastRecent.size > 64) {
+      for (const [entryKey, seenAt] of _toastRecent) {
+        if (now - seenAt > 60000) _toastRecent.delete(entryKey);
+      }
+    }
+
+    _toastQueue.push({
+      message: normalized,
+      type: normalizedType,
+      title: title ? String(title) : ''
+    });
+
+    if (_toastQueue.length > 8) {
+      const removable = _toastQueue.findIndex((entry) => entry.type === 'info' || entry.type === 'success');
+      _toastQueue.splice(removable >= 0 ? removable : 0, 1);
+    }
+
+    _drainToastQueue();
   }
 
   // ============================================

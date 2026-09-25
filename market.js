@@ -103,6 +103,8 @@ const Market = (() => {
   let currentFilter = 'all';
   let currentSearchQuery = '';
   let trendingData = [];
+  let trendingProvenance = 'trending';
+  let trendingAge = null;
   let marketData = [];
   let isInitialLoad = true;
 
@@ -136,17 +138,12 @@ const Market = (() => {
     const cacheStatus = CacheManager.getCacheStatus();
     const hasCache = cacheStatus.marketData.cached && cacheStatus.marketData.count > 0;
 
-    if (!hasCache || isInitialLoad) {
-      showLoadingScreen();
-      isInitialLoad = false;
-    } else {
-      // FIX (C2): buildUIFromCache is now async — must await here so the
-      // optimistic render completes before loadAllData is called. Without
-      // this await, buildUIFromCache returned a Promise immediately and the
-      // cache data was never populated into marketData / trendingData before
-      // the UI was handed off.
+    if (hasCache) {
       await buildUIFromCache();
+    } else {
+      showLoadingScreen();
     }
+    isInitialLoad = false;
 
     try {
       // Load data (will use cache if valid)
@@ -190,6 +187,34 @@ const Market = (() => {
   //   → resolves the Promise first
   //   → .data accesses the actual result object's data property
   //   → correct array of coins is used
+
+  function getVisibleMarketData() {
+    let visible = applyFilter(marketData, currentFilter);
+    const query = currentSearchQuery.trim().toLowerCase();
+    if (query) {
+      visible = visible.filter((coin) => {
+        const name = String(coin && coin.name || '').toLowerCase();
+        const symbol = String(coin && coin.symbol || '').toLowerCase();
+        return name.includes(query) || symbol.includes(query);
+      });
+    }
+    return visible;
+  }
+
+  function clearMarketSearch({ preserveFilter = true } = {}) {
+    currentSearchQuery = '';
+    if (!preserveFilter) currentFilter = 'all';
+    const input = document.getElementById('market-search');
+    if (input) input.value = '';
+    const clear = document.querySelector('.market-search-clear');
+    if (clear) clear.classList.remove('is-visible');
+    document.querySelectorAll('.market-filter-btn').forEach((btn) => {
+      btn.setAttribute('aria-pressed', String(btn.dataset.filter === currentFilter));
+    });
+    renderMarketItems(getVisibleMarketData());
+    if (input) input.focus({ preventScroll: true });
+  }
+
   async function buildUIFromCache() {
     console.log('[MARKET] 📦 Building UI from cache...');
 
@@ -205,8 +230,7 @@ const Market = (() => {
     if (cacheStatus.marketData.cached) {
       const marketResult = await CacheManager.getMarketData();
       marketData = marketResult.data || [];
-      const filtered = applyFilter(marketData, currentFilter);
-      renderMarketItems(filtered);
+      renderMarketItems(getVisibleMarketData());
     }
 
     // Use cached trending
@@ -249,30 +273,48 @@ const Market = (() => {
     container.appendChild(screen);
   }
 
-  function showErrorScreen(message) {
+
+  function showErrorScreen(error) {
     if (!container) return;
+
+    const status = window.CacheManager ? CacheManager.getCacheStatus() : null;
+    const retrySeconds = status && status.system ? Number(status.system.nextRetrySeconds || 0) : 0;
+    const rateLimited = Boolean(
+      retrySeconds > 0 ||
+      (status && status.system && status.system.lastFailureCode === 'RATE_LIMITED') ||
+      (error && error.code === 'RATE_LIMITED')
+    );
 
     container.innerHTML = '';
 
-    const screen = document.createElement('div');
-    screen.style.cssText = 'display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; padding:20px; text-align:center;';
+    const screen = document.createElement('section');
+    screen.className = 'market-recovery-state';
 
-    screen.innerHTML = `
-      <div style="font-size:48px; margin-bottom:20px; opacity:0.5;">
-        <i class="fas fa-exclamation-triangle" style="color:#f59e0b;"></i>
-      </div>
-      <div style="font-size:16px; font-weight:600; color:var(--color-text-primary); margin-bottom:8px;">
-        Failed to Load Market
-      </div>
-      <div style="font-size:13px; color:var(--color-text-secondary); margin-bottom:20px; max-width:300px;">
-        <div id="error-message-text"></div>
-      </div>
-      <button data-app-action="market-refresh" class="btn btn-primary" style="padding:10px 24px;">
-        <i class="fas fa-sync-alt" style="margin-right:8px;"></i>
-        Retry
-      </button>
-    `;
-screen.querySelector('#error-message-text').textContent = message || 'Unable to fetch market data. Please check your connection.';
+    const icon = document.createElement('div');
+    icon.className = 'market-recovery-state__icon';
+    icon.innerHTML = '<i class="fas fa-signal" aria-hidden="true"></i>';
+
+    const title = document.createElement('h3');
+    title.textContent = rateLimited ? 'Live prices are cooling down' : 'Market is temporarily unavailable';
+
+    const copy = document.createElement('p');
+    copy.textContent = rateLimited
+      ? (retrySeconds > 0
+          ? 'Saved prices are used when available. Try live prices again in about ' + retrySeconds + ' seconds.'
+          : 'The live market provider asked NexTrade to slow down. Your account is unaffected; retry shortly.')
+      : 'Your account is unaffected. Check the connection or retry live market data.';
+
+    const actions = document.createElement('div');
+    actions.className = 'market-recovery-actions';
+
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'market-state-button market-state-button--primary';
+    retry.textContent = 'Retry market';
+    retry.addEventListener('click', refresh);
+
+    actions.appendChild(retry);
+    screen.append(icon, title, copy, actions);
     container.appendChild(screen);
   }
 
@@ -341,8 +383,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     const marketList = createMarketList();
     container.appendChild(marketList);
 
-    const filtered = applyFilter(marketData, currentFilter);
-    renderMarketItems(filtered);
+    renderMarketItems(getVisibleMarketData());
 
     renderTrendingCards();
 
@@ -359,15 +400,16 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
 
     section.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:0 16px;">
-        <h3 style="font-size:15px; font-weight:700; color:var(--color-text-primary); margin:0;">
-          <i class="fas fa-fire" style="color:#f59e0b; margin-right:6px; font-size:14px;"></i>
-          Trending Now
+        <h3 id="market-trending-title" style="font-size:15px; font-weight:700; color:var(--color-text-primary); margin:0;">
+          <i class="fas fa-fire" style="color:var(--color-warning); margin-right:6px; font-size:14px;"></i>
+          Trending now
         </h3>
         <button class="trending-refresh-btn" data-app-action="market-refresh-trending" style="background:none; border:none; color:var(--color-text-tertiary); cursor:pointer; padding:4px;">
           <i class="fas fa-sync-alt" style="font-size:12px;"></i>
         </button>
       </div>
       
+      <div id="market-trending-meta" class="market-trending-meta" hidden></div>
       <div id="trending-container" style="overflow-x: auto; -webkit-overflow-scrolling: touch; margin:0; padding:0 0 16px 0;">
         <div style="display:flex; gap:10px; min-width:min-content;">
           ${createTrendingSkeletons()}
@@ -396,7 +438,9 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
       
       if (result.success && result.data && result.data.length > 0) {
         trendingData = result.data.slice(0, 7);
-        console.log(`[MARKET] ✅ Loaded ${trendingData.length} trending coins`);
+        trendingProvenance = result.isStale || result.source === 'stale' ? 'stale' : 'trending';
+        trendingAge = result.age || null;
+        console.log(`[MARKET] ✅ Loaded ${trendingData.length} trending coins (${trendingProvenance})`);
       } else {
         console.warn('[MARKET] ⚠️ No trending data available');
         useTrendingFallback();
@@ -419,11 +463,15 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
       .slice(0, 7);
 
     if (topGainers.length > 0) {
+      trendingProvenance = 'movers';
+      trendingAge = null;
       trendingData = topGainers.map(c => ({
         id: c.id,
         symbol: c.symbol,
         name: c.name,
-        thumb: c.image
+        thumb: c.image,
+        current_price: c.current_price,
+        price_change_percentage_24h: c.price_change_percentage_24h
       }));
     }
   }
@@ -431,6 +479,28 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
   function renderTrendingCards() {
     const trendingContainer = document.getElementById('trending-container');
     if (!trendingContainer) return;
+
+    const title = document.getElementById('market-trending-title');
+    const meta = document.getElementById('market-trending-meta');
+
+    if (title) {
+      title.lastChild.textContent = trendingProvenance === 'movers'
+        ? ' Market movers'
+        : ' Trending now';
+    }
+
+    if (meta) {
+      if (trendingProvenance === 'stale') {
+        meta.hidden = false;
+        meta.textContent = 'Saved trending snapshot' + (trendingAge ? ' · ' + trendingAge : '');
+      } else if (trendingProvenance === 'movers') {
+        meta.hidden = false;
+        meta.textContent = 'Trending feed unavailable · showing strongest 24h gainers instead';
+      } else {
+        meta.hidden = true;
+        meta.textContent = '';
+      }
+    }
 
     if (trendingData.length === 0) {
       trendingContainer.innerHTML = `
@@ -515,7 +585,45 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
       const card = e.target.closest('[data-trending-coin]');
       if (!card) return;
       const coinId = decodeURIComponent(card.dataset.trendingCoin || '');
-      if (coinId) showCoinDetails(coinId);
+      if (!coinId) return;
+
+      const existing = marketData.find((entry) => entry && entry.id === coinId);
+      if (existing) {
+        showCoinDetails(existing);
+        return;
+      }
+
+      const fallback = trendingData.find((entry) => entry && entry.id === coinId);
+      card.setAttribute('aria-busy', 'true');
+
+      Promise.resolve(
+        window.API && typeof API.getCoinDetails === 'function'
+          ? API.getCoinDetails(coinId)
+          : null
+      ).then((result) => {
+        const details = result && result.success ? result.data : null;
+        if (details) {
+          marketData = [...marketData.filter((entry) => entry.id !== details.id), details];
+          showCoinDetails(details);
+          return;
+        }
+
+        if (fallback && Number(fallback.current_price) > 0) {
+          showCoinDetails({
+            ...fallback,
+            image: fallback.thumb,
+            market_cap: 0,
+            total_volume: 0,
+            high_24h: 0,
+            low_24h: 0,
+            market_cap_rank: fallback.market_cap_rank || 0,
+            sparkline: []
+          });
+          return;
+        }
+
+        if (window.App) App.showInfo('This trending market is still loading. Try again shortly.', 'Market detail');
+      }).finally(() => card.removeAttribute('aria-busy'));
     }, { once: false });
 
     // 250ms gives the DOM time to paint before canvas draws
@@ -566,52 +674,50 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
   // HEADER (SEARCH & FILTERS)
   // ============================================
 
+
   function createHeader() {
     const header = document.createElement('div');
     header.className = 'market-header';
     header.style.cssText = 'padding:0 0 16px 0; position:sticky; top:0; background:var(--color-background); z-index:10; width:100%; box-sizing:border-box;';
 
     const searchWrapper = document.createElement('div');
-    searchWrapper.style.cssText = 'position:relative; margin:0 16px 12px;';
+    searchWrapper.className = 'market-search-shell';
 
-    searchWrapper.innerHTML = `
-      <i class="fas fa-search" style="position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--color-text-tertiary); font-size:13px; pointer-events:none;"></i>
-      <input 
-        type="text" 
-        id="market-search" 
-        placeholder="Search cryptocurrencies..." 
-        value="${currentSearchQuery}"
-        style="
-          width:100%; 
-          padding:12px 14px 12px 40px; 
-          background:var(--color-surface); 
-          border:1px solid var(--color-border); 
-          border-radius:12px; 
-          color:var(--color-text-primary); 
-          font-size:14px;
-          outline:none;
-          transition: border-color 0.2s;
-        "
-      />
-    `;
+    const searchIcon = document.createElement('i');
+    searchIcon.className = 'fas fa-search market-search-icon';
+    searchIcon.setAttribute('aria-hidden', 'true');
 
-    searchWrapper.querySelector('#market-search').addEventListener('input', (e) => {
-      handleSearch(e.target.value);
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.id = 'market-search';
+    input.className = 'market-search-input';
+    input.placeholder = 'Search cryptocurrencies…';
+    input.value = currentSearchQuery;
+    input.autocomplete = 'off';
+    input.enterKeyHint = 'search';
+
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'market-search-clear' + (currentSearchQuery ? ' is-visible' : '');
+    clear.setAttribute('aria-label', 'Clear market search');
+    clear.innerHTML = '<i class="fas fa-xmark" aria-hidden="true"></i>';
+
+    input.addEventListener('input', (event) => {
+      clear.classList.toggle('is-visible', Boolean(event.target.value));
+      handleSearch(event.target.value);
     });
 
-    searchWrapper.querySelector('#market-search').addEventListener('focus', (e) => {
-      e.target.style.borderColor = 'var(--color-primary)';
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && input.value) {
+        event.preventDefault();
+        clearMarketSearch();
+      }
     });
 
-    searchWrapper.querySelector('#market-search').addEventListener('blur', (e) => {
-      e.target.style.borderColor = 'var(--color-border)';
-    });
+    clear.addEventListener('click', () => clearMarketSearch());
+    searchWrapper.append(searchIcon, input, clear);
 
-    const filters = createFilters();
-
-    header.appendChild(searchWrapper);
-    header.appendChild(filters);
-
+    header.append(searchWrapper, createFilters());
     return header;
   }
 
@@ -820,27 +926,59 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     ctx.stroke();
   }
 
+
   function showEmptyState() {
     const list = document.getElementById('market-list');
     if (!list) return;
 
+    const query = currentSearchQuery.trim();
+    const filterLabel = { all: 'All', gainers: 'Gainers', losers: 'Losers', volume: 'Volume' }[currentFilter] || 'All';
+
     list.innerHTML = '';
 
-    const empty = document.createElement('div');
-    empty.style.cssText = 'text-align:center; padding:60px 20px;';
+    const empty = document.createElement('section');
+    empty.className = 'market-empty-state';
 
-    empty.innerHTML = `
-      <div style="font-size:48px; margin-bottom:16px; opacity:0.3;">
-        <i class="fas fa-search"></i>
-      </div>
-      <div style="font-size:16px; font-weight:600; color:var(--color-text-primary); margin-bottom:8px;">
-        No Results Found
-      </div>
-      <div style="font-size:13px; color:var(--color-text-secondary);">
-        Try adjusting your search or filters
-      </div>
-    `;
+    const icon = document.createElement('div');
+    icon.className = 'market-empty-state__icon';
+    icon.innerHTML = '<i class="fas fa-search" aria-hidden="true"></i>';
 
+    const title = document.createElement('h3');
+    const copy = document.createElement('p');
+    const actions = document.createElement('div');
+    actions.className = 'market-empty-actions';
+
+    if (query && currentFilter !== 'all') {
+      title.textContent = 'No “' + query + '” assets in ' + filterLabel;
+      copy.textContent = 'The search is valid, but this filter removes every matching asset.';
+      const showAll = document.createElement('button');
+      showAll.type = 'button';
+      showAll.className = 'market-state-button market-state-button--primary';
+      showAll.textContent = 'Show all results';
+      showAll.addEventListener('click', () => handleFilterChange('all'));
+      actions.appendChild(showAll);
+    } else if (query) {
+      title.textContent = 'No assets match “' + query + '”';
+      copy.textContent = 'Try another name or symbol, or clear the search to return to Market.';
+    } else if (currentFilter !== 'all') {
+      title.textContent = 'Nothing in ' + filterLabel + ' right now';
+      copy.textContent = 'Market data loaded successfully; this view simply has no qualifying assets.';
+    } else {
+      title.textContent = 'Market data is not ready';
+      copy.textContent = 'Retry live prices. Saved data will appear automatically when available.';
+    }
+
+    if (query) {
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.className = 'market-state-button';
+      clear.textContent = 'Clear search';
+      clear.addEventListener('click', () => clearMarketSearch());
+      actions.appendChild(clear);
+    }
+
+    empty.append(icon, title, copy);
+    if (actions.childElementCount) empty.appendChild(actions);
     list.appendChild(empty);
   }
 
@@ -854,18 +992,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     currentSearchQuery = query;
 
     searchTimeout = setTimeout(() => {
-      const trimmed = query.trim().toLowerCase();
-
-      let filtered = applyFilter(marketData, currentFilter);
-
-      if (trimmed.length > 0) {
-        filtered = filtered.filter(coin =>
-          coin.name.toLowerCase().includes(trimmed) ||
-          coin.symbol.toLowerCase().includes(trimmed)
-        );
-      }
-
-      renderMarketItems(filtered);
+      renderMarketItems(getVisibleMarketData());
     }, 300);
   }
 
@@ -885,17 +1012,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
       );
     });
 
-    let filtered = applyFilter(marketData, filterId);
-
-    if (currentSearchQuery && currentSearchQuery.length > 0) {
-      const trimmed = currentSearchQuery.toLowerCase();
-      filtered = filtered.filter(coin =>
-        coin.name.toLowerCase().includes(trimmed) ||
-        coin.symbol.toLowerCase().includes(trimmed)
-      );
-    }
-
-    renderMarketItems(filtered);
+    renderMarketItems(getVisibleMarketData());
   }
 
   function applyFilter(data, filterId) {
@@ -941,9 +1058,13 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
       if (marketResult.success && marketResult.data && marketResult.data.length > 0) {
         marketData = marketResult.data;
         console.log(`[MARKET] ✅ Market data loaded: ${marketData.length} coins (source: ${marketResult.source})`);
+      } else if (marketData.length > 0) {
+        console.warn('[MARKET] ⚠️ Fresh market request failed; preserving current data');
       } else {
-        console.warn('[MARKET] ⚠️ No market data available');
-        marketData = [];
+        const failure = new Error('Market data unavailable');
+        failure.code = marketResult.code || 'MARKET_UNAVAILABLE';
+        failure.retryAfterSeconds = marketResult.retryAfterSeconds || null;
+        throw failure;
       }
 
     } catch (error) {
@@ -952,20 +1073,44 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     }
   }
 
+
   async function refresh() {
     console.log('[MARKET] 🔄 Manual refresh requested...');
-    
-    if (container) {
-      showLoadingScreen();
-      
-      try {
-        await CacheManager.getMarketData(true);
-        await loadTrendingCoins();
+    if (!container || !window.CacheManager) return;
+
+    const hadData = marketData.length > 0;
+    if (!hadData) showLoadingScreen();
+
+    try {
+      const result = await CacheManager.getMarketData(true);
+      await loadTrendingCoins();
+
+      if (result.success && result.data && result.data.length > 0) {
+        marketData = result.data;
         buildUI();
-      } catch (error) {
-        console.error('[MARKET] ❌ Refresh failed:', error);
-        showErrorScreen(error.message);
+        return;
       }
+
+      if (hadData) {
+        buildUI();
+        const status = CacheManager.getCacheStatus();
+        const retry = status && status.system ? Number(status.system.nextRetrySeconds || 0) : 0;
+        if (window.App) {
+          App.showInfo(
+            retry > 0
+              ? 'Saved prices remain available. Live prices can be retried in about ' + retry + ' seconds.'
+              : 'Saved prices remain available while the live market reconnects.',
+            'Market'
+          );
+        }
+        return;
+      }
+
+      showErrorScreen(result);
+    } catch (error) {
+      console.error('[MARKET] ❌ Refresh failed:', error);
+      if (hadData) buildUI();
+      else showErrorScreen(error);
     }
   }
 
@@ -1423,7 +1568,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
     if (!ohlc || ohlc.length === 0 || !window.LightweightCharts) {
       if (hadValidChart) {
         loader.classList.add('is-error');
-        loader.innerHTML = '<span>Could not load ' + requestedRange + ' · showing last valid chart</span>';
+        loader.innerHTML = '<span>' + requestedRange + ' unavailable · showing last valid chart (' + _renderedRange + ')</span>';
         setTimeout(() => loader.remove(), 2400);
 
         if (_liveBadgeEl) {
@@ -1681,8 +1826,10 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
       coin = coinIdOrObject;
     }
 
-    // Close any existing overlay first
+    // Close any existing overlay first and start each market from a known range.
     closeOverlay();
+    _activeRange = '1W';
+    _renderedRange = '1W';
 
     const isUp       = (coin.price_change_percentage_24h || 0) >= 0;
     const changeColor = isUp ? '#10b981' : '#ef4444';
@@ -1807,7 +1954,6 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
         return;
       }
 
-      const fallbackRange = _renderedRange;
       _activeRange = range;
       paintRangeState(range);
       _followLive = true;
@@ -1820,8 +1966,7 @@ screen.querySelector('#error-message-text').textContent = message || 'Unable to 
       );
 
       if (result === false && _activeRange === range) {
-        _activeRange = fallbackRange;
-        paintRangeState(fallbackRange);
+        paintRangeState(range);
       }
     }
 

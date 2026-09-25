@@ -48,3 +48,9 @@ These rules are product constraints, not aspirations.
 38. **Accent foreground is a semantic token.** Text/icons placed on primary, success or danger emphasis consume the shared on-accent token instead of embedding white in feature code.
 39. **Shared modal surfaces inherit the active theme.** A modal is infrastructure, not a dark-theme island; every title, body, action and review row consumes semantic foreground/surface tokens.
 40. **Theme-sensitive portfolio summaries use semantic surface tokens.** Vault position summaries may express strategy state, but their neutral backgrounds, borders and secondary text cannot assume a dark canvas.
+41. **Network condition is not presentation state.** Cached, stale, refreshing, rate-limited, unavailable, empty-search and empty-filter states remain distinct so transport failure can never masquerade as a product result.
+42. **Search intent, filter intent and data availability are independent state domains.** A query may produce zero results under one filter without implying the market failed; recovery controls explain and preserve that distinction.
+43. **A failed analytical request preserves user intent and labels fallback truthfully.** Requested chart range remains selected while the last valid chart may remain visible only with explicit provenance.
+44. **Background refresh never spends the attention budget on success.** Silent freshness indicators own routine market repaint; transient notifications are reserved for user-relevant outcomes or action-required failures.
+45. **One transient notification owns attention at a time.** Toasts are serialized, deduplicated and bounded so system feedback cannot stack into cognitive load.
+46. **Trade denomination is user intent; execution quantity is server authority.** Users may express a trade in fiat or asset units, but the server resolves the canonical ledger amount from a fresh execution quote.

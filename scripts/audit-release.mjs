@@ -997,6 +997,83 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
   }
 }
 
+
+// Market interaction + attention authority.
+{
+  const marketSource = read('market.js');
+  const cacheSource = read('cache-manager.js');
+  const apiSource = read('api.js');
+  const appSource = read('app.js');
+  const tradeSource = read('trade.js');
+  const executeTradeSource = read('api/execute-trade.js');
+  const componentSource = read('components.css');
+  const architectureSource = read('ARCHITECTURE_RULES.md');
+
+  if (!marketSource.includes('market-search-clear') || !marketSource.includes('Show all results') || !marketSource.includes('clearMarketSearch')) {
+    fail('Market search does not provide intentional recovery controls');
+  }
+
+  if (marketSource.includes('_activeRange = fallbackRange') || !marketSource.includes('showing last valid chart') || !marketSource.includes('_renderedRange')) {
+    fail('Market timeframe intent can still bounce back after a failed range request');
+  }
+
+  if (!marketSource.includes("trendingProvenance = 'trending'") || !marketSource.includes("trendingProvenance = 'movers'") || !marketSource.includes('Market movers')) {
+    fail('Trending provenance is not represented truthfully');
+  }
+
+  if (!cacheSource.includes('CACHE_STORAGE_KEY') || !cacheSource.includes('hydratePersistentCache') || !cacheSource.includes('persistCache')) {
+    fail('Market cache is still memory-only across app restarts');
+  }
+
+  if (cacheSource.includes("showCacheNotification('success'") || !cacheSource.includes('nextRetrySeconds')) {
+    fail('Background market refresh still competes for user attention or lacks retry state');
+  }
+
+  if (!apiSource.includes('retryAfterSeconds') || !apiSource.includes("error.code = response.status === 429 ? 'RATE_LIMITED'") || !apiSource.includes('response.status === 429')) {
+    fail('Market API failures do not preserve safe rate-limit semantics');
+  }
+
+  if (appSource.includes('MAX_VISIBLE_TOASTS') || !appSource.includes('_toastQueue') || !appSource.includes('_activeToast') || !componentSource.includes('.ntm-toast.is-visible')) {
+    fail('Feedback system does not arbitrate to one visible notification');
+  }
+
+  if (!tradeSource.includes('amountUnit') || !tradeSource.includes('trade-mode-switch') || !tradeSource.includes('ArrowUp') || !tradeSource.includes('Indicative market quote')) {
+    fail('Trade entry lacks denomination switching/live estimate/keyboard contract');
+  }
+
+  if (!executeTradeSource.includes('canonicalRpcAmount') || !executeTradeSource.includes('amountUnit') || !executeTradeSource.includes('requested_unit')) {
+    fail('Server trade authority does not canonicalize fiat/asset denomination');
+  }
+
+  for (const principle of [
+    'Network condition is not presentation state.',
+    'Search intent, filter intent and data availability are independent state domains.',
+    'A failed analytical request preserves user intent and labels fallback truthfully.',
+    'Background refresh never spends the attention budget on success.',
+    'One transient notification owns attention at a time.',
+    'Trade denomination is user intent; execution quantity is server authority.'
+  ]) {
+    if (!architectureSource.includes(principle)) {
+      fail(`Architecture constitution missing: ${principle}`);
+    }
+  }
+
+  if (!failures.some((x) =>
+    x.includes('intentional recovery controls') ||
+    x.includes('bounce back') ||
+    x.includes('Trending provenance') ||
+    x.includes('memory-only') ||
+    x.includes('retry state') ||
+    x.includes('rate-limit semantics') ||
+    x.includes('one visible notification') ||
+    x.includes('denomination switching') ||
+    x.includes('canonicalize fiat') ||
+    x.includes('Architecture constitution missing')
+  )) {
+    pass('Market interaction/attention authority');
+  }
+}
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);

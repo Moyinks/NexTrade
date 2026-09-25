@@ -114,23 +114,35 @@ const API = (() => {
   async function fetchWithErrorHandling(url, logEntry = null) {
     try {
       const response = await fetch(url);
-      
+
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+        const retryHeader = response.headers && response.headers.get
+          ? response.headers.get('retry-after')
+          : null;
+        const parsedRetry = retryHeader ? Number(retryHeader) : NaN;
+        const error = new Error(
+          response.status === 429
+            ? 'Market data is temporarily rate limited'
+            : 'Market data request failed'
+        );
+        error.status = response.status;
+        error.code = response.status === 429 ? 'RATE_LIMITED' : 'MARKET_HTTP_ERROR';
+        error.retryAfterSeconds = Number.isFinite(parsedRetry) && parsedRetry > 0
+          ? Math.ceil(parsedRetry)
+          : null;
+        throw error;
       }
-      
+
       const data = await response.json();
-      
-      if (logEntry) {
-        logResponse(logEntry, true, data);
-      }
-      
+      if (logEntry) logResponse(logEntry, true, data);
       return data;
     } catch (error) {
-      if (logEntry) {
-        logResponse(logEntry, false, null, error.message);
+      if (!error.code) {
+        error.code = error && error.name === 'AbortError'
+          ? 'MARKET_TIMEOUT'
+          : 'MARKET_NETWORK_ERROR';
       }
+      if (logEntry) logResponse(logEntry, false, null, error.message);
       throw error;
     }
   }
@@ -145,7 +157,9 @@ const API = (() => {
       } catch (error) {
         lastError = error;
         console.warn(`[API] ⚠️ Attempt ${attempt} failed:`, error.message);
-        
+
+        if (error && error.status === 429) break;
+
         if (attempt < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
         }
@@ -325,7 +339,15 @@ const API = (() => {
       }
       
       console.error('[API] ❌ Market data fetch failed completely:', error);
-      return { success: false, data: [], error: error.message };
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+        code: error.code || 'MARKET_UNAVAILABLE',
+        status: Number(error.status) || null,
+        retryAfterSeconds: Number(error.retryAfterSeconds) || null,
+        rateLimited: Number(error.status) === 429
+      };
     }
   }
 
@@ -500,7 +522,7 @@ const API = (() => {
   async function getTrendingCoins() {
     if (isCacheValid(cache.trending.timestamp) && cache.trending.data) {
       console.log('[API] 📦 Using cached trending data');
-      return { success: true, data: cache.trending.data };
+      return { success: true, data: cache.trending.data, source: 'cache' };
     }
 
     const logEntry = logRequest('CoinGecko Trending', {});
@@ -521,16 +543,24 @@ const API = (() => {
 
       cache.trending = { data: trending, timestamp: Date.now() };
       logResponse(logEntry, true, trending);
-      return { success: true, data: trending };
+      return { success: true, data: trending, source: 'api' };
       
     } catch (error) {
       logResponse(logEntry, false, null, error.message);
       
       if (cache.trending.data) {
-        return { success: true, data: cache.trending.data };
+        return { success: true, data: cache.trending.data, source: 'stale', isStale: true };
       }
-      
-      return { success: false, data: [], error: error.message };
+
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+        code: error.code || 'MARKET_UNAVAILABLE',
+        status: Number(error.status) || null,
+        retryAfterSeconds: Number(error.retryAfterSeconds) || null,
+        rateLimited: Number(error.status) === 429
+      };
     }
   }
 

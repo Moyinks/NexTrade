@@ -262,166 +262,343 @@ const Trade = (() => {
   // 3. SPOT TRADE — OPTIMISTIC UI + LEDGER-FIRST
   // ============================================
 
+
   async function openSpotTrade(coinInput, type) {
     if (_isTradingLocked) {
-      if (window.App) App.showError('A trade is already in progress. Please wait.');
+      if (window.App) App.showWarning('A trade is already being processed. Please wait.');
       return;
     }
 
     if (!coinInput) {
-      if (window.App) App.showError('No coin selected');
+      if (window.App) App.showError('No market selected.');
       return;
     }
 
     let coin = coinInput;
     if (typeof coinInput === 'string') {
       const marketData = window.AppState ? AppState.get('marketData') : [];
-      if (!marketData || marketData.length === 0) {
-        if (window.App) App.showError('Market data is loading. Please try again.');
-        return;
-      }
-      coin = marketData.find(c => c && c.id === coinInput);
+      coin = Array.isArray(marketData)
+        ? marketData.find((entry) => entry && entry.id === coinInput)
+        : null;
       if (!coin) {
-        if (window.App) App.showError('Coin data not available. Please refresh.');
+        if (window.App) App.showError('This market is not available yet. Refresh Market and try again.');
         return;
       }
     }
 
-    if (!coin || !coin.id || !coin.symbol || typeof coin.current_price !== 'number') {
-      if (window.App) App.showError('Invalid coin data. Please try again.');
+    if (!coin || !coin.id || !coin.symbol || !Number.isFinite(Number(coin.current_price)) || Number(coin.current_price) <= 0) {
+      if (window.App) App.showError('A reliable quote is not available for this market yet.');
       return;
     }
 
     const { balances, holdings, user } = getUserState();
-
     if (!user || !user.id) {
-      if (window.App) App.showError('User session not found. Please refresh.');
+      if (window.App) App.showError('Your session is no longer available. Sign in again.');
       return;
     }
 
-    const isBuy      = type === 'buy';
-    const assetKey   = coin.symbol.toLowerCase();
-    const available  = isBuy ? balances.spot : (holdings[assetKey] || 0);
-    const availLabel = isBuy ? 'USD' : coin.symbol.toUpperCase();
-    const color      = isBuy ? 'var(--color-success)' : 'var(--color-danger)';
+    const isBuy = type === 'buy';
+    const assetKey = String(coin.symbol).toLowerCase();
+    const assetSymbol = String(coin.symbol).toUpperCase();
+    const availableUsd = Number(balances.spot || 0);
+    const availableAsset = Number(holdings[assetKey] || 0);
+    let amountUnit = isBuy ? 'usd' : 'asset';
+    let quotePrice = Number(coin.current_price);
 
     const content = document.createElement('div');
-    content.style.cssText = 'display:flex;flex-direction:column;gap:20px;';
+    content.className = 'trade-sheet';
 
-    const headerRow = document.createElement('div');
-    headerRow.style.cssText = 'display:flex;align-items:center;gap:16px;padding-bottom:16px;border-bottom:1px solid var(--color-border);';
+    const head = document.createElement('div');
+    head.className = 'trade-coin-head';
+
     const tradeCoinImageUrl = window.API && typeof API.proxiedCoinImageUrl === 'function'
       ? API.proxiedCoinImageUrl(coin.image)
       : '';
     if (tradeCoinImageUrl) {
       const img = document.createElement('img');
-      img.src = tradeCoinImageUrl; img.alt = coin.name;
-      img.style.cssText = 'width:48px;height:48px;border-radius:50%;background:var(--color-surface-elevated);';
-      img.onerror = () => img.style.display = 'none';
-      headerRow.appendChild(img);
+      img.className = 'trade-coin-head__image';
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      img.addEventListener('error', () => img.remove(), { once: true });
+      img.src = tradeCoinImageUrl;
+      head.appendChild(img);
     }
-    const headerText  = document.createElement('div');
-    const headerTitle = document.createElement('div');
-    headerTitle.style.cssText = 'font-size:18px;font-weight:700;color:var(--color-text-primary);';
-    headerTitle.textContent   = type.toUpperCase() + ' ' + coin.name;
-    const headerPrice = document.createElement('div');
-    headerPrice.style.cssText = 'font-size:13px;color:var(--color-text-secondary);';
-    headerPrice.textContent   = '$' + coin.current_price.toLocaleString();
-    headerText.appendChild(headerTitle); headerText.appendChild(headerPrice);
-    headerRow.appendChild(headerText);
-    content.appendChild(headerRow);
 
-    const amtBlock = document.createElement('div');
-    amtBlock.style.cssText = 'position:relative;margin-top:8px;';
-    const amtLblEl = document.createElement('label');
-    amtLblEl.style.cssText = 'font-size:11px;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.5px;';
-    amtLblEl.textContent   = 'Amount in ' + (isBuy ? 'USD' : coin.symbol);
-    const amtRow = document.createElement('div');
-    amtRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const headCopy = document.createElement('div');
+    const headTitle = document.createElement('div');
+    headTitle.className = 'trade-coin-head__title';
+    headTitle.textContent = (isBuy ? 'Buy ' : 'Sell ') + coin.name;
+
+    const headPrice = document.createElement('div');
+    headPrice.className = 'trade-coin-head__price';
+    headCopy.append(headTitle, headPrice);
+    head.appendChild(headCopy);
+    content.appendChild(head);
+
+    const modeSwitch = document.createElement('div');
+    modeSwitch.className = 'trade-mode-switch';
+    modeSwitch.setAttribute('role', 'group');
+    modeSwitch.setAttribute('aria-label', 'Amount denomination');
+
+    const usdMode = document.createElement('button');
+    usdMode.type = 'button';
+    usdMode.dataset.unit = 'usd';
+    usdMode.textContent = '$ USD';
+
+    const assetMode = document.createElement('button');
+    assetMode.type = 'button';
+    assetMode.dataset.unit = 'asset';
+    assetMode.textContent = assetSymbol;
+
+    modeSwitch.append(usdMode, assetMode);
+    content.appendChild(modeSwitch);
+
+    const amountBlock = document.createElement('div');
+    amountBlock.className = 'trade-amount-block';
+
+    const amountLabel = document.createElement('label');
+    amountLabel.className = 'trade-amount-label';
+    amountLabel.htmlFor = 'trade-amt';
+    amountLabel.textContent = 'Amount';
+
+    const amountRow = document.createElement('div');
+    amountRow.className = 'trade-amount-row';
+
     const tradeAmt = document.createElement('input');
-    tradeAmt.type        = 'number';
-    tradeAmt.id          = 'trade-amt';
-    tradeAmt.className   = 'financial-data';
-    tradeAmt.setAttribute('inputmode', 'decimal');
-    tradeAmt.style.cssText = 'font-size:32px;font-weight:700;background:transparent;border:none;color:var(--color-text-primary);width:100%;padding:12px 0;outline:none;';
+    tradeAmt.type = 'text';
+    tradeAmt.id = 'trade-amt';
+    tradeAmt.className = 'trade-amount-input financial-data';
+    tradeAmt.inputMode = 'decimal';
+    tradeAmt.autocomplete = 'off';
+    tradeAmt.spellcheck = false;
     tradeAmt.placeholder = '0.00';
+    tradeAmt.setAttribute('aria-describedby', 'trade-estimate trade-validation');
+
     const unitLabel = document.createElement('span');
-    unitLabel.style.cssText = 'font-size:14px;font-weight:700;color:var(--color-text-secondary);';
-    unitLabel.textContent   = isBuy ? 'USD' : coin.symbol;
-    amtRow.appendChild(tradeAmt); amtRow.appendChild(unitLabel);
-    const divider = document.createElement('div');
-    divider.style.cssText = 'height:1px;background:var(--color-border);width:100%;';
-    amtBlock.appendChild(amtLblEl); amtBlock.appendChild(amtRow); amtBlock.appendChild(divider);
-    content.appendChild(amtBlock);
+    unitLabel.className = 'trade-amount-unit';
 
-    const availRow = document.createElement('div');
-    availRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
-    const availText = document.createElement('div');
-    availText.style.cssText = 'font-size:12px;color:var(--color-text-secondary);';
-    availText.innerHTML = 'Available: <span style="font-weight:700;color:var(--color-text-primary);">' + available.toFixed(isBuy ? 2 : 6) + ' ' + availLabel + '</span>';
+    amountRow.append(tradeAmt, unitLabel);
+    amountBlock.append(amountLabel, amountRow);
+    content.appendChild(amountBlock);
+
+    const balanceRow = document.createElement('div');
+    balanceRow.className = 'trade-balance-row';
+
+    const balanceCopy = document.createElement('div');
+    balanceCopy.className = 'trade-balance-copy';
+
     const maxBtn = document.createElement('button');
-    maxBtn.style.cssText = 'font-size:11px;color:' + color + ';background:' + color + '15;border:1px solid ' + color + '30;padding:0 14px;border-radius:8px;font-weight:700;cursor:pointer;min-height:44px;display:inline-flex;align-items:center;';
-    maxBtn.textContent   = 'MAX';
-    availRow.appendChild(availText); availRow.appendChild(maxBtn);
-    content.appendChild(availRow);
+    maxBtn.type = 'button';
+    maxBtn.className = 'trade-max';
+    maxBtn.textContent = 'MAX';
 
-    const estBox = document.createElement('div');
-    estBox.style.cssText = 'background:var(--color-surface-elevated);padding:16px;border-radius:12px;font-size:13px;color:var(--color-text-secondary);display:flex;justify-content:space-between;align-items:center;';
-    const estLabel = document.createElement('span');
-    estLabel.textContent = 'Estimated Receive:';
-    const estVal = document.createElement('span');
-    estVal.id          = 'trade-est';
-    estVal.style.cssText = 'font-weight:700;color:var(--color-text-primary);font-family:var(--font-mono);font-size:15px;';
-    estVal.textContent = '0.00';
-    estBox.appendChild(estLabel); estBox.appendChild(estVal);
-    content.appendChild(estBox);
+    balanceRow.append(balanceCopy, maxBtn);
+    content.appendChild(balanceRow);
 
-    const confirmBtn   = document.createElement('button');
-    const btnClass     = isBuy ? 'btn-success' : 'btn-danger';
-    confirmBtn.className   = 'btn ' + btnClass + ' btn-full';
-    confirmBtn.style.cssText = 'height:56px;font-size:16px;';
-    confirmBtn.textContent = type.toUpperCase() + ' NOW';
+    const estimate = document.createElement('div');
+    estimate.className = 'trade-estimate';
+    estimate.id = 'trade-estimate';
+
+    const estimateLabel = document.createElement('div');
+    estimateLabel.className = 'trade-estimate__label';
+
+    const estimateValue = document.createElement('div');
+    estimateValue.className = 'trade-estimate__value';
+
+    estimate.append(estimateLabel, estimateValue);
+    content.appendChild(estimate);
+
+    const quoteNote = document.createElement('div');
+    quoteNote.className = 'trade-quote-note';
+    quoteNote.textContent = 'Indicative market quote. NexTrade verifies the execution price again before changing the ledger.';
+    content.appendChild(quoteNote);
+
+    const validation = document.createElement('div');
+    validation.className = 'trade-validation';
+    validation.id = 'trade-validation';
+    validation.setAttribute('aria-live', 'polite');
+    content.appendChild(validation);
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'btn ' + (isBuy ? 'btn-success' : 'btn-danger') + ' btn-full trade-submit';
+    confirmBtn.textContent = isBuy ? 'Review purchase' : 'Review sale';
     content.appendChild(confirmBtn);
 
-    const updateEst = () => {
-      const val = parseFloat(tradeAmt.value) || 0;
-      estVal.textContent = isBuy
-        ? (val / coin.current_price).toFixed(6) + ' ' + coin.symbol
-        : '$' + (val * coin.current_price).toFixed(2);
-    };
+    function latestQuote() {
+      const stateData = window.AppState ? AppState.get('marketData') : [];
+      if (Array.isArray(stateData)) {
+        const latest = stateData.find((entry) => entry && entry.id === coin.id);
+        const candidate = Number(latest && latest.current_price);
+        if (Number.isFinite(candidate) && candidate > 0) quotePrice = candidate;
+      }
+      return quotePrice;
+    }
 
-    tradeAmt.addEventListener('input', updateEst);
-    maxBtn.addEventListener('click', () => { tradeAmt.value = available; updateEst(); });
+    function sanitizeAmount(value) {
+      let clean = String(value || '').replace(/[^0-9.]/g, '');
+      const dot = clean.indexOf('.');
+      if (dot >= 0) {
+        clean = clean.slice(0, dot + 1) + clean.slice(dot + 1).replace(/\./g, '');
+      }
+      return clean.slice(0, 24);
+    }
 
-    // ── TRADE EXECUTION (extracted so both the review confirm and direct path use it) ──
-    async function executeTrade(val) {
+    function parseAmount() {
+      const n = Number(tradeAmt.value);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    }
+
+    function conversion(value, unit, price) {
+      if (!Number.isFinite(value) || value <= 0 || !Number.isFinite(price) || price <= 0) {
+        return { usd: 0, asset: 0 };
+      }
+      return unit === 'usd'
+        ? { usd: value, asset: value / price }
+        : { usd: value * price, asset: value };
+    }
+
+    function formatUsd(value) {
+      return '$' + Number(value || 0).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    function formatAsset(value) {
+      const n = Number(value || 0);
+      const digits = n >= 1 ? 6 : 8;
+      return n.toLocaleString(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: digits
+      }) + ' ' + assetSymbol;
+    }
+
+    function maxForMode(price) {
+      if (isBuy) {
+        return amountUnit === 'usd'
+          ? availableUsd
+          : (price > 0 ? availableUsd / price : 0);
+      }
+      return amountUnit === 'asset'
+        ? availableAsset
+        : availableAsset * price;
+    }
+
+    function validateCurrent(value, price) {
+      if (!Number.isFinite(value) || value <= 0) return 'Enter an amount to continue.';
+      const converted = conversion(value, amountUnit, price);
+      if (isBuy && converted.usd > availableUsd + 1e-8) return 'Amount exceeds your available Spot Wallet balance.';
+      if (!isBuy && converted.asset > availableAsset + 1e-12) return 'Amount exceeds your available ' + assetSymbol + ' balance.';
+      return '';
+    }
+
+    function paint() {
+      const price = latestQuote();
+      const value = parseAmount();
+      const converted = conversion(value, amountUnit, price);
+      const error = value > 0 ? validateCurrent(value, price) : '';
+
+      headPrice.textContent = formatUsd(price) + ' · indicative';
+      usdMode.setAttribute('aria-pressed', String(amountUnit === 'usd'));
+      assetMode.setAttribute('aria-pressed', String(amountUnit === 'asset'));
+      unitLabel.textContent = amountUnit === 'usd' ? 'USD' : assetSymbol;
+
+      if (isBuy) {
+        balanceCopy.innerHTML = 'Available <strong>' + formatUsd(availableUsd) + '</strong>';
+        estimateLabel.textContent = amountUnit === 'usd'
+          ? 'Estimated ' + assetSymbol + ' received'
+          : 'Estimated cash required';
+        estimateValue.textContent = amountUnit === 'usd'
+          ? formatAsset(converted.asset)
+          : formatUsd(converted.usd);
+      } else {
+        balanceCopy.innerHTML = 'Available <strong>' + formatAsset(availableAsset) + '</strong>';
+        estimateLabel.textContent = amountUnit === 'asset'
+          ? 'Estimated cash received'
+          : 'Estimated ' + assetSymbol + ' sold';
+        estimateValue.textContent = amountUnit === 'asset'
+          ? formatUsd(converted.usd)
+          : formatAsset(converted.asset);
+      }
+
+      validation.textContent = error;
+      confirmBtn.disabled = !value || Boolean(error) || _isTradingLocked;
+      return { value, price, converted, error };
+    }
+
+    function setMode(nextUnit) {
+      if (!['usd', 'asset'].includes(nextUnit) || nextUnit === amountUnit) return;
+      const current = paint();
+      const oldUnit = amountUnit;
+      amountUnit = nextUnit;
+
+      if (current.value > 0) {
+        const converted = conversion(current.value, oldUnit, current.price);
+        const nextValue = nextUnit === 'usd' ? converted.usd : converted.asset;
+        tradeAmt.value = nextValue ? String(Number(nextValue.toPrecision(10))) : '';
+      }
+
+      paint();
+      tradeAmt.focus({ preventScroll: true });
+    }
+
+    usdMode.addEventListener('click', () => setMode('usd'));
+    assetMode.addEventListener('click', () => setMode('asset'));
+
+    tradeAmt.addEventListener('input', () => {
+      const clean = sanitizeAmount(tradeAmt.value);
+      if (clean !== tradeAmt.value) tradeAmt.value = clean;
+      paint();
+    });
+
+    tradeAmt.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        if (!confirmBtn.disabled) confirmBtn.click();
+        return;
+      }
+
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      event.preventDefault();
+
+      const current = parseAmount();
+      const step = amountUnit === 'usd'
+        ? 1
+        : Math.max(0.000001, Number((1 / Math.max(latestQuote(), 1)).toPrecision(2)));
+
+      const next = event.key === 'ArrowUp'
+        ? current + step
+        : Math.max(0, current - step);
+
+      tradeAmt.value = next ? String(Number(next.toPrecision(10))) : '';
+      paint();
+    });
+
+    maxBtn.addEventListener('click', () => {
+      const max = maxForMode(latestQuote());
+      tradeAmt.value = max > 0 ? String(Number(max.toPrecision(10))) : '';
+      paint();
+      tradeAmt.focus({ preventScroll: true });
+    });
+
+    async function executeTrade(requestValue, requestUnit) {
       confirmBtn.disabled = true;
-      confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:8px;"></i>Executing...';
+      confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Executing…';
       _isTradingLocked = true;
 
       try {
         const { user: freshUser } = getUserState();
-        if (!freshUser || !freshUser.id) throw new Error('User session lost');
-        if (!window.supabaseClient) throw new Error('Secure trade service unavailable');
+        if (!freshUser || !freshUser.id) throw new Error('Your session expired. Sign in again.');
+        if (!window.supabaseClient) throw new Error('Secure trade service is unavailable.');
 
         const { data: sessionData, error: sessionError } = await window.supabaseClient.auth.getSession();
         if (sessionError) throw sessionError;
         const session = sessionData && sessionData.session;
-        if (!session || !session.access_token) throw new Error('Session expired. Sign in again.');
+        if (!session || !session.access_token) throw new Error('Your session expired. Sign in again.');
 
-        // Fresh server-derived balances are pre-flight UX only. The Postgres RPC
-        // repeats validation under a row lock, so this cannot be the authority.
-        const [freshSpot, holdingsResult] = await Promise.all([
-          deriveSpotBalance(freshUser.id),
-          window.supabaseClient.from('profiles').select('holdings').eq('id', freshUser.id).single()
-        ]);
-        if (holdingsResult.error) throw holdingsResult.error;
-        const freshHoldings = holdingsResult.data && holdingsResult.data.holdings || {};
-        const freshAvailable = isBuy ? freshSpot : Number(freshHoldings[assetKey] || 0);
-        if (val > freshAvailable) throw new Error('Insufficient available balance');
-
-        const tradeFingerprint = `${type}|${assetKey}|${coin.id}|${val.toFixed(8)}`;
+        const tradeFingerprint = [type, assetKey, coin.id, requestUnit, Number(requestValue).toPrecision(12)].join('|');
         const tradeKey = getIdempotencyKey('trade', tradeFingerprint);
+
         const response = await fetch((APP_CONFIG.apis && APP_CONFIG.apis.executeTrade) || '/api/execute-trade', {
           method: 'POST',
           headers: {
@@ -432,108 +609,132 @@ const Trade = (() => {
             side: type,
             asset: assetKey,
             coinId: coin.id,
-            amount: val,
+            amount: requestValue,
+            amountUnit: requestUnit,
             idempotencyKey: tradeKey
           })
         });
+
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || 'Trade execution failed');
-        if (!payload.tx_id || !Number.isFinite(Number(payload.spot_balance))) {
-          throw new Error('Trade authority returned an invalid response');
-        }
+        if (!response.ok) throw new Error(payload.error || 'Trade execution failed.');
 
         const executedPrice = Number(payload.executed_price);
         const executedUsd = Number(payload.executed_usd_amount);
         const quantity = Number(payload.asset_quantity);
-        if (!Number.isFinite(executedPrice) || executedPrice <= 0 || !Number.isFinite(executedUsd) || executedUsd <= 0 || !Number.isFinite(quantity) || quantity <= 0) {
-          throw new Error('Invalid execution response');
+
+        if (
+          !payload.tx_id ||
+          !Number.isFinite(Number(payload.spot_balance)) ||
+          !Number.isFinite(executedPrice) ||
+          executedPrice <= 0 ||
+          !Number.isFinite(executedUsd) ||
+          executedUsd <= 0 ||
+          !Number.isFinite(quantity) ||
+          quantity <= 0
+        ) {
+          throw new Error('Trade authority returned an invalid execution.');
         }
+
         RequestId.clear('trade', tradeKey);
 
         if (window.AppState) {
-          AppState.set('holdings', payload.holdings || freshHoldings);
+          AppState.set('holdings', payload.holdings || {});
           AppState.updateBalances({ spot: Number(payload.spot_balance) });
           AppState.addTransaction({
             id: payload.tx_id,
             type,
             amount: executedUsd,
             status: 'completed',
-            description: type.toUpperCase() + ' ' + coin.symbol.toUpperCase() + ' @ $' + executedPrice.toLocaleString(),
-            metadata: { asset: assetKey, quantity, executed_price: executedPrice },
+            description: type.toUpperCase() + ' ' + assetSymbol + ' @ ' + formatUsd(executedPrice),
+            metadata: {
+              asset: assetKey,
+              quantity,
+              executed_price: executedPrice,
+              requested_amount: requestValue,
+              requested_unit: requestUnit
+            },
             created_at: new Date().toISOString()
           });
         }
 
-        const action = isBuy ? 'Bought' : 'Sold';
-        if (window.App) App.showSuccess(
-          action + ' at server-verified market price $' + executedPrice.toLocaleString(undefined, { maximumFractionDigits: 8 }) + '.',
-          type.toUpperCase() + ' ' + coin.symbol.toUpperCase()
-        );
         if (window.Modal) Modal.close();
-      } catch (err) {
-        console.error('[TRADE] Trade execution failed:', err);
-        if (window.App) App.showError(err.message || 'Trade execution failed');
+        if (window.App) {
+          App.showSuccess(
+            (isBuy ? 'Bought ' : 'Sold ') + formatAsset(quantity) + ' at ' + formatUsd(executedPrice) + '.',
+            isBuy ? 'Purchase complete' : 'Sale complete'
+          );
+        }
+      } catch (error) {
+        console.error('[TRADE] Trade execution failed:', error);
+        if (window.App) App.showError(error.message || 'Trade execution failed.');
       } finally {
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = type.toUpperCase() + ' NOW';
         _isTradingLocked = false;
+        confirmBtn.textContent = isBuy ? 'Review purchase' : 'Review sale';
+        paint();
       }
     }
 
     confirmBtn.addEventListener('click', async () => {
-      if (confirmBtn.disabled || _isTradingLocked) return;
+      if (_isTradingLocked || confirmBtn.disabled) return;
 
-      const checked = validateAmount(tradeAmt.value, available);
-      if (!checked.valid) { if (window.App) App.showError(checked.msg); return; }
-      const val = checked.num;
+      const current = paint();
+      if (!current.value || current.error) return;
 
-      // ── REVIEW STEP: show confirmation card before executing ─────────────
-      const estQty   = isBuy ? (val / coin.current_price) : (val * coin.current_price);
-      const estLabel = isBuy
-        ? (val / coin.current_price).toFixed(6) + ' ' + coin.symbol.toUpperCase()
-        : '$' + (val * coin.current_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const amtFmt   = '$' + val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const priceFmt = '$' + coin.current_price.toLocaleString() + ' (quote)';
+      const entered = amountUnit === 'usd'
+        ? formatUsd(current.value)
+        : formatAsset(current.value);
+
+      const counterpart = amountUnit === 'usd'
+        ? formatAsset(current.converted.asset)
+        : formatUsd(current.converted.usd);
+
+      const directionLabel = isBuy
+        ? (amountUnit === 'usd' ? 'Estimated receive' : 'Estimated cost')
+        : (amountUnit === 'asset' ? 'Estimated receive' : 'Estimated quantity');
 
       const reviewMsg = [
         '<div class="ntm-review-grid">',
         '  <div class="ntm-review-row">',
-        '    <span class="ntm-review-label">Amount</span>',
-        '    <strong class="ntm-review-value">' + amtFmt + '</strong>',
+        '    <span class="ntm-review-label">You entered</span>',
+        '    <strong class="ntm-review-value">' + entered + '</strong>',
         '  </div>',
         '  <div class="ntm-review-row">',
-        '    <span class="ntm-review-label">Price</span>',
-        '    <strong class="ntm-review-value">' + priceFmt + '</strong>',
+        '    <span class="ntm-review-label">' + directionLabel + '</span>',
+        '    <strong class="ntm-review-value">' + counterpart + '</strong>',
         '  </div>',
         '  <div class="ntm-review-row">',
-        '    <span class="ntm-review-label">You receive</span>',
-        '    <strong class="ntm-review-value">' + estLabel + '</strong>',
+        '    <span class="ntm-review-label">Indicative price</span>',
+        '    <strong class="ntm-review-value">' + formatUsd(current.price) + '</strong>',
         '  </div>',
         '</div>'
       ].join('');
 
       if (!window.Modal) {
-        // Fallback if modal system unavailable — execute directly
-        await executeTrade(val);
+        await executeTrade(current.value, amountUnit);
         return;
       }
 
       const confirmed = await Modal.confirm({
-        title:       (isBuy ? 'Confirm Purchase' : 'Confirm Sale'),
-        content:     reviewMsg,
-        confirmText: type.toUpperCase() + ' NOW',
-        cancelText:  'Go Back',
-        dangerMode:  !isBuy,
-        icon:        isBuy ? 'fa-circle-check' : 'fa-circle-arrow-up',
+        title: isBuy ? 'Confirm Purchase' : 'Confirm Sale',
+        content: reviewMsg,
+        confirmText: isBuy ? 'BUY NOW' : 'SELL NOW',
+        cancelText: 'Go Back',
+        dangerMode: !isBuy,
+        icon: isBuy ? 'fa-circle-check' : 'fa-circle-arrow-up'
       });
 
       if (!confirmed) return;
-
-      await executeTrade(val);
+      await executeTrade(current.value, amountUnit);
     });
 
-    if (window.Modal) Modal.open({ title: '', content, showCloseButton: true });
+    paint();
+
+    if (window.Modal) {
+      Modal.open({ title: '', content, showCloseButton: true });
+      setTimeout(() => tradeAmt.focus({ preventScroll: true }), 180);
+    }
   }
+
 
   // ============================================
   // EXPORTS

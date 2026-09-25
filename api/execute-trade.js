@@ -1,9 +1,8 @@
+
 /**
- * NexTrade — server-authoritative trade execution
- *
- * The browser chooses direction/asset/amount, but never the execution price.
- * This endpoint authenticates the caller, resolves an allowlisted market price,
- * then calls a service-role-only Postgres RPC that serializes the user's ledger.
+ * NexTrade — server-authoritative trade execution.
+ * Browser intent may be expressed in USD or asset units. The server resolves
+ * a fresh execution price and canonicalizes the ledger amount.
  */
 'use strict';
 
@@ -11,25 +10,11 @@ const { createClient } = require('@supabase/supabase-js');
 const { requireSameOrigin } = require('../server/supabase-server');
 
 const COINS = Object.freeze({
-  bitcoin: 'btc',
-  ethereum: 'eth',
-  solana: 'sol',
-  binancecoin: 'bnb',
-  ripple: 'xrp',
-  cardano: 'ada',
-  'avalanche-2': 'avax',
-  polkadot: 'dot',
-  'matic-network': 'matic',
-  dogecoin: 'doge',
-  'shiba-inu': 'shib',
-  tron: 'trx',
-  litecoin: 'ltc',
-  chainlink: 'link',
-  uniswap: 'uni',
-  toncoin: 'ton',
-  near: 'near',
-  stellar: 'xlm',
-  sui: 'sui'
+  bitcoin: 'btc', ethereum: 'eth', solana: 'sol', binancecoin: 'bnb',
+  ripple: 'xrp', cardano: 'ada', 'avalanche-2': 'avax', polkadot: 'dot',
+  'matic-network': 'matic', dogecoin: 'doge', 'shiba-inu': 'shib',
+  tron: 'trx', litecoin: 'ltc', chainlink: 'link', uniswap: 'uni',
+  toncoin: 'ton', near: 'near', stellar: 'xlm', sui: 'sui'
 });
 
 const MAX_AMOUNT = 1_000_000_000;
@@ -42,7 +27,6 @@ function setSecurityHeaders(res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
 }
-
 
 function validAmount(value) {
   const n = Number(value);
@@ -67,11 +51,13 @@ async function fetchUsdPrice(coinId) {
       signal: controller.signal
     });
     if (!response.ok) throw new Error('Market price service unavailable');
+
     const body = await response.json();
     const quote = body && body[coinId];
     const price = Number(quote && quote.usd);
     const updatedAt = Number(quote && quote.last_updated_at);
     const nowSeconds = Math.floor(Date.now() / 1000);
+
     if (!Number.isFinite(price) || price <= 0) throw new Error('Invalid market price');
     if (!Number.isFinite(updatedAt) || updatedAt <= 0 || updatedAt > nowSeconds + 30 || nowSeconds - updatedAt > MAX_PRICE_AGE_SECONDS) {
       throw new Error('Market price is stale');
@@ -82,8 +68,14 @@ async function fetchUsdPrice(coinId) {
   }
 }
 
+function canonicalRpcAmount(side, amountUnit, amount, price) {
+  if (side === 'buy') return amountUnit === 'asset' ? amount * price : amount;
+  return amountUnit === 'usd' ? amount / price : amount;
+}
+
 module.exports = async function handler(req, res) {
   setSecurityHeaders(res);
+
   if (req.method !== 'POST' && req.method !== 'OPTIONS') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -98,8 +90,11 @@ module.exports = async function handler(req, res) {
 
   const contentType = String(req.headers['content-type'] || '').toLowerCase();
   if (!contentType.startsWith('application/json')) return res.status(415).json({ error: 'JSON body required' });
+
   const contentLength = Number(req.headers['content-length'] || 0);
-  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) return res.status(413).json({ error: 'Request body too large' });
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    return res.status(413).json({ error: 'Request body too large' });
+  }
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
@@ -114,11 +109,13 @@ module.exports = async function handler(req, res) {
   const side = String(req.body && req.body.side || '').toLowerCase();
   const coinId = String(req.body && req.body.coinId || '').toLowerCase();
   const requestedAsset = String(req.body && req.body.asset || '').toLowerCase();
+  const amountUnit = String(req.body && req.body.amountUnit || '').toLowerCase();
   const amount = validAmount(req.body && req.body.amount);
   const idempotencyKey = validIdempotencyKey(req.body && req.body.idempotencyKey);
   const serverAsset = COINS[coinId];
 
   if (!['buy', 'sell'].includes(side)) return res.status(400).json({ error: 'Invalid trade side' });
+  if (!['usd', 'asset'].includes(amountUnit)) return res.status(400).json({ error: 'Invalid amount denomination' });
   if (!serverAsset || requestedAsset !== serverAsset) return res.status(400).json({ error: 'Asset mapping rejected' });
   if (amount == null) return res.status(400).json({ error: 'Invalid trade amount' });
   if (!idempotencyKey) return res.status(400).json({ error: 'Invalid idempotency key' });
@@ -133,11 +130,17 @@ module.exports = async function handler(req, res) {
 
   try {
     const price = await fetchUsdPrice(coinId);
+    const rpcAmount = canonicalRpcAmount(side, amountUnit, amount, price);
+
+    if (!Number.isFinite(rpcAmount) || rpcAmount <= 0 || rpcAmount > MAX_AMOUNT) {
+      return res.status(400).json({ error: 'Trade amount is outside the supported range' });
+    }
+
     const { data, error } = await supabase.rpc('execute_trade', {
       p_user_id: user.id,
       p_side: side,
       p_asset: serverAsset,
-      p_amount: amount,
+      p_amount: rpcAmount,
       p_price: price,
       p_idempotency_key: idempotencyKey
     });
@@ -152,14 +155,18 @@ module.exports = async function handler(req, res) {
       holdings: row.holdings || {},
       executed_price: Number(row.executed_price),
       executed_usd_amount: Number(row.executed_usd_amount),
-      asset_quantity: Number(row.asset_quantity)
+      asset_quantity: Number(row.asset_quantity),
+      requested_amount: amount,
+      requested_unit: amountUnit
     });
   } catch (error) {
     console.error('[execute-trade]', error && error.message ? error.message : error);
     const message = String(error && error.message || 'Trade execution failed');
-    const domainError = /insufficient|idempot|invalid|unsupported|holding/i.test(message);
+    const domainError = /insufficient|idempot|invalid|unsupported|holding|outside/i.test(message);
     if (domainError) return res.status(400).json({ error: message });
-    if (/market price|price service|abort/i.test(message)) return res.status(502).json({ error: 'Market price service unavailable' });
+    if (/market price|price service|abort/i.test(message)) {
+      return res.status(502).json({ error: 'Market price is temporarily unavailable. Try again shortly.' });
+    }
     return res.status(500).json({ error: 'Trade execution failed' });
   }
 };

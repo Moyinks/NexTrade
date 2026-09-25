@@ -23,12 +23,14 @@ const CacheManager = (() => {
   // ============================================
 
   const CONFIG = {
-    CACHE_TTL: 60 * 60 * 1000,           // 60 minutes
-    BACKGROUND_CHECK_INTERVAL: 30 * 1000, // 30 seconds
-    RETRY_DELAYS: [60000, 120000, 300000], // 1min, 2min, 5min
-    MAX_STALE_AGE: 24 * 60 * 60 * 1000,   // 24 hours (absolute max)
-    MIN_COINS_FOR_DERIVED: 10              // Minimum coins needed for filters
+    CACHE_TTL: 60 * 60 * 1000,
+    BACKGROUND_CHECK_INTERVAL: 30 * 1000,
+    RETRY_DELAYS: [60000, 120000, 300000],
+    MAX_STALE_AGE: 24 * 60 * 60 * 1000,
+    MIN_COINS_FOR_DERIVED: 10
   };
+
+  const CACHE_STORAGE_KEY = 'nextrade:market-cache:v1';
 
   // ============================================
   // STATE
@@ -61,10 +63,63 @@ const CacheManager = (() => {
     activeRequests: new Map(),
     lastRefreshAttempt: 0,
     retryCount: 0,
+    retryAfterUntil: 0,
+    lastFailureCode: null,
     isRefreshing: false
   };
 
   let backgroundCheckTimer = null;
+
+  function persistCache() {
+    try {
+      localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify({
+        version: 1,
+        savedAt: Date.now(),
+        marketData: { data: cache.marketData.data, timestamp: cache.marketData.timestamp },
+        trending: { data: cache.trending.data, timestamp: cache.trending.timestamp }
+      }));
+    } catch (_) {}
+  }
+
+  function hydratePersistentCache() {
+    try {
+      const raw = localStorage.getItem(CACHE_STORAGE_KEY);
+      if (!raw) return false;
+      const snapshot = JSON.parse(raw);
+      const now = Date.now();
+
+      if (!snapshot || snapshot.version !== 1 || !snapshot.marketData ||
+          !Array.isArray(snapshot.marketData.data) ||
+          !Number.isFinite(Number(snapshot.marketData.timestamp)) ||
+          now - Number(snapshot.marketData.timestamp) > CONFIG.MAX_STALE_AGE) {
+        localStorage.removeItem(CACHE_STORAGE_KEY);
+        return false;
+      }
+
+      cache.marketData = {
+        data: snapshot.marketData.data,
+        timestamp: Number(snapshot.marketData.timestamp),
+        source: 'persistent',
+        version: 1
+      };
+      cache.derived = { ...computeDerivedViews(cache.marketData.data), computedAt: Date.now() };
+
+      if (snapshot.trending && Array.isArray(snapshot.trending.data) &&
+          Number.isFinite(Number(snapshot.trending.timestamp)) &&
+          now - Number(snapshot.trending.timestamp) <= CONFIG.MAX_STALE_AGE) {
+        cache.trending = {
+          data: snapshot.trending.data,
+          timestamp: Number(snapshot.trending.timestamp)
+        };
+      }
+
+      if (window.AppState) AppState.set('marketData', cache.marketData.data);
+      return true;
+    } catch (_) {
+      try { localStorage.removeItem(CACHE_STORAGE_KEY); } catch (_) {}
+      return false;
+    }
+  }
 
   // ============================================
   // UTILITY FUNCTIONS
@@ -253,13 +308,12 @@ const CacheManager = (() => {
           AppState.set('marketData', result.data);
         }
 
-        // Reset retry counter on success
         cache.retryCount = 0;
+        cache.retryAfterUntil = 0;
+        cache.lastFailureCode = null;
+        persistCache();
 
         console.log(`[CACHE] ✅ Fresh data cached (${result.data.length} coins)`);
-
-        // Show success notification
-        showCacheNotification('success', 'Market Data Updated', 'Latest prices and rankings loaded');
 
         return {
           success: true,
@@ -271,14 +325,16 @@ const CacheManager = (() => {
 
       } catch (error) {
         console.error('[CACHE] ❌ Fetch failed:', error);
+        cache.lastFailureCode = error && error.code ? error.code : 'MARKET_UNAVAILABLE';
+        const retrySeconds = Number(error && error.retryAfterSeconds);
+        if (Number.isFinite(retrySeconds) && retrySeconds > 0) {
+          cache.retryAfterUntil = Date.now() + retrySeconds * 1000;
+        }
 
         // If we have stale cache, use it
         if (cache.marketData.data && cache.marketData.data.length > 0) {
           console.log('[CACHE] 📦 Falling back to stale cache');
           
-          showCacheNotification('warning', 'Using Cached Data', 
-            `Unable to refresh. Showing data from ${getCacheAge(cache.marketData.timestamp)}`);
-
           return {
             success: true,
             data: cache.marketData.data,
@@ -291,9 +347,6 @@ const CacheManager = (() => {
         }
 
         // No cache available - hard failure
-        showCacheNotification('error', 'Failed to Load Market Data', 
-          'Unable to fetch market data. Please check your connection.');
-
         return {
           success: false,
           data: [],
@@ -330,11 +383,15 @@ const CacheManager = (() => {
             data: result.data,
             timestamp: Date.now()
           };
-          
+          persistCache();
           console.log(`[CACHE] ✅ Trending data cached (${result.data.length} coins)`);
         }
 
-        return result;
+        return {
+          ...result,
+          source: result.source || 'api',
+          age: cache.trending.timestamp ? getCacheAge(cache.trending.timestamp) : null
+        };
 
       } catch (error) {
         console.error('[CACHE] ❌ Trending fetch failed:', error);
@@ -344,6 +401,8 @@ const CacheManager = (() => {
           return {
             success: true,
             data: cache.trending.data,
+            source: 'stale',
+            age: getCacheAge(cache.trending.timestamp),
             isStale: true
           };
         }
@@ -423,8 +482,13 @@ const CacheManager = (() => {
       return;
     }
 
-    // Rate limit: Don't retry too quickly
-    const timeSinceLastAttempt = Date.now() - cache.lastRefreshAttempt;
+    const now = Date.now();
+    if (cache.retryAfterUntil > now) {
+      console.log(`[CACHE] ⏸️ Provider retry window active for ${Math.ceil((cache.retryAfterUntil - now) / 1000)}s`);
+      return;
+    }
+
+    const timeSinceLastAttempt = now - cache.lastRefreshAttempt;
     const minDelay = CONFIG.RETRY_DELAYS[Math.min(cache.retryCount, CONFIG.RETRY_DELAYS.length - 1)];
 
     if (timeSinceLastAttempt < minDelay) {
@@ -547,6 +611,10 @@ const CacheManager = (() => {
         activeRequests: cache.activeRequests.size,
         isRefreshing: cache.isRefreshing,
         retryCount: cache.retryCount,
+        nextRetrySeconds: cache.retryAfterUntil > Date.now()
+          ? Math.ceil((cache.retryAfterUntil - Date.now()) / 1000)
+          : 0,
+        lastFailureCode: cache.lastFailureCode,
         backgroundCheckerRunning: !!backgroundCheckTimer
       }
     };
@@ -560,6 +628,9 @@ const CacheManager = (() => {
     cache.trending = { data: null, timestamp: 0 };
     cache.activeRequests.clear();
     cache.retryCount = 0;
+    cache.retryAfterUntil = 0;
+    cache.lastFailureCode = null;
+    try { localStorage.removeItem(CACHE_STORAGE_KEY); } catch (_) {}
 
     console.log('[CACHE] ✅ Cache cleared');
   }
@@ -570,7 +641,8 @@ const CacheManager = (() => {
 
   function init() {
     console.log('[CACHE] 🚀 Initializing CacheManager...');
-    
+
+    hydratePersistentCache();
     startBackgroundChecker();
     
     // Listen for page visibility changes
