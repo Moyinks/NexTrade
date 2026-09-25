@@ -60,3 +60,8 @@ These rules are product constraints, not aspirations.
 50. **Placeholder text is supporting affordance, not content.** Empty-field hints sit behind entered values and labels in the hierarchy; focus may clarify the field without promoting placeholder text into primary copy.
 51. **Selection state is not success state.** Checkboxes, selected options and consent controls use selection/brand semantics; success color is reserved for completed positive outcomes.
 52. **Critical control geometry is independent of webfont arrival.** Primary actions own explicit height, line-height and wrapping behavior so cached or late-loading fonts cannot change the product’s physical layout.
+53. **Presentation readiness is independent of transaction authority.** A warm authenticated cache may keep last-known workspace content visible while server/ledger authority revalidates; cached money never becomes spendable authority.
+54. **Warm revalidation never erases a valid workspace.** Background resume, tab discard recovery and reconnect may annotate freshness, but they do not replace known Home sections wholesale with loading skeletons.
+55. **Placeholder contrast is a rendered contract.** Auth placeholders explicitly own color, WebKit text fill and opacity so browser text-fill inheritance cannot promote hints into entered-value hierarchy.
+56. **Auth modes own their scroll origin and focus lifecycle.** Opening or switching authentication modes resets the auth scroll surface before user focus; mobile keyboards never decide the initial title position.
+57. **Primary CTA geometry is fixed in both axes.** Font loading may change glyph metrics, but it cannot change the used inline or block dimensions of primary landing actions.

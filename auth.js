@@ -82,8 +82,8 @@
   };
   window.confirmLegal = function () {
     termsAccepted = true;
-    const box = document.getElementById('customCheck');
-    if (box) { box.classList.add('checked'); box.setAttribute('aria-checked','true'); }
+    const row = document.querySelector('#auth .checkbox-row[role="checkbox"]');
+    if (row) { row.classList.add('checked'); row.setAttribute('aria-checked','true'); }
     const m = document.getElementById('legalModal');
     if (m) { m.style.display = 'none'; m.classList.remove('open'); }
   };
@@ -96,11 +96,27 @@
 
   let landingScrollTop = 0;
 
+  function resetAuthScrollOrigin() {
+    const auth = document.getElementById('auth');
+    const active = document.activeElement;
+    if (auth && active && auth.contains(active) && typeof active.blur === 'function') {
+      active.blur();
+    }
+    const scroll = auth && auth.querySelector('.auth-scroll');
+    if (!scroll) return;
+    scroll.scrollTop = 0;
+    requestAnimationFrame(function () {
+      scroll.scrollTop = 0;
+      requestAnimationFrame(function () { scroll.scrollTop = 0; });
+    });
+  }
+
   /* ── View transitions ──────────────────────────────────────────────────── */
   window.enterAuth = function (newMode) {
     mode = newMode;
     const landing = document.getElementById('landing');
     landingScrollTop = landing ? landing.scrollTop : 0;
+    resetAuthScrollOrigin();
     landing.classList.add('exit');
     const btn = document.getElementById('submitBtn');
     btn.disabled = false; btn.classList.remove('loading');
@@ -110,17 +126,16 @@
       document.getElementById('formSubtitle').textContent = 'Enter your credentials to continue.';
       document.getElementById('loginForm').classList.remove('hidden');
       resetBtn('SIGN IN'); updateAuthSwitch('login');
-      setTimeout(function () { document.getElementById('logEmail')?.focus(); }, 310);
     } else {
       document.getElementById('formTitle').textContent    = 'Create Account';
       document.getElementById('formSubtitle').textContent = 'Let\u2019s get your portfolio started.';
       document.getElementById('signupForm').classList.remove('hidden');
       resetBtn('CREATE ACCOUNT'); updateAuthSwitch('signup');
-      setTimeout(function () { document.getElementById('regName')?.focus(); }, 310);
     }
     setTimeout(function () {
       landing.style.display = 'none';
       document.getElementById('auth').classList.add('visible');
+      resetAuthScrollOrigin();
     }, 260);
   };
 
@@ -152,7 +167,7 @@
     document.getElementById('formSubtitle').textContent = 'Enter your credentials to continue.';
     document.getElementById('submitBtn').style.display = '';
     resetBtn('SIGN IN'); updateAuthSwitch('login');
-    setTimeout(function () { document.getElementById('logEmail')?.focus(); }, 200);
+    resetAuthScrollOrigin();
   };
 
   window.showSignup = function () {
@@ -164,7 +179,7 @@
     document.getElementById('formSubtitle').textContent = 'Let\u2019s get your portfolio started.';
     document.getElementById('submitBtn').style.display = '';
     resetBtn('CREATE ACCOUNT'); updateAuthSwitch('signup');
-    setTimeout(function () { document.getElementById('regName')?.focus(); }, 200);
+    resetAuthScrollOrigin();
   };
 
   /* ── Forgot password ───────────────────────────────────────────────────── */
@@ -183,7 +198,7 @@
     resetBtn('SEND CODE'); updateAuthSwitch(null);
     const ei = document.getElementById('forgotEmail');
     if (prefillEmail) ei.value = prefillEmail;
-    setTimeout(function () { ei.focus(); }, 300);
+    resetAuthScrollOrigin();
   };
 
   function showForgotOtp(email) {
@@ -197,7 +212,7 @@
     resetBtn('VERIFY CODE'); updateAuthSwitch(null);
     const inputs = document.querySelectorAll('#forgotOtpInputs input');
     inputs.forEach(function (x) { x.value = ''; x.classList.remove('filled'); });
-    setTimeout(function () { inputs[0]?.focus(); }, 300);
+    resetAuthScrollOrigin();
   }
 
   function showRecovery(session) {
@@ -213,7 +228,7 @@
     document.getElementById('formSubtitle').textContent = 'Choose a strong password for your account.';
     document.getElementById('submitBtn').style.display = '';
     resetBtn('UPDATE PASSWORD'); updateAuthSwitch(null);
-    setTimeout(function () { document.getElementById('newPassword')?.focus(); }, 300);
+    resetAuthScrollOrigin();
   }
 
   /* ── OTP input wiring ──────────────────────────────────────────────────── */
@@ -314,7 +329,7 @@
         document.getElementById('formTitle').textContent    = 'Verify Email';
         document.getElementById('formSubtitle').textContent = 'Check your inbox for the 6-digit code.';
         resetBtn('VERIFY CODE');
-        document.querySelector('#otpInputs input')?.focus();
+        resetAuthScrollOrigin();
         return;
       }
 
@@ -432,7 +447,7 @@
         document.getElementById('formSubtitle').textContent = 'Check your inbox for the 6-digit code.';
         document.getElementById('displayEmail').textContent = pendingEmail;
         resetBtn('VERIFY CODE');
-        setTimeout(function(){ var inp=Array.from(document.querySelectorAll('#otpInputs input')); (inp.find(function(x){return !x.value;})||inp[0])?.focus(); },350);
+        resetAuthScrollOrigin();
         return;
       }
 
@@ -446,7 +461,7 @@
         document.getElementById('formTitle').textContent    = 'Check Your Email';
         document.getElementById('formSubtitle').textContent = 'Enter the 6-digit reset code.';
         resetBtn('VERIFY CODE');
-        setTimeout(function(){ var inp=Array.from(document.querySelectorAll('#forgotOtpInputs input')); (inp.find(function(x){return !x.value;})||inp[0])?.focus(); },350);
+        resetAuthScrollOrigin();
         return;
       }
 

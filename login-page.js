@@ -203,7 +203,9 @@ if (feeSection) barObserver.observe(feeSection);
   document.addEventListener('click', (event) => { invoke(event.target); });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
-    const el = event.target && event.target.closest ? event.target.closest('[data-login-action][role="button"]') : null;
+    const el = event.target && event.target.closest
+      ? event.target.closest('[data-login-action][role="button"], [data-login-action][role="checkbox"]')
+      : null;
     if (!el) return;
     event.preventDefault();
     invoke(el);

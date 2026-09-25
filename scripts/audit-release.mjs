@@ -1258,6 +1258,29 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
   }
 }
 
+
+// Warm-state continuity + mobile auth runtime contracts.
+{
+  const stateSource = read('state.js');
+  const appSource = read('app.js');
+  const homeSource = read('home.js');
+  const authSource = read('auth.js');
+  const loginSource = read('login.html');
+  const swSource = read('sw.js');
+  const architectureSource = read('ARCHITECTURE_RULES.md');
+
+  if (!stateSource.includes('presentationReady: false') || !stateSource.includes("Object.prototype.hasOwnProperty.call(parsed, 'balances')") || !appSource.includes("AppState.set('presentationReady', true)")) fail('Warm-cache presentation readiness is not separate from ledger authority');
+  if (homeSource.includes("if (snapshot.balanceSyncStatus !== 'ready') {\n      root.appendChild(loadingSection('Recent activity', 3));") || !homeSource.includes("if (snapshot.presentationReady !== true)") || !homeSource.includes('Showing last known values while balances sync…')) fail('Home can still erase valid warm presentation during revalidation');
+  if (!loginSource.includes('--auth-placeholder: #526173') || !loginSource.includes('-webkit-text-fill-color: var(--auth-placeholder)') || !loginSource.includes('opacity: 0.68') || !loginSource.includes('opacity: 0.52')) fail('Auth placeholder hierarchy is not protected against Blink/WebKit text-fill inheritance');
+  if (!loginSource.includes('inline-size: 100%') || !loginSource.includes('block-size: 58px') || !loginSource.includes('min-block-size: 58px') || !loginSource.includes('max-block-size: 58px') || !loginSource.includes('box-sizing: border-box') || !loginSource.includes('font-synthesis: none')) fail('Landing primary CTA does not own deterministic two-axis geometry');
+  if (!authSource.includes('function resetAuthScrollOrigin()') || !authSource.includes('active.blur()') || !authSource.includes("auth.querySelector('.auth-scroll')") || !authSource.includes('requestAnimationFrame(function ()') || !loginSource.includes('min-height: 0') || !loginSource.includes('height: calc(56px + env(safe-area-inset-top, 0px))')) fail('Auth mode transitions do not own scroll origin/safe mobile viewport geometry');
+  if (authSource.includes("setTimeout(function () { document.getElementById('logEmail')?.focus(); }, 310)") || authSource.includes("setTimeout(function () { document.getElementById('regName')?.focus(); }, 310)") || authSource.includes("setTimeout(function () { document.getElementById('newPassword')?.focus(); }, 300)")) fail('Auth opening still forces eager keyboard focus before title position is stable');
+  if (!swSource.includes("const CACHE_VERSION  = 'nextrade-warm-state-auth-v2';")) fail('Service-worker cache version was not advanced for warm/auth assets');
+  for (const principle of ['Presentation readiness is independent of transaction authority.','Warm revalidation never erases a valid workspace.','Placeholder contrast is a rendered contract.','Auth modes own their scroll origin and focus lifecycle.','Primary CTA geometry is fixed in both axes.']) if (!architectureSource.includes(principle)) fail(`Architecture constitution missing: ${principle}`);
+  if (!failures.some((x) => x.includes('Warm-cache presentation readiness') || x.includes('erase valid warm presentation') || x.includes('placeholder hierarchy') || x.includes('two-axis geometry') || x.includes('scroll origin/safe mobile') || x.includes('eager keyboard focus') || x.includes('cache version') || x.includes('Architecture constitution missing'))) pass('Warm-state/auth/CTA continuity architecture');
+}
+
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);

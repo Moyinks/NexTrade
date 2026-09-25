@@ -23,6 +23,9 @@
     vaultCash: 0,
     holdings: {},
     balanceSyncStatus: 'syncing',
+    // Presentation readiness is independent from transaction authority.
+    // A warm cache may be shown while ledger authority revalidates.
+    presentationReady: false,
     investments: [],
     transactions: [],
     activityFeed: [],
@@ -108,7 +111,8 @@
         activityFeed: (state.activityFeed || []).slice(0, 20),
         profile: state.profile,
         marketData: state.marketData,
-        ui: state.ui
+        ui: state.ui,
+        presentationReady: state.presentationReady === true
         // user + balanceSyncStatus deliberately excluded.
       }));
     } catch (error) {
@@ -132,7 +136,12 @@
         if (parsed.profile) state.profile = parsed.profile;
         if (parsed.ui) state.ui = { ...state.ui, ...parsed.ui };
       }
-      // Cached balances stay visually gated until cloud synchronization succeeds.
+      // Cached values remain non-authoritative, but a cache written by a prior
+      // authenticated session is valid presentation data during revalidation.
+      // The explicit flag supports new caches; the balances-key check upgrades
+      // existing v2 caches without discarding their last-known workspace.
+      state.presentationReady = parsed.presentationReady === true ||
+        Object.prototype.hasOwnProperty.call(parsed, 'balances');
       state.balanceSyncStatus = 'syncing';
       syncVaultData();
     } catch (error) {

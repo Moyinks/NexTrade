@@ -46,7 +46,8 @@
         investments: [],
         transactions: [],
         marketData: [],
-        balanceSyncStatus: 'syncing'
+        balanceSyncStatus: 'syncing',
+        presentationReady: false
       };
     }
 
@@ -58,7 +59,8 @@
       investments: AppState.get('investments') || [],
       transactions: AppState.get('transactions') || [],
       marketData: AppState.get('marketData') || [],
-      balanceSyncStatus: AppState.get('balanceSyncStatus') || 'syncing'
+      balanceSyncStatus: AppState.get('balanceSyncStatus') || 'syncing',
+      presentationReady: AppState.get('presentationReady') === true
     };
   }
 
@@ -328,7 +330,9 @@
 
     const balanceNote = el('div', 'width:100%;font-size:12px;line-height:1.4;color:var(--color-text-secondary);margin-top:2px;');
     if (!ready) {
-      balanceNote.textContent = 'Loading your latest balances…';
+      balanceNote.textContent = snapshot.presentationReady
+        ? 'Showing last known values while balances sync…'
+        : 'Loading your latest balances…';
     } else if (total <= 0) {
       balanceNote.textContent = 'Add funds to start moving money.';
     } else {
@@ -1202,7 +1206,7 @@
 
     root.appendChild(heroCard(snapshot));
 
-    if (snapshot.balanceSyncStatus !== 'ready') {
+    if (snapshot.presentationReady !== true) {
       root.appendChild(loadingSection('Recent activity', 3));
       root.appendChild(loadingSection('Market pulse', 3));
       root.appendChild(loadingSection('Smart context', 2));

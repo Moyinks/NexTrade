@@ -353,6 +353,11 @@
         AppState.set('user', session.user);
       }
 
+      // All display sources have resolved. Mark the workspace presentation-ready
+      // independently from financial authority so later warm restores may keep
+      // last-known content visible while ledger balances revalidate.
+      if (window.AppState) AppState.set('presentationReady', true);
+
       // All three sources are resolved. Mark balances as authoritative BEFORE
       // navigate() so Home.render() always receives 'ready' on first render.
       // This is the single moment of truth: spot (ledger-derived), investments
