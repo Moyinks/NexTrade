@@ -1180,3 +1180,329 @@ body[data-route="home"] .home-hero-card {
   position: relative !important;
   top: auto !important;
 }
+
+/* Home section hierarchy: less dashboard chrome, more editorial rhythm. */
+body[data-route="home"] .home-workspace {
+  gap: 16px !important;
+}
+
+body[data-route="home"] .home-section {
+  gap: 7px !important;
+}
+
+body[data-route="home"] .home-section__head {
+  padding-inline: 18px !important;
+  align-items: flex-end;
+}
+
+.home-section__copy {
+  min-width: 0;
+}
+
+.home-section__title {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 735;
+  letter-spacing: -.018em;
+  line-height: 1.2;
+}
+
+.home-section__subtitle {
+  margin-top: 3px;
+  color: var(--color-text-tertiary);
+  font-size: 10.5px;
+  font-weight: 520;
+  line-height: 1.4;
+}
+
+.home-section__action {
+  min-height: 30px;
+  padding: 0 1px;
+
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: -.005em;
+
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.home-section__action:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Active strategy cards: premium matte, compact, numeric-first. */
+.home-strategy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-inline: 14px;
+}
+
+.home-strategy-card {
+  width: 100%;
+  padding: 14px 15px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  color: inherit;
+
+  text-align: left;
+  cursor: pointer;
+
+  transition:
+    background-color 150ms var(--nt-ease-standard),
+    border-color 150ms var(--nt-ease-standard),
+    transform 72ms var(--nt-ease-press);
+
+  -webkit-tap-highlight-color: transparent;
+}
+
+.home-strategy-card:active {
+  transform: scale(.997);
+}
+
+.home-strategy-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .home-strategy-card:hover {
+    border-color: var(--color-border-hover);
+    background: var(--color-surface-elevated);
+  }
+}
+
+.home-strategy-card__top {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.home-strategy-card__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.home-strategy-card__name-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.home-strategy-card__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 735;
+  letter-spacing: -.012em;
+  line-height: 1.25;
+}
+
+.home-strategy-card__meta {
+  margin-top: 5px;
+  color: var(--color-text-tertiary);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.home-strategy-card__value-block {
+  flex: 0 0 auto;
+  min-width: 92px;
+  text-align: right;
+}
+
+.home-strategy-card__value {
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 735;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.home-strategy-card__value-label {
+  margin-top: 3px;
+  color: var(--color-text-tertiary);
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.home-strategy-card__profit {
+  margin-top: 4px;
+  color: var(--color-success);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-strategy-card__progress {
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-border);
+}
+
+.home-strategy-card__progress-fill {
+  height: 100%;
+  min-width: 4px;
+  border-radius: inherit;
+  background: var(--color-primary);
+}
+
+.home-strategy-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  color: var(--color-text-tertiary);
+  font-size: 9.5px;
+  line-height: 1.25;
+}
+
+.home-strategy-card__footer > :last-child {
+  color: var(--color-text-secondary);
+  font-weight: 650;
+}
+
+/* Home empty strategy follows the same geometry rather than becoming a mini-card. */
+body[data-route="home"] .home-strategy-empty {
+  margin-inline: 14px;
+  padding: 13px 2px !important;
+  gap: 14px;
+}
+
+.home-strategy-empty__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.home-strategy-empty__title {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.home-strategy-empty__body {
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+/* Lists feel expensive when alignment is exact and containment is quiet. */
+body[data-route="home"] .home-activity-list > .tx-card {
+  padding: 11px 18px !important;
+}
+
+body[data-route="home"] .home-market-list > * {
+  min-height: 54px;
+  padding: 11px 18px !important;
+}
+
+body[data-route="home"] .home-context-card {
+  padding: 13px 16px;
+  border-radius: 12px;
+}
+
+body[data-route="home"] .home-stat-grid {
+  column-gap: 18px !important;
+}
+
+body[data-route="home"] .home-stat-cell {
+  padding-block: 11px 12px !important;
+}
+
+/* Vault strategy annotation uses the same semantic badge as Home. */
+.vault-strategy-card .nt-strategy-badge {
+  vertical-align: middle;
+}
+
+.vault-detail-chip {
+  border-color: var(--color-border) !important;
+  background: var(--color-surface-elevated) !important;
+  box-shadow: none !important;
+}
+
+.vault-strategy-metric {
+  border-color: var(--color-border) !important;
+  border-radius: 10px !important;
+  background: var(--color-surface-elevated) !important;
+}
+
+.vault-strategy-cta {
+  min-height: 44px;
+  box-shadow: none !important;
+}
+
+/* Motion polish: transition only properties we actually animate. */
+.btn {
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.input-field {
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.input-field:focus {
+  box-shadow: 0 0 0 3px var(--color-primary-glow);
+}
+
+/* Numeric surfaces should never visually jump as values update. */
+.financial-data,
+.tx-card__amount,
+.wallet-balance-rail__value,
+.home-strategy-card__value,
+.home-strategy-card__profit {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 380px) {
+  .home-strategy-list {
+    padding-inline: 12px;
+  }
+
+  .home-strategy-card {
+    padding-inline: 13px;
+  }
+
+  .home-strategy-card__value-block {
+    min-width: 82px;
+  }
+
+  .nt-strategy-badge {
+    padding-inline: 6px;
+    font-size: 8.5px;
+  }
+}

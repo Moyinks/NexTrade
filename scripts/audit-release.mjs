@@ -1074,6 +1074,190 @@ if (!failures.some((x) => x.includes('architecture component') || x.includes('Fi
   }
 }
 
+
+// Premium finish + strategy semantics.
+{
+  const homeSource = read('home.js');
+  const vaultSource = read('vault.js');
+  const componentSource = read('components.css');
+  const finishCss = read('mobile-product-finish.css');
+  const architectureSource = read('ARCHITECTURE_RULES.md');
+
+  if (
+    !homeSource.includes(
+      "badge.className = 'nt-strategy-badge'"
+    ) ||
+    !homeSource.includes(
+      "badgeTone = 'attention'"
+    ) ||
+    !homeSource.includes(
+      "badgeTone = 'ready'"
+    )
+  ) {
+    fail('Home active strategies do not expose semantic strategy state');
+  }
+
+  if (
+    !vaultSource.includes(
+      "badge.className = 'nt-strategy-badge'"
+    ) ||
+    vaultSource.includes('★ FOR YOU')
+  ) {
+    fail('Vault recommendation badge still uses generic promotional styling');
+  }
+
+  if (
+    !componentSource.includes(
+      '.nt-strategy-badge'
+    ) ||
+    !componentSource.includes(
+      '[data-tone="recommended"]'
+    )
+  ) {
+    fail('Strategy badge primitive is missing from the shared component system');
+  }
+
+  if (
+    !homeSource.includes(
+      "titleEl.className = 'home-section__title'"
+    ) ||
+    !homeSource.includes(
+      "action.className = 'home-section__action'"
+    )
+  ) {
+    fail('Home section hierarchy still depends on one-off inline typography');
+  }
+
+  for (const contract of [
+    '.home-strategy-card',
+    '.home-strategy-card__progress-fill',
+    '.home-section__title',
+    '.vault-strategy-metric'
+  ]) {
+    if (!finishCss.includes(contract)) {
+      fail(`Premium finish contract missing: ${contract}`);
+    }
+  }
+
+  const boundedButtonMotion =
+    finishCss.match(/\.btn\s*\{([\s\S]*?)\}/);
+
+  if (
+    !boundedButtonMotion ||
+    !boundedButtonMotion[1].includes(
+      'background-color var(--transition-fast)'
+    ) ||
+    !boundedButtonMotion[1].includes(
+      'border-color var(--transition-fast)'
+    ) ||
+    !boundedButtonMotion[1].includes(
+      'color var(--transition-fast)'
+    ) ||
+    !boundedButtonMotion[1].includes(
+      'box-shadow var(--transition-fast)'
+    ) ||
+    !boundedButtonMotion[1].includes(
+      'transform var(--transition-fast)'
+    ) ||
+    /transition\s*:\s*all\b/.test(
+      boundedButtonMotion[1]
+    )
+  ) {
+    fail('Premium button motion is not bounded to explicit properties');
+  }
+
+  for (const principle of [
+    'Product state badges are semantic annotations, not decoration.',
+    'Premium finish comes from hierarchy, density and alignment before ornament.',
+    'Interactive polish uses bounded motion and deterministic geometry.'
+  ]) {
+    if (!architectureSource.includes(principle)) {
+      fail(`Architecture constitution missing: ${principle}`);
+    }
+  }
+
+  if (!failures.some((x) =>
+    x.includes('semantic strategy state') ||
+    x.includes('generic promotional styling') ||
+    x.includes('Strategy badge primitive') ||
+    x.includes('inline typography') ||
+    x.includes('Premium finish contract') ||
+    x.includes('Premium button motion') ||
+    x.includes('Architecture constitution missing')
+  )) {
+    pass('Premium visual finish architecture');
+  }
+}
+
+
+// Auth form semantics + landing geometry stability.
+{
+  const loginSource = read('login.html');
+  const loginPageSource = read('login-page.js');
+  const architectureSource = read('ARCHITECTURE_RULES.md');
+
+  if (
+    !loginSource.includes('--auth-placeholder: #526173') ||
+    !loginSource.includes('color: var(--auth-placeholder)') ||
+    !loginSource.includes(':-webkit-autofill')
+  ) {
+    fail('Auth fields do not own subdued placeholder/autofill presentation');
+  }
+
+  if (
+    !loginSource.includes(
+      '#auth .checkbox-row.checked .check-box'
+    ) ||
+    !loginSource.includes(
+      'background: var(--auth-blue)'
+    ) ||
+    loginSource.includes(
+      '#auth .check-box.checked {\n  border-color: var(--auth-success)'
+    )
+  ) {
+    fail('Auth consent state is not using selection semantics');
+  }
+
+  if (
+    !loginSource.includes(
+      'role="checkbox" aria-checked="false"'
+    ) ||
+    !loginPageSource.includes(
+      '[data-login-action][role="checkbox"]'
+    )
+  ) {
+    fail('Auth consent control lacks coherent keyboard/checkbox semantics');
+  }
+
+  if (
+    !loginSource.includes('height: 58px') ||
+    !loginSource.includes('white-space: nowrap') ||
+    !loginSource.includes('font-synthesis: none')
+  ) {
+    fail('Landing primary CTA geometry can still shift with font arrival');
+  }
+
+  for (const principle of [
+    'Placeholder text is supporting affordance, not content.',
+    'Selection state is not success state.',
+    'Critical control geometry is independent of webfont arrival.'
+  ]) {
+    if (!architectureSource.includes(principle)) {
+      fail(`Architecture constitution missing: ${principle}`);
+    }
+  }
+
+  if (!failures.some((x) =>
+    x.includes('subdued placeholder') ||
+    x.includes('selection semantics') ||
+    x.includes('keyboard/checkbox semantics') ||
+    x.includes('font arrival') ||
+    x.includes('Architecture constitution missing')
+  )) {
+    pass('Auth form/landing geometry architecture');
+  }
+}
+
 console.log('\nNexTrade release audit');
 console.log('======================');
 for (const p of passes) console.log(`PASS  ${p}`);

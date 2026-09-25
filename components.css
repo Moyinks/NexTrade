@@ -581,3 +581,56 @@
 .trade-quote-note{margin-top:-6px;color:var(--color-text-tertiary);font-size:9px;line-height:1.45}
 .trade-submit{min-height:52px}
 .trade-validation{min-height:18px;margin-top:-5px;color:var(--color-danger);font-size:10px;line-height:1.4}
+
+/* ==========================================================================
+   PREMIUM STRATEGY BADGE PRIMITIVE
+   ========================================================================== */
+
+.nt-strategy-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--nt-radius-pill);
+
+  background: var(--color-surface-elevated);
+  color: var(--color-text-secondary);
+
+  font-size: 9px;
+  font-weight: 720;
+  letter-spacing: .01em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.nt-strategy-badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .75;
+}
+
+.nt-strategy-badge[data-tone="active"] {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+}
+
+.nt-strategy-badge[data-tone="attention"] {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+}
+
+.nt-strategy-badge[data-tone="ready"],
+.nt-strategy-badge[data-tone="recommended"] {
+  color: var(--color-primary);
+  background: var(--color-primary-glow);
+  border-color: var(--color-border-active);
+}

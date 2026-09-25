@@ -349,80 +349,211 @@
   }
 
   function sectionShell(title, subtitle, actionText, actionHandler) {
-    const wrap = el('section', 'display:flex;flex-direction:column;gap:10px;');
+    const wrap = document.createElement('section');
     wrap.className = 'home-section';
-    const head = el('div', 'display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 16px;');
+
+    const head = document.createElement('div');
     head.className = 'home-section__head';
-    const left = el('div', 'min-width:0;');
-    left.appendChild(el('div', 'font-size:16px;font-weight:800;line-height:1.15;color:var(--color-text-primary,#fff);letter-spacing:-0.3px;', title));
-    if (subtitle) left.appendChild(el('div', 'font-size:12px;line-height:1.4;color:var(--color-text-secondary,#94a3b8);margin-top:3px;', subtitle));
+
+    const left = document.createElement('div');
+    left.className = 'home-section__copy';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'home-section__title';
+    titleEl.textContent = title;
+    left.appendChild(titleEl);
+
+    if (subtitle) {
+      const subtitleEl = document.createElement('div');
+      subtitleEl.className = 'home-section__subtitle';
+      subtitleEl.textContent = subtitle;
+      left.appendChild(subtitleEl);
+    }
+
     head.appendChild(left);
+
     if (actionText && actionHandler) {
-      const action = el('button', 'border:none;background:none;padding:0;margin:0;font-size:12px;font-weight:700;color:var(--color-primary,#60a5fa);cursor:pointer;flex-shrink:0;');
+      const action = document.createElement('button');
+      action.type = 'button';
+      action.className = 'home-section__action';
       action.textContent = actionText;
       action.addEventListener('click', actionHandler);
       head.appendChild(action);
     }
+
     wrap.appendChild(head);
     return wrap;
   }
 
+
   function investmentsSection(snapshot) {
-    const active = (snapshot.investments || []).filter(inv => inv && inv.status === 'active');
-    const shell = sectionShell('Active Strategies', 'Open positions in the Vault');
+    const active = (snapshot.investments || []).filter(
+      inv => inv && inv.status === 'active'
+    );
+
+    const shell = sectionShell(
+      'Active Strategies',
+      'Open positions in the Vault'
+    );
 
     if (!active.length) {
-      const empty = el('div', 'border-radius:16px;padding:18px;background:var(--color-surface);border:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;gap:12px;');
+      const empty = document.createElement('div');
       empty.className = 'home-strategy-empty';
-      const copy = el('div', 'min-width:0;flex:1;');
-      copy.appendChild(el('div', 'font-size:14px;font-weight:700;color:var(--color-text-primary,#fff);margin-bottom:4px;', 'No active positions'));
-      copy.appendChild(el('div', 'font-size:12px;line-height:1.4;color:var(--color-text-secondary,#94a3b8);', 'Open Vault to pick a strategy and start compounding.'));
-      const btn = el('button', 'border:none;border-radius:12px;padding:10px 14px;background:var(--color-primary,#3b82f6);color:var(--color-text-primary);font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;');
+
+      const copy = document.createElement('div');
+      copy.className = 'home-strategy-empty__copy';
+
+      const title = document.createElement('div');
+      title.className = 'home-strategy-empty__title';
+      title.textContent = 'No active positions';
+
+      const body = document.createElement('div');
+      body.className = 'home-strategy-empty__body';
+      body.textContent =
+        'Open Vault to pick a strategy and start compounding.';
+
+      copy.append(title, body);
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-primary btn-sm';
       btn.textContent = 'Open Vault';
-      btn.addEventListener('click', () => window.App && App.navigate('vault'));
-      empty.appendChild(copy);
-      empty.appendChild(btn);
+      btn.addEventListener(
+        'click',
+        () => window.App && App.navigate('vault')
+      );
+
+      empty.append(copy, btn);
       shell.appendChild(empty);
       return shell;
     }
 
-    const list = el('div', 'display:flex;flex-direction:column;gap:10px;');
-    active.slice(0, 4).forEach(inv => {
-      const p      = investmentProgress(inv);
-      const name   = strategyDisplayName(inv);
-      const amount = Number(inv.amount) || 0;
-      const atMat  = Number.isFinite(p.atMaturity) && p.atMaturity > amount ? p.atMaturity : amount;
-      const profit  = atMat - amount;
+    const list = document.createElement('div');
+    list.className = 'home-strategy-list';
 
-      const box = el('button', 'width:100%;text-align:left;border-radius:16px;padding:14px;border:1px solid var(--color-border);background:var(--color-surface);cursor:pointer;display:flex;flex-direction:column;gap:10px;');
+    active.slice(0, 4).forEach(inv => {
+      const progress = investmentProgress(inv);
+      const name = strategyDisplayName(inv);
+      const amount = Number(inv.amount) || 0;
+      const atMaturity =
+        Number.isFinite(progress.atMaturity) &&
+        progress.atMaturity > amount
+          ? progress.atMaturity
+          : amount;
+      const profit = atMaturity - amount;
+
+      const maturityTime = progress.maturesAt
+        ? new Date(progress.maturesAt).getTime()
+        : NaN;
+
+      const remainingMs =
+        Number.isFinite(maturityTime)
+          ? maturityTime - Date.now()
+          : Infinity;
+
+      let badgeTone = 'active';
+      let badgeLabel = 'Active';
+
+      if (
+        Number.isFinite(maturityTime) &&
+        maturityTime <= Date.now()
+      ) {
+        badgeTone = 'ready';
+        badgeLabel = 'Ready';
+      } else if (remainingMs <= 4 * 86400000) {
+        badgeTone = 'attention';
+        badgeLabel = 'Matures soon';
+      }
+
+      const box = document.createElement('button');
       box.type = 'button';
+      box.className = 'home-strategy-card';
       box.addEventListener('click', () => {
-        if (window.App && typeof App.navigate === 'function') App.navigate('vault');
+        if (
+          window.App &&
+          typeof App.navigate === 'function'
+        ) {
+          App.navigate('vault');
+        }
       });
 
-      const top  = el('div', 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;min-width:0;');
-      const left = el('div', 'min-width:0;flex:1;');
-      left.appendChild(el('div', 'font-size:14px;font-weight:800;line-height:1.2;color:var(--color-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', name));
-      left.appendChild(el('div', 'font-size:12px;color:var(--color-text-tertiary);margin-top:4px;', formatMoney(amount) + ' invested \u00B7 ' + timeRemaining(p.maturesAt)));
+      const top = document.createElement('div');
+      top.className = 'home-strategy-card__top';
+
+      const left = document.createElement('div');
+      left.className = 'home-strategy-card__copy';
+
+      const nameRow = document.createElement('div');
+      nameRow.className = 'home-strategy-card__name-row';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'home-strategy-card__name';
+      nameEl.textContent = name;
+
+      const badge = document.createElement('span');
+      badge.className = 'nt-strategy-badge';
+      badge.dataset.tone = badgeTone;
+      badge.textContent = badgeLabel;
+
+      nameRow.append(nameEl, badge);
+
+      const meta = document.createElement('div');
+      meta.className = 'home-strategy-card__meta';
+      meta.textContent =
+        formatMoney(amount) +
+        ' invested · ' +
+        timeRemaining(progress.maturesAt);
+
+      left.append(nameRow, meta);
       top.appendChild(left);
 
-      const right = el('div', 'text-align:right;flex-shrink:0;');
-      right.appendChild(el('div', 'font-size:13px;font-weight:800;color:var(--color-text-primary);line-height:1.2;', formatMoney(atMat)));
-      right.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);margin-top:2px;', 'Est. at maturity'));
-      const profitEl = el('div', 'font-size:10px;font-weight:700;margin-top:3px;', '+' + formatMoney(profit) + ' profit');
-      profitEl.style.color = '#10b981';
-      right.appendChild(profitEl);
+      const right = document.createElement('div');
+      right.className = 'home-strategy-card__value-block';
+
+      const value = document.createElement('div');
+      value.className = 'home-strategy-card__value';
+      value.textContent = formatMoney(atMaturity);
+
+      const valueLabel = document.createElement('div');
+      valueLabel.className = 'home-strategy-card__value-label';
+      valueLabel.textContent = 'Est. at maturity';
+
+      const profitEl = document.createElement('div');
+      profitEl.className = 'home-strategy-card__profit';
+      profitEl.textContent =
+        '+' + formatMoney(profit) + ' profit';
+
+      right.append(value, valueLabel, profitEl);
       top.appendChild(right);
       box.appendChild(top);
 
-      const bar  = el('div', 'width:100%;height:5px;border-radius:999px;background:var(--color-surface-elevated);overflow:hidden;');
-      const fill = el('div', 'height:100%;width:' + Math.max(4, Math.round((p.progress || 0) * 100)) + '%;border-radius:999px;background:linear-gradient(90deg,rgba(59,130,246,0.95),rgba(16,185,129,0.95));');
+      const bar = document.createElement('div');
+      bar.className = 'home-strategy-card__progress';
+
+      const fill = document.createElement('div');
+      fill.className = 'home-strategy-card__progress-fill';
+      fill.style.width =
+        Math.max(
+          4,
+          Math.round((progress.progress || 0) * 100)
+        ) + '%';
+
       bar.appendChild(fill);
       box.appendChild(bar);
 
-      const bottom = el('div', 'display:flex;align-items:center;justify-content:space-between;');
-      bottom.appendChild(el('div', 'font-size:11px;color:var(--color-text-tertiary);', Math.round((p.progress || 0) * 100) + '% complete'));
-      bottom.appendChild(el('div', 'font-size:11px;font-weight:700;color:var(--color-text-secondary);', (inv.apy || 0) + '% cycle target'));
+      const bottom = document.createElement('div');
+      bottom.className = 'home-strategy-card__footer';
+
+      const completion = document.createElement('span');
+      completion.textContent =
+        Math.round((progress.progress || 0) * 100) +
+        '% complete';
+
+      const target = document.createElement('span');
+      target.textContent =
+        (inv.apy || 0) + '% cycle target';
+
+      bottom.append(completion, target);
       box.appendChild(bottom);
 
       list.appendChild(box);
@@ -431,6 +562,7 @@
     shell.appendChild(list);
     return shell;
   }
+
 
   function smartContextPriority(snapshot) {
     const investments = Array.isArray(snapshot.investments)

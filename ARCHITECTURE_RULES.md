@@ -54,3 +54,9 @@ These rules are product constraints, not aspirations.
 44. **Background refresh never spends the attention budget on success.** Silent freshness indicators own routine market repaint; transient notifications are reserved for user-relevant outcomes or action-required failures.
 45. **One transient notification owns attention at a time.** Toasts are serialized, deduplicated and bounded so system feedback cannot stack into cognitive load.
 46. **Trade denomination is user intent; execution quantity is server authority.** Users may express a trade in fiat or asset units, but the server resolves the canonical ledger amount from a fresh execution quote.
+47. **Product state badges are semantic annotations, not decoration.** Strategy, risk and lifecycle badges use one restrained product primitive whose tone is driven by state; promotional pills and arbitrary color chips are not substitutes.
+48. **Premium finish comes from hierarchy, density and alignment before ornament.** Tight rhythm, exact baselines, restrained borders and stable typography take priority over extra gradients, shadows, glass and oversized radii.
+49. **Interactive polish uses bounded motion and deterministic geometry.** Controls animate only the properties users perceive, use consistent press/focus behavior, and never rely on broad `transition: all` effects.
+50. **Placeholder text is supporting affordance, not content.** Empty-field hints sit behind entered values and labels in the hierarchy; focus may clarify the field without promoting placeholder text into primary copy.
+51. **Selection state is not success state.** Checkboxes, selected options and consent controls use selection/brand semantics; success color is reserved for completed positive outcomes.
+52. **Critical control geometry is independent of webfont arrival.** Primary actions own explicit height, line-height and wrapping behavior so cached or late-loading fonts cannot change the product’s physical layout.

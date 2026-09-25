@@ -825,7 +825,10 @@
     const nameRow   = el('div', 'display:flex;align-items:center;gap:6px;margin-bottom:1px;flex-wrap:wrap;');
     nameRow.appendChild(el('span', 'font-size:15px;font-weight:800;color:var(--color-text-primary);', strategy.name));
     if (recommended) {
-      const badge = el('span', 'font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;letter-spacing:0.6px;color:var(--color-on-accent);background:var(--color-primary);', '\u2605 FOR YOU');
+      const badge = document.createElement('span');
+      badge.className = 'nt-strategy-badge';
+      badge.dataset.tone = 'recommended';
+      badge.textContent = 'Recommended';
       nameRow.appendChild(badge);
     }
     titleWrap.appendChild(nameRow);
